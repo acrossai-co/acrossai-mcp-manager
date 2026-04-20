@@ -81,7 +81,9 @@ class Settings {
 
 		if ( 'default' === $server ) {
 			$current = (bool) get_option( 'acrossai_mcp_manager_enabled', false );
-			update_option( 'acrossai_mcp_manager_enabled', ! $current );
+			// Store as integer 1/0 — storing PHP bool false via update_option can
+			// result in an empty string, which is still falsy but avoids ambiguity.
+			update_option( 'acrossai_mcp_manager_enabled', $current ? 0 : 1 );
 		}
 
 		wp_safe_redirect( admin_url( 'admin.php?page=acrossai_mcp_manager&updated=1' ) );

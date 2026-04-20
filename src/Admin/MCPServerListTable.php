@@ -50,6 +50,7 @@ class MCPServerListTable extends \WP_List_Table {
 			'name'        => __( 'Server Name', 'acrossai-mcp-manager' ),
 			'description' => __( 'Description', 'acrossai-mcp-manager' ),
 			'status'      => __( 'Status', 'acrossai-mcp-manager' ),
+			'actions'     => __( 'Actions', 'acrossai-mcp-manager' ),
 		);
 	}
 
@@ -128,7 +129,7 @@ class MCPServerListTable extends \WP_List_Table {
 	}
 
 	/**
-	 * Render the status column with enable/disable toggle.
+	 * Render the status column — badge only (Active / Inactive).
 	 *
 	 * @since 1.0.0
 	 *
@@ -137,7 +138,23 @@ class MCPServerListTable extends \WP_List_Table {
 	 * @return string
 	 */
 	public function column_status( $item ) {
-		$enabled    = $item['enabled'];
+		if ( $item['enabled'] ) {
+			return '<span class="acrossai-status-badge acrossai-status-active">' . esc_html__( 'Active', 'acrossai-mcp-manager' ) . '</span>';
+		}
+
+		return '<span class="acrossai-status-badge acrossai-status-inactive">' . esc_html__( 'Inactive', 'acrossai-mcp-manager' ) . '</span>';
+	}
+
+	/**
+	 * Render the actions column — Enable / Disable button.
+	 *
+	 * @since 1.0.0
+	 *
+	 * @param array $item Row data.
+	 *
+	 * @return string
+	 */
+	public function column_actions( $item ) {
 		$nonce      = wp_create_nonce( 'acrossai_mcp_toggle_' . $item['id'] );
 		$toggle_url = add_query_arg(
 			array(
@@ -149,22 +166,18 @@ class MCPServerListTable extends \WP_List_Table {
 			admin_url( 'admin.php' )
 		);
 
-		if ( $enabled ) {
-			$badge_html   = '<span class="acrossai-status-badge acrossai-status-active">' . esc_html__( 'Active', 'acrossai-mcp-manager' ) . '</span>';
-			$button_html  = sprintf(
+		if ( $item['enabled'] ) {
+			return sprintf(
 				'<a href="%s" class="button button-small acrossai-btn-disable">%s</a>',
 				esc_url( $toggle_url ),
 				esc_html__( 'Disable', 'acrossai-mcp-manager' )
 			);
-		} else {
-			$badge_html   = '<span class="acrossai-status-badge acrossai-status-inactive">' . esc_html__( 'Inactive', 'acrossai-mcp-manager' ) . '</span>';
-			$button_html  = sprintf(
-				'<a href="%s" class="button button-small button-primary acrossai-btn-enable">%s</a>',
-				esc_url( $toggle_url ),
-				esc_html__( 'Enable', 'acrossai-mcp-manager' )
-			);
 		}
 
-		return $badge_html . '&nbsp;&nbsp;' . $button_html;
+		return sprintf(
+			'<a href="%s" class="button button-small button-primary acrossai-btn-enable">%s</a>',
+			esc_url( $toggle_url ),
+			esc_html__( 'Enable', 'acrossai-mcp-manager' )
+		);
 	}
 }
