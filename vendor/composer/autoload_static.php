@@ -9,30 +9,32 @@ class ComposerStaticInit78d47bad24c2e5d7b4e3841b5c8074c6
     public static $prefixLengthsPsr4 = array (
         'W' => 
         array (
+            'WP\\McpSchema\\' => 13,
             'WP\\MCP\\' => 7,
-        ),
-        'M' => 
-        array (
-            'MCP_MANAGER\\' => 12,
         ),
         'A' => 
         array (
             'Automattic\\Jetpack\\Autoloader\\' => 30,
+            'ACROSSAI_MCP_MANAGER\\' => 21,
         ),
     );
 
     public static $prefixDirsPsr4 = array (
+        'WP\\McpSchema\\' => 
+        array (
+            0 => __DIR__ . '/..' . '/wordpress/php-mcp-schema/src',
+        ),
         'WP\\MCP\\' => 
         array (
             0 => __DIR__ . '/..' . '/wordpress/mcp-adapter/includes',
         ),
-        'MCP_MANAGER\\' => 
-        array (
-            0 => __DIR__ . '/../..' . '/src',
-        ),
         'Automattic\\Jetpack\\Autoloader\\' => 
         array (
             0 => __DIR__ . '/..' . '/automattic/jetpack-autoloader/src',
+        ),
+        'ACROSSAI_MCP_MANAGER\\' => 
+        array (
+            0 => __DIR__ . '/../..' . '/src',
         ),
     );
 

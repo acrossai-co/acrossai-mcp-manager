@@ -6,16 +6,20 @@ $vendorDir = dirname(__DIR__);
 $baseDir   = dirname($vendorDir);
 
 return array(
-	'WP\\MCP\\' => array(
-		'version' => '0.4.1.0',
-		'path'    => array( $vendorDir . '/wordpress/mcp-adapter/includes' )
+	'WP\\McpSchema\\' => array(
+		'version' => '0.1.1.0',
+		'path'    => array( $vendorDir . '/wordpress/php-mcp-schema/src' )
 	),
-	'MCP_MANAGER\\' => array(
-		'version' => '1.0.0.0',
-		'path'    => array( $baseDir . '/src' )
+	'WP\\MCP\\' => array(
+		'version' => '0.5.0.0',
+		'path'    => array( $vendorDir . '/wordpress/mcp-adapter/includes' )
 	),
 	'Automattic\\Jetpack\\Autoloader\\' => array(
 		'version' => '2.12.0',
 		'path'    => array( $vendorDir . '/automattic/jetpack-autoloader/src' )
+	),
+	'ACROSSAI_MCP_MANAGER\\' => array(
+		'version' => 'dev-main',
+		'path'    => array( $baseDir . '/src' )
 	),
 );

@@ -7,7 +7,7 @@
  * @package WP\MCP
  */
 
-declare(strict_types = 1);
+declare( strict_types=1 );
 
 namespace WP\MCP;
 
@@ -36,6 +36,8 @@ final class Plugin {
 
 			/**
 			 * Fires after the main plugin class has been initialized.
+			 *
+			 * @since 0.1.0
 			 *
 			 * @param self $instance The main plugin class instance.
 			 */
@@ -93,7 +95,7 @@ final class Plugin {
 		_doing_it_wrong(
 			__FUNCTION__,
 			sprintf(
-				// translators: %s: Class name.
+			// translators: %s: Class name.
 				esc_html__( 'The %s class should not be cloned.', 'mcp-adapter' ),
 				esc_html( self::class ),
 			),
@@ -108,7 +110,7 @@ final class Plugin {
 		_doing_it_wrong(
 			__FUNCTION__,
 			sprintf(
-				// translators: %s: Class name.
+			// translators: %s: Class name.
 				esc_html__( 'De-serializing instances of %s is not allowed.', 'mcp-adapter' ),
 				esc_html( self::class ),
 			),

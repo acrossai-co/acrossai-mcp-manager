@@ -4,6 +4,8 @@ Part of the [**AI Building Blocks for WordPress** initiative](https://make.wordp
 
 The official WordPress package for MCP integration that exposes WordPress abilities as [Model Context Protocol (MCP)](https://modelcontextprotocol.io) tools, resources, and prompts for AI agents.
 
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/WordPress/mcp-adapter)
+
 ## Overview
 
 This adapter bridges WordPress's Abilities API with the [MCP specification](https://modelcontextprotocol.io/specification/2025-06-18/), providing a standardized way for AI agents to interact with WordPress functionality. It includes HTTP and STDIO transport support, comprehensive error handling, and an extensible architecture for custom integrations.
@@ -77,6 +79,17 @@ For detailed information about MCP components, see the [Model Context Protocol s
 │
 │   # Business logic and MCP components
 ├── Domain/
+│   │   # Shared contracts
+│   ├── Contracts/
+│   │   └── McpComponentInterface.php       # Contract for MCP components
+│   │   # Shared utilities
+│   ├── Utils/
+│   │   ├── McpNameSanitizer.php            # MCP name sanitization
+│   │   ├── McpValidator.php                # MCP name/URI/schema validation
+│   │   ├── McpAnnotationMapper.php         # Annotation mapping from abilities
+│   │   ├── SchemaTransformer.php           # Schema format transformation
+│   │   ├── ContentBlockHelper.php          # Content block DTO factory
+│   │   └── AbilityArgumentNormalizer.php   # Argument normalization
 │   │   # MCP Tools implementation
 │   ├── Tools/
 │   │   ├── McpTool.php                   # Base tool class
@@ -120,10 +133,12 @@ For detailed information about MCP components, see the [Model Context Protocol s
 │       │   └── McpObservabilityHandlerInterface.php  # Observability interface
 │       ├── ErrorLogMcpObservabilityHandler.php       # Default handler
 │       ├── NullMcpObservabilityHandler.php           # Null object pattern
-│       └── McpObservabilityHelperTrait.php           # Helper trait
+│       ├── McpObservabilityHelperTrait.php           # Helper trait
+│       ├── ConsoleObservabilityHandler.php          # Console output handler
+│       └── FailureReason.php                        # Standardized failure reasons
 │
 │   # Transport layer implementations
-├─── Transport/
+├── Transport/
 │   ├── Contracts/
 │   │   ├── McpTransportInterface.php     # Base transport interface
 │   │   └── McpRestTransportInterface.php # REST transport interface
@@ -169,11 +184,15 @@ Individual server management with comprehensive configuration:
 ### Required Dependencies
 
 - **PHP**: >= 7.4
-- **[WordPress Abilities API](https://github.com/WordPress/abilities-api)**: For ability registration and management
+- **WordPress**: >= 6.8 (6.9+ recommended)
+- **[WordPress Abilities API](https://make.wordpress.org/core/2025/11/10/abilities-api-in-wordpress-6-9/)**: Included in WordPress core since 6.9. For WordPress 6.8, install the [Abilities API plugin](https://github.com/WordPress/abilities-api) separately (note: the plugin repository was archived in February 2026).
+- **[php-mcp-schema](https://github.com/WordPress/php-mcp-schema)** (^0.1.0): Typed DTOs for MCP protocol types (MCP 2025-11-25)
 
 ### WordPress Abilities API Integration
 
-This adapter requires the [WordPress Abilities API](https://github.com/WordPress/abilities-api), which provides:
+Since WordPress 6.9, the [Abilities API](https://make.wordpress.org/core/2025/11/10/abilities-api-in-wordpress-6-9/) is a core API and does not require a separate plugin.
+
+The Abilities API provides:
 
 - Standardized ability registration (`wp_register_ability()`)
 - Ability retrieval and management (`wp_get_ability()`)
@@ -188,10 +207,10 @@ This adapter requires the [WordPress Abilities API](https://github.com/WordPress
 The MCP Adapter is designed to be installed as a Composer package. This is the primary and recommended installation method:
 
 ```bash
-composer require wordpress/abilities-api wordpress/mcp-adapter
+composer require wordpress/mcp-adapter
 ```
 
-This will automatically install both the WordPress Abilities API and MCP Adapter as dependencies in your project.
+> **Note:** On WordPress 6.8, you must also install the Abilities API separately: `composer require wordpress/abilities-api wordpress/mcp-adapter`. On WordPress 6.9+, the Abilities API is built into core and does not need to be installed.
 
 #### Using Jetpack Autoloader (Highly Recommended)
 
@@ -250,13 +269,14 @@ This will give you the latest development version from the `trunk` branch with a
   "$schema": "https://schemas.wp.org/trunk/wp-env.json",
   // ... other config ...
   "plugins": [
-    "WordPress/abilities-api",
     "WordPress/mcp-adapter",
     // ... other plugins ...
   ],
   // ... more config ...
 }
 ```
+
+> **Note:** On WordPress 6.8, also add `"WordPress/abilities-api"` to the plugins array. On WordPress 6.9+, the Abilities API is included in core.
 
 ### Using MCP Adapter in Your Plugin
 
@@ -278,12 +298,13 @@ McpAdapter::instance();
 
 ## Basic Usage
 
-The MCP Adapter automatically creates a default server that exposes all registered WordPress abilities through a layered architecture. This provides immediate MCP functionality without requiring manual server configuration.
+The MCP Adapter automatically creates a default server that exposes registered WordPress abilities through a layered architecture. This provides immediate MCP functionality without requiring manual server configuration.
 
 **How it works:**
-- All WordPress abilities registered via `wp_register_ability()` are automatically available
-- The default server supports both HTTP and STDIO transports with MCP 2025-06-18 compliance
-- Abilities are exposed as tools, resources, or prompts based on their characteristics
+- WordPress abilities registered via `wp_register_ability()` with the `meta.mcp.public` flag set to `true` are discoverable and executable on the default server via its built-in adapter tools
+- On the default server, public abilities are accessed through `mcp-adapter/discover-abilities`, `mcp-adapter/get-ability-info`, and `mcp-adapter/execute-ability` rather than being auto-registered individually in `tools/list`
+- Alternatively, abilities can be explicitly listed when creating a [custom MCP server](#creating-custom-mcp-servers); in that case, they can be exposed directly as MCP tools, resources, or prompts without requiring the `meta.mcp.public` flag
+- The default server supports both HTTP and STDIO transports and supports multiple MCP protocol versions
 - Built-in error handling and observability are included
 - Access via HTTP: `/wp-json/mcp/mcp-adapter-default-server`
 - Access via STDIO: `wp mcp-adapter serve --server=mcp-adapter-default-server`
@@ -297,6 +318,7 @@ add_action( 'wp_abilities_api_init', function() {
     wp_register_ability( 'my-plugin/get-posts', [
         'label' => 'Get Posts',
         'description' => 'Retrieve WordPress posts with optional filtering',
+        'category' => 'site',
         'input_schema' => [
             'type' => 'object',
             'properties' => [
@@ -337,25 +359,34 @@ add_action( 'wp_abilities_api_init', function() {
         },
         'permission_callback' => function() {
             return current_user_can( 'read' );
-        }
+        },
+        'meta' => [
+            'mcp' => [
+                'public' => true, // Required for default MCP server access
+            ],
+        ],
     ]);
 });
 
-// The ability is automatically available via the default MCP server
-// No additional configuration needed!
+// With the meta.mcp.public flag, the ability is exposed through the default MCP server.
+// In the default server configuration, discover it via `discover-abilities`
+// and invoke it via `mcp-adapter/execute-ability` rather than expecting
+// it to appear as its own entry in `tools/list`.
+// Without the meta.mcp.public flag, abilities are only accessible
+// through custom MCP servers that explicitly list them.
 ```
 
 </details>
 
-For detailed information about creating WordPress abilities, see the [WordPress Abilities API documentation](https://github.com/WordPress/abilities-api).
+For detailed information about creating WordPress abilities, see the [Abilities API developer documentation](https://developer.wordpress.org/news/2025/11/introducing-the-wordpress-abilities-api/).
 
 ### Connecting to MCP Servers
 
 The MCP Adapter supports multiple connection methods. Here are examples for connecting with MCP clients:
 
-#### STDIO Transport (Testing Only)
+#### STDIO Transport (Local Development)
 
-For testing purposes only, you can interact directly with MCP servers using WP-CLI commands:
+For local development and testing, you can interact directly with MCP servers using WP-CLI commands:
 
 ```bash
 # List all available MCP servers
@@ -370,7 +401,7 @@ echo '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' | wp mcp-adapt
 
 #### MCP Client Configuration
 
-Configure MCP clients (Claude Desktop, Claude Code, VS Code, Cursor, etc.) to connect to your WordPress MCP servers:
+Configure MCP clients (Claude Desktop, Claude Code, VS Code, Cursor, etc.) to connect to your WordPress MCP servers.
 
 <details>
 <summary><strong>STDIO Transport Configuration for local sites (click to expand)</strong></summary>
@@ -406,6 +437,8 @@ Configure MCP clients (Claude Desktop, Claude Code, VS Code, Cursor, etc.) to co
 
 <details>
 <summary><strong>HTTP Transport via Proxy (click to expand)</strong></summary>
+
+The [`@automattic/mcp-wordpress-remote`](https://www.npmjs.com/package/@automattic/mcp-wordpress-remote) proxy runs locally and translates STDIO-based MCP communication from AI clients into HTTP REST API calls that WordPress understands. Authentication uses [WordPress Application Passwords](https://make.wordpress.org/core/2020/11/05/application-passwords-integration-guide/).
 
 ```json
 {
@@ -493,6 +526,11 @@ See the [Error Handling Guide](docs/guides/error-handling.md) for detailed imple
 The MCP Adapter includes built-in observability for tracking metrics and events. You can implement custom observability handlers to integrate with monitoring systems, analytics platforms, or performance tracking tools.
 
 See the [Observability Guide](docs/guides/observability.md) for detailed metrics tracking and custom handler implementation.
+
+## Migration
+
+- [Migration Guide: v0.5.0](docs/migration/v0.5.0.md) — Breaking changes and upgrade instructions
+- [Migration Guide: v0.3.0](docs/migration/v0.3.0.md) — Transport, observability, and hook name changes
 
 ## License
 [GPL-2.0-or-later](https://spdx.org/licenses/GPL-2.0-or-later.html)
