@@ -12,6 +12,8 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
+use ACROSSAI_MCP_MANAGER\Database\MCPServerTable;
+
 if ( ! class_exists( 'WP_List_Table' ) ) {
 	require_once ABSPATH . 'wp-admin/includes/class-wp-list-table.php';
 }
@@ -64,15 +66,18 @@ class MCPServerListTable extends \WP_List_Table {
 	public function prepare_items() {
 		$this->_column_headers = array( $this->get_columns(), array(), array() );
 
-		$enabled = (bool) get_option( 'acrossai_mcp_manager_enabled', false );
+		$rows = MCPServerTable::get_all();
 
-		$this->items = array(
-			array(
-				'id'          => 'default',
-				'name'        => __( 'Default MCP Server', 'acrossai-mcp-manager' ),
-				'description' => __( 'WordPress MCP Adapter integration for AI clients (VS Code, Claude, GitHub Codex, ChatGPT).', 'acrossai-mcp-manager' ),
-				'enabled'     => $enabled,
-			),
+		$this->items = array_map(
+			function ( $row ) {
+				return array(
+					'id'          => (int) $row['id'],
+					'name'        => $row['server_name'],
+					'description' => __( 'WordPress MCP Adapter integration for AI clients (VS Code, Claude, GitHub Codex, ChatGPT).', 'acrossai-mcp-manager' ),
+					'enabled'     => (bool) $row['is_enabled'],
+				);
+			},
+			$rows
 		);
 	}
 

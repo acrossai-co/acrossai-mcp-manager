@@ -13,6 +13,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 use ACROSSAI_MCP_MANAGER\Core\Plugin;
+use ACROSSAI_MCP_MANAGER\Database\MCPServerTable;
 
 /**
  * Handles admin settings page and settings registration.
@@ -75,15 +76,12 @@ class Settings {
 			wp_die( esc_html__( 'You do not have permission to perform this action.', 'acrossai-mcp-manager' ) );
 		}
 
-		$server = isset( $_GET['server'] ) ? sanitize_key( $_GET['server'] ) : ''; // phpcs:ignore WordPress.Security.NonceVerification
+		$server_id = isset( $_GET['server'] ) ? absint( $_GET['server'] ) : 0; // phpcs:ignore WordPress.Security.NonceVerification
 
-		check_admin_referer( 'acrossai_mcp_toggle_' . $server );
+		check_admin_referer( 'acrossai_mcp_toggle_' . $server_id );
 
-		if ( 'default' === $server ) {
-			$current = (bool) get_option( 'acrossai_mcp_manager_enabled', false );
-			// Store as integer 1/0 — storing PHP bool false via update_option can
-			// result in an empty string, which is still falsy but avoids ambiguity.
-			update_option( 'acrossai_mcp_manager_enabled', $current ? 0 : 1 );
+		if ( $server_id > 0 ) {
+			MCPServerTable::toggle_status( $server_id );
 		}
 
 		wp_safe_redirect( admin_url( 'admin.php?page=acrossai_mcp_manager&updated=1' ) );

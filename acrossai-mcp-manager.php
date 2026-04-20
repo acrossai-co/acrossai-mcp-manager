@@ -46,27 +46,30 @@ if ( class_exists( 'ACROSSAI_MCP_MANAGER\Auth\BasicAuthHandler' ) ) {
 /**
  * Plugin initialization hook.
  *
+ * Creates/upgrades the DB table if the schema version changed, then boots
+ * the plugin singleton.
+ *
  * @since 1.0.0
  */
 add_action(
 	'plugins_loaded',
 	function () {
-		// Initialize the plugin.
+		ACROSSAI_MCP_MANAGER\Database\MCPServerTable::maybe_create_table();
 		ACROSSAI_MCP_MANAGER\Core\Plugin::instance();
 	},
 	10
 );
 
 /**
- * Plugin activation hook.
+ * Plugin activation hook — create table and seed default server row.
  *
  * @since 1.0.0
  */
 register_activation_hook(
 	__FILE__,
 	function () {
-		// Activation logic (placeholder for future).
-		// Could be used for setting default options, creating tables, etc.
+		ACROSSAI_MCP_MANAGER\Database\MCPServerTable::create_table();
+		ACROSSAI_MCP_MANAGER\Database\MCPServerTable::insert_default_server();
 	}
 );
 

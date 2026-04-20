@@ -13,6 +13,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 use ACROSSAI_MCP_MANAGER\Core\Plugin;
+use ACROSSAI_MCP_MANAGER\Database\MCPServerTable;
 
 /**
  * Manages MCP Adapter integration.
@@ -90,7 +91,7 @@ class Controller {
 	 * @return bool True if enabled, false otherwise.
 	 */
 	public function is_enabled() {
-		return (bool) $this->plugin->get_option( 'acrossai_mcp_manager_enabled', false );
+		return MCPServerTable::has_any_enabled();
 	}
 
 	/**
