@@ -12,31 +12,33 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-use ACROSSAI_MCP_MANAGER\Core\Plugin;
+use ACROSSAI_MCP_MANAGER\Database\MCPServerTable;
 
 /**
- * Manages Application Passwords for MCP clients.
+ * Manages Application Passwords for MCP clients and the REST endpoints
+ * that the admin JS uses to generate passwords and fetch client configs.
  *
- * Uses WordPress's native Application Passwords system.
+ * REST namespace: acrossai-mcp-manager/v1
+ *
+ * Endpoints:
+ *   POST /generate-app-password  – create a new WP Application Password
+ *   GET  /get-client-config/{client} – return the JSON config for a client
+ *   GET  /list-app-passwords     – list passwords created by this plugin
  *
  * @since 1.0.0
  */
 class ApplicationPasswords {
 
 	/**
-	 * Plugin instance.
+	 * Supported MCP clients and their configuration details.
 	 *
-	 * @var Plugin
-	 */
-	private $plugin;
-
-	/**
-	 * Supported MCP clients with their configuration details.
+	 * Each entry maps a client ID to the metadata needed to build the JSON
+	 * configuration that users paste into their MCP client config file.
 	 *
-	 * @var array
+	 * @var array<string,array>
 	 */
 	private $clients = array(
-		'vscode' => array(
+		'vscode'  => array(
 			'label'         => 'VS Code',
 			'description'   => 'Visual Studio Code with Copilot',
 			'icon'          => '󰨞',
@@ -44,7 +46,7 @@ class ApplicationPasswords {
 			'config_file'   => '~/.config/Code/User/globalStorage/Copilot.copilot-chat/mcp.json',
 			'server_name'   => 'mcp-wordpress',
 		),
-		'claude' => array(
+		'claude'  => array(
 			'label'         => 'Claude',
 			'description'   => 'Anthropic Claude Desktop App',
 			'icon'          => '🤖',
@@ -52,7 +54,7 @@ class ApplicationPasswords {
 			'config_file'   => '~/Library/Application Support/Claude/claude_desktop_config.json',
 			'server_name'   => 'mcp-wordpress',
 		),
-		'codex'  => array(
+		'codex'   => array(
 			'label'         => 'GitHub Codex',
 			'description'   => 'GitHub Copilot & Codex Integration',
 			'icon'          => '🐙',
@@ -68,7 +70,7 @@ class ApplicationPasswords {
 			'config_file'   => '~/.config/chatgpt/config.json',
 			'server_name'   => 'mcp-wordpress',
 		),
-			'custom' => array(
+		'custom'  => array(
 			'label'         => 'Custom Client',
 			'description'   => 'Custom MCP Client Implementation',
 			'icon'          => '⚙️',
@@ -79,86 +81,131 @@ class ApplicationPasswords {
 	);
 
 	/**
-	 * Constructor.
+	 * Constructor — registers REST routes.
 	 *
 	 * @since 1.0.0
-	 *
-	 * @param Plugin $plugin Plugin instance.
 	 */
-	public function __construct( Plugin $plugin ) {
-		$this->plugin = $plugin;
+	public function __construct() {
 		add_action( 'rest_api_init', array( $this, 'register_rest_routes' ) );
 	}
 
+	// -------------------------------------------------------------------------
+	// REST routes
+	// -------------------------------------------------------------------------
+
 	/**
-	 * Register REST routes.
+	 * Register all REST API routes for this class.
 	 *
 	 * @since 1.0.0
 	 *
 	 * @return void
 	 */
 	public function register_rest_routes() {
+		$namespace       = 'acrossai-mcp-manager/v1';
+		$admin_only_perm = function () {
+			return current_user_can( 'manage_options' );
+		};
+
 		register_rest_route(
-			'acrossai-mcp-manager/v1',
+			$namespace,
 			'/generate-app-password',
 			array(
 				'methods'             => 'POST',
 				'callback'            => array( $this, 'generate_app_password' ),
-				'permission_callback' => function () {
-					return current_user_can( 'manage_options' );
-				},
+				'permission_callback' => $admin_only_perm,
+				'args'                => array(
+					'client'    => array(
+						'required'          => true,
+						'sanitize_callback' => 'sanitize_text_field',
+					),
+					'server_id' => array(
+						'required'          => false,
+						'default'           => 0,
+						'sanitize_callback' => 'absint',
+					),
+				),
 			)
 		);
 
 		register_rest_route(
-			'acrossai-mcp-manager/v1',
+			$namespace,
 			'/get-client-config/(?P<client>[a-z\-]+)',
 			array(
 				'methods'             => 'GET',
 				'callback'            => array( $this, 'get_client_config' ),
-				'permission_callback' => function () {
-					return current_user_can( 'manage_options' );
-				},
+				'permission_callback' => $admin_only_perm,
+				'args'                => array(
+					'server_id' => array(
+						'required'          => false,
+						'default'           => 0,
+						'sanitize_callback' => 'absint',
+					),
+				),
+			)
+		);
+
+		register_rest_route(
+			$namespace,
+			'/list-app-passwords',
+			array(
+				'methods'             => 'GET',
+				'callback'            => array( $this, 'list_app_passwords' ),
+				'permission_callback' => $admin_only_perm,
 			)
 		);
 	}
 
+	// -------------------------------------------------------------------------
+	// REST callbacks
+	// -------------------------------------------------------------------------
+
 	/**
-	 * Generate Application Password via REST API.
+	 * Generate a WordPress Application Password for the given MCP client.
 	 *
-	 * Uses WordPress's native application password system.
+	 * The password name includes the client label and, when a valid server_id
+	 * is supplied, the server name — making it easy to identify in the profile
+	 * page. The raw password is returned once and never stored by this plugin.
 	 *
 	 * @since 1.0.0
 	 *
-	 * @param \WP_REST_Request $request The request object.
+	 * @param \WP_REST_Request $request REST request.
 	 *
-	 * @return \WP_REST_Response|\WP_Error Response or error.
+	 * @return \WP_REST_Response|\WP_Error
 	 */
 	public function generate_app_password( \WP_REST_Request $request ) {
-		$current_user = wp_get_current_user();
-		$client       = sanitize_text_field( $request->get_param( 'client' ) );
+		$client    = $request->get_param( 'client' );
+		$server_id = (int) $request->get_param( 'server_id' );
 
 		if ( ! isset( $this->clients[ $client ] ) ) {
 			return new \WP_Error(
 				'invalid_client',
-				__( 'Invalid client type', 'acrossai-mcp-manager' ),
+				__( 'Invalid client type.', 'acrossai-mcp-manager' ),
 				array( 'status' => 400 )
 			);
 		}
 
-		// Check if WordPress Application Passwords class is available (WP 5.6+)
 		if ( ! class_exists( 'WP_Application_Passwords' ) ) {
 			return new \WP_Error(
 				'not_supported',
-				__( 'Application Passwords not supported on this WordPress version', 'acrossai-mcp-manager' ),
+				__( 'Application Passwords are not supported on this WordPress version.', 'acrossai-mcp-manager' ),
 				array( 'status' => 501 )
 			);
 		}
 
-		$app_name = sprintf( 'AcrossAI MCP Manager - %s', $this->clients[ $client ]['label'] );
+		$current_user = wp_get_current_user();
+		$client_label = $this->clients[ $client ]['label'];
 
-		// Create application password using WordPress's native class
-		// This will show up in the user's profile under Application Passwords
+		// Append server name when a specific server is referenced.
+		$server_suffix = '';
+		if ( $server_id > 0 ) {
+			$server = MCPServerTable::get_by_id( $server_id );
+			if ( $server ) {
+				$server_suffix = ' (' . $server['server_name'] . ')';
+			}
+		}
+
+		$app_name = sprintf( 'AcrossAI MCP Manager - %s%s', $client_label, $server_suffix );
+
 		$result = \WP_Application_Passwords::create_new_application_password(
 			$current_user->ID,
 			array( 'name' => $app_name )
@@ -168,84 +215,132 @@ class ApplicationPasswords {
 			return $result;
 		}
 
-		// $result is array: [ 'password', 'app_details' ]
 		list( $password, $app_details ) = $result;
-		$app_id                         = isset( $app_details['uuid'] ) ? $app_details['uuid'] : '';
 
-		// Return password only once
 		return rest_ensure_response(
 			array(
 				'success'  => true,
 				'password' => $password,
 				'username' => $current_user->user_login,
 				'client'   => $client,
-				'app_id'   => $app_id,
-				'message'  => __( 'Application Password created successfully and is now visible in your profile page. Store this safely - it will only be shown once.', 'acrossai-mcp-manager' ),
+				'app_id'   => isset( $app_details['uuid'] ) ? $app_details['uuid'] : '',
+				'message'  => __( 'Application Password created. Store it safely — it is shown only once.', 'acrossai-mcp-manager' ),
 			)
 		);
 	}
 
 	/**
-	 * Get client configuration with top-level wrapper.
+	 * Return the full MCP JSON configuration for a client.
+	 *
+	 * Accepts an optional server_id query parameter. All servers currently share
+	 * the same MCP adapter endpoint; server_id is forwarded for future use when
+	 * each server may expose a unique URL.
 	 *
 	 * @since 1.0.0
 	 *
-	 * @param \WP_REST_Request $request The request object.
+	 * @param \WP_REST_Request $request REST request.
 	 *
-	 * @return \WP_REST_Response Response.
+	 * @return \WP_REST_Response
 	 */
 	public function get_client_config( \WP_REST_Request $request ) {
-		$client = sanitize_text_field( $request->get_param( 'client' ) );
+		$client    = sanitize_text_field( $request->get_param( 'client' ) );
+		$server_id = (int) $request->get_param( 'server_id' );
 
 		if ( ! isset( $this->clients[ $client ] ) ) {
 			return rest_ensure_response(
 				array(
 					'success' => false,
-					'message' => __( 'Invalid client type', 'acrossai-mcp-manager' ),
+					'message' => __( 'Invalid client type.', 'acrossai-mcp-manager' ),
 				)
 			);
 		}
 
-		$current_user = wp_get_current_user();
-		$username     = $current_user->user_login;
+		$current_user  = wp_get_current_user();
+		$mcp_config    = $this->generate_mcp_server_config( $current_user->user_login, $server_id );
+		$top_level_key = $this->clients[ $client ]['top_level_key'];
+		$server_name   = $this->clients[ $client ]['server_name'];
 
-		$mcp_config        = $this->generate_mcp_server_config( $username );
-		$wrapped_config    = $this->wrap_config_with_top_level_key( $client, $mcp_config );
-		$config_file_path  = $this->clients[ $client ]['config_file'];
-		$top_level_key     = $this->clients[ $client ]['top_level_key'];
+		$full_config = array(
+			$top_level_key => array(
+				$server_name => $mcp_config,
+			),
+		);
 
 		return rest_ensure_response(
 			array(
-				'success'           => true,
-				'client'            => $client,
-				'mcp_config'        => $mcp_config,
-				'full_config'       => $wrapped_config,
-				'username'          => $username,
-				'top_level_key'     => $top_level_key,
-				'config_file_path'  => $config_file_path,
+				'success'          => true,
+				'client'           => $client,
+				'mcp_config'       => $mcp_config,
+				'full_config'      => $full_config,
+				'username'         => $current_user->user_login,
+				'top_level_key'    => $top_level_key,
+				'config_file_path' => $this->clients[ $client ]['config_file'],
 			)
 		);
 	}
 
 	/**
-	 * Generate MCP server configuration (Format #1 - Recommended Standard).
+	 * List existing Application Passwords created by this plugin for the current user.
 	 *
-	 * All clients use the same standard Format #1 configuration:
-	 * - Uses npx command with @automattic/mcp-wordpress-remote@latest package
-	 * - Uses "env" key (not "environment")
-	 * - NO "type" field
-	 * - Returns identical structure for: VS Code, Claude, GitHub Codex, Custom
+	 * Filters by the "AcrossAI MCP Manager" name prefix so unrelated passwords
+	 * are never exposed.
 	 *
 	 * @since 1.0.0
 	 *
-	 * @param string $username Username.
-	 *
-	 * @return array MCP server configuration in Format #1.
+	 * @return \WP_REST_Response
 	 */
-	private function generate_mcp_server_config( $username ) {
+	public function list_app_passwords() {
+		if ( ! class_exists( 'WP_Application_Passwords' ) ) {
+			return rest_ensure_response(
+				array(
+					'success'   => true,
+					'passwords' => array(),
+				)
+			);
+		}
+
+		$user_id   = get_current_user_id();
+		$all       = \WP_Application_Passwords::get_user_application_passwords( $user_id );
+		$passwords = array_values(
+			array_filter(
+				$all,
+				function ( $pwd ) {
+					return isset( $pwd['name'] ) && false !== strpos( $pwd['name'], 'AcrossAI MCP Manager' );
+				}
+			)
+		);
+
+		return rest_ensure_response(
+			array(
+				'success'   => true,
+				'passwords' => $passwords,
+			)
+		);
+	}
+
+	// -------------------------------------------------------------------------
+	// Helpers
+	// -------------------------------------------------------------------------
+
+	/**
+	 * Build the inner MCP server configuration block.
+	 *
+	 * Uses the standard @automattic/mcp-wordpress-remote package. All servers
+	 * currently share the same adapter endpoint; server_id is accepted for
+	 * forward-compatibility when per-server URLs are introduced.
+	 *
+	 * @since 1.0.0
+	 *
+	 * @param string $username  WordPress username for the WP_API_USERNAME env var.
+	 * @param int    $server_id Optional DB server ID (reserved for future use).
+	 *
+	 * @return array MCP server configuration array.
+	 */
+	private function generate_mcp_server_config( $username, $server_id = 0 ) {
+		// All servers currently use the same adapter endpoint.
+		// When per-server URLs are supported, derive the URL from $server_id here.
 		$mcp_api_url = rest_url( 'mcp/mcp-adapter-default-server' );
 
-		// Format #1: Standard recommended configuration for all clients
 		return array(
 			'command' => 'npx',
 			'args'    => array(
@@ -255,46 +350,17 @@ class ApplicationPasswords {
 			'env'     => array(
 				'WP_API_URL'      => $mcp_api_url,
 				'WP_API_USERNAME' => $username,
-				'WP_API_PASSWORD' => '(See password field above)',
+				'WP_API_PASSWORD' => '(paste generated password here)',
 			),
 		);
 	}
 
 	/**
-	 * Wrap MCP config with top-level key based on client type.
-	 *
-	 * Different providers use different top-level keys:
-	 * - VS Code, GitHub Codex: "servers"
-	 * - Claude, Custom: "mcpServers"
+	 * Return the full client definitions array.
 	 *
 	 * @since 1.0.0
 	 *
-	 * @param string $client     Client type.
-	 * @param array  $mcp_config MCP server configuration.
-	 *
-	 * @return array Full configuration with top-level key.
-	 */
-	private function wrap_config_with_top_level_key( $client, $mcp_config ) {
-		if ( ! isset( $this->clients[ $client ] ) ) {
-			return array();
-		}
-
-		$top_level_key = $this->clients[ $client ]['top_level_key'];
-		$server_name   = $this->clients[ $client ]['server_name'];
-
-		return array(
-			$top_level_key => array(
-				$server_name => $mcp_config,
-			),
-		);
-	}
-
-	/**
-	 * Get list of supported clients.
-	 *
-	 * @since 1.0.0
-	 *
-	 * @return array List of clients.
+	 * @return array<string,array>
 	 */
 	public function get_clients() {
 		return $this->clients;

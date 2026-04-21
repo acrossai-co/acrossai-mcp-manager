@@ -12,105 +12,85 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-use ACROSSAI_MCP_MANAGER\Core\Plugin;
 use ACROSSAI_MCP_MANAGER\Database\MCPServerTable;
 
 /**
- * Manages MCP Adapter integration.
+ * Manages the MCP Adapter lifecycle.
+ *
+ * Reads enabled servers from the DB on every init hook and boots
+ * the \WP\MCP\Plugin adapter singleton when at least one server is active.
+ *
+ * Status values
+ * -------------
+ *   'running'   — adapter initialised successfully
+ *   'disabled'  — no enabled server rows in the DB
+ *   'not-found' — \WP\MCP\Plugin class not available
+ *   'error'     — exception thrown during adapter init
+ *   'unknown'   — initialize_adapter() not yet called
  *
  * @since 1.0.0
  */
 class Controller {
 
 	/**
-	 * Plugin instance.
-	 *
-	 * @var Plugin
-	 */
-	private $plugin;
-
-	/**
-	 * Adapter status cache.
+	 * Adapter status.
 	 *
 	 * @var string|null
 	 */
 	private $adapter_status = null;
 
 	/**
-	 * Constructor.
+	 * Constructor — registers the init hook.
 	 *
 	 * @since 1.0.0
-	 *
-	 * @param Plugin $plugin Plugin instance.
 	 */
-	public function __construct( Plugin $plugin ) {
-		$this->plugin = $plugin;
-
-		// Register initialization hook.
-		add_action( 'init', array( $this, 'initialize_adapter' ), 20 );
+	public function __construct() {
+		add_action( 'init', array( $this, 'initialize_adapter' ), 1 );
 	}
 
 	/**
-	 * Initialize MCP Adapter if enabled.
+	 * Boot the MCP Adapter when at least one server is enabled.
 	 *
 	 * @since 1.0.0
 	 *
 	 * @return void
 	 */
 	public function initialize_adapter() {
-		// Check if MCP Adapter is enabled.
-		if ( ! $this->is_enabled() ) {
+		if ( ! MCPServerTable::has_any_enabled() ) {
 			$this->adapter_status = 'disabled';
 			return;
 		}
 
-		// Check if MCP Adapter Plugin class exists.
-		// The MCP Adapter uses WP\MCP namespace, not \MCP
 		if ( ! class_exists( '\WP\MCP\Plugin' ) ) {
 			$this->adapter_status = 'not-found';
 			return;
 		}
 
-		// Initialize MCP Adapter.
 		try {
 			\WP\MCP\Plugin::instance();
 			$this->adapter_status = 'running';
 		} catch ( \Exception $e ) {
+			$this->adapter_status = 'error';
 			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
 				do_action( 'acrossai_mcp_manager_adapter_init_error', $e );
 			}
-			$this->adapter_status = 'error';
 		}
 	}
 
 	/**
-	 * Check if MCP Adapter is enabled.
+	 * Return the current adapter status string.
+	 *
+	 * Calls initialize_adapter() if it hasn't run yet.
 	 *
 	 * @since 1.0.0
 	 *
-	 * @return bool True if enabled, false otherwise.
-	 */
-	public function is_enabled() {
-		return MCPServerTable::has_any_enabled();
-	}
-
-	/**
-	 * Get adapter status.
-	 *
-	 * @since 1.0.0
-	 *
-	 * @return string Adapter status: 'running', 'disabled', 'not-found', or 'error'.
+	 * @return string
 	 */
 	public function get_adapter_status() {
 		if ( null === $this->adapter_status ) {
-			// Initialize if not already done.
 			$this->initialize_adapter();
 		}
 
-		if ( null === $this->adapter_status ) {
-			return 'unknown';
-		}
-
-		return $this->adapter_status;
+		return $this->adapter_status ?? 'unknown';
 	}
 }

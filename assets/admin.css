@@ -1,278 +1,115 @@
 /**
- * AcrossAI MCP Manager Admin Styles
+ * AcrossAI MCP Manager — minimal admin styles.
+ *
+ * Only overrides things WordPress core doesn't already handle.
+ * All colours follow the WP admin palette so every admin colour scheme
+ * (default, fresh, blue, midnight, etc.) looks correct.
  */
 
-.acrossai-mcp-manager-wrap {
-	max-width: 100%;
-}
-
-.acrossai-mcp-manager-wrap .nav-tab-wrapper {
-	background: #fff;
-	border-bottom: 1px solid #ddd;
-	margin: 15px 0 0 0;
-	padding: 0;
-	border-radius: 3px;
-}
-
+/* -------------------------------------------------------------------------
+   Tab navigation — WP handles the base styles; we just add flex for icons.
+   ------------------------------------------------------------------------- */
 .acrossai-mcp-manager-wrap .nav-tab {
-	background: #f1f1f1;
-	border: 1px solid #ddd;
-	border-bottom: none;
-	color: #666;
-	cursor: pointer;
-	font-size: 13px;
-	line-height: 1.5;
-	margin: 0 5px 0 0;
-	padding: 10px 15px;
-	text-decoration: none;
-	transition: all 0.2s;
 	display: inline-flex;
 	align-items: center;
-	gap: 5px;
+	gap: 4px;
 }
 
-.acrossai-mcp-manager-wrap .nav-tab:hover {
-	background: #e9e9e9;
-	color: #333;
-}
-
-.acrossai-mcp-manager-wrap .nav-tab.nav-tab-active {
-	background: #fff;
-	border-bottom-color: #fff;
-	color: #000;
-	font-weight: 600;
-}
-
-.acrossai-mcp-manager-wrap .nav-tab .mcp-client-icon {
-	font-size: 16px;
-	display: inline-block;
-}
-
-/* Tab Content */
+/* -------------------------------------------------------------------------
+   Tab content area
+   ------------------------------------------------------------------------- */
 .tab-content {
 	background: #fff;
 	padding: 20px;
-	border: 1px solid #ddd;
+	border: 1px solid #c3c4c7;
 	border-top: none;
 	margin-bottom: 20px;
 }
 
 .mcp-tab-panel {
-	animation: fadeIn 0.2s;
+	animation: acrossai-fade-in 0.15s ease-in;
 }
 
-@keyframes fadeIn {
+@keyframes acrossai-fade-in {
 	from { opacity: 0; }
-	to { opacity: 1; }
+	to   { opacity: 1; }
 }
 
-/* Configuration Boxes */
-.mcp-config-box {
-	background: #f9f9f9;
-	border: 1px solid #ddd;
-	border-radius: 4px;
-	padding: 15px;
-	margin: 20px 0;
-}
-
-.mcp-config-box h3 {
-	margin-top: 0;
-	margin-bottom: 15px;
-	color: #0073aa;
-}
-
-.config-item {
-	margin-bottom: 15px;
-}
-
-.config-item label {
-	display: block;
-	font-weight: 600;
-	margin-bottom: 5px;
-	color: #333;
-}
-
-.config-item input[type="text"],
-.config-item input[type="password"],
-.config-item textarea {
-	width: 100%;
-	padding: 8px;
-	border: 1px solid #ddd;
-	border-radius: 3px;
-	font-family: 'Courier New', monospace;
-	font-size: 12px;
-}
-
-.password-section {
-	display: flex;
-	gap: 5px;
-	align-items: center;
-}
-
-.password-section input {
-	flex: 1;
-	min-width: 0;
-}
-
-.password-section .button {
-	white-space: nowrap;
-	flex-shrink: 0;
-}
-
-.password-actions {
-	margin: 20px 0;
-	padding: 15px;
-	background: #f0f7ff;
-	border: 1px solid #cce5ff;
-	border-radius: 3px;
-}
-
-.password-actions .button-primary {
-	margin-bottom: 10px;
-	display: block;
-	width: 100%;
-	text-align: center;
-}
-
-.password-actions .description {
-	margin: 10px 0 0 0;
-	color: #666;
-	font-size: 12px;
-}
-
-/* Configuration JSON */
+/* -------------------------------------------------------------------------
+   Configuration JSON block
+   ------------------------------------------------------------------------- */
 .mcp-config-json {
-	margin: 30px 0;
+	margin: 16px 0;
+}
+
+.mcp-config-json label {
+	display: block;
+	margin-bottom: 6px;
+}
+
+.mcp-config-json .button {
+	margin-top: 8px;
 }
 
 .mcp-config-json textarea {
 	width: 100%;
-	min-height: 300px;
-	padding: 10px;
-	font-family: 'Courier New', monospace;
+	min-height: 220px;
+	font-family: Consolas, 'Courier New', monospace;
 	font-size: 12px;
-	border: 1px solid #ddd;
-	border-radius: 3px;
-	background: #f5f5f5;
-}
-
-.mcp-config-json .button {
-	margin-top: 10px;
-}
-
-/* Info Box */
-.mcp-info-box {
-	background: #fff;
-	border-left: 4px solid #0073aa;
-	padding: 15px;
-	margin: 20px 0;
-}
-
-.mcp-info-box h3 {
-	margin: 0 0 10px 0;
-	color: #0073aa;
-}
-
-.mcp-clients-list {
-	margin: 0;
-	padding-left: 20px;
-}
-
-.mcp-clients-list li {
-	margin: 15px 0;
-	padding-bottom: 10px;
-	border-bottom: 1px solid #eee;
-}
-
-.mcp-clients-list li:last-child {
-	border-bottom: none;
-}
-
-.mcp-clients-list strong {
-	display: block;
-	margin-bottom: 5px;
-	color: #0073aa;
-}
-
-.mcp-clients-list p {
-	margin: 0;
-	color: #666;
-	font-size: 13px;
-}
-
-/* Instructions */
-.mcp-instructions {
-	background: #f9f9f9;
-	border: 1px solid #ddd;
-	border-radius: 4px;
-	padding: 15px;
-	margin: 20px 0;
-}
-
-.mcp-instructions h3 {
-	margin-top: 0;
-	color: #0073aa;
-}
-
-.mcp-instructions ol {
-	margin: 10px 0;
-	padding-left: 25px;
-}
-
-.mcp-instructions li {
-	margin: 8px 0;
 	line-height: 1.6;
+	background: #f6f7f7;
+	border: 1px solid #c3c4c7;
+	padding: 10px;
+	resize: vertical;
+	box-sizing: border-box;
 }
 
-/* Buttons */
-.button.copy-to-clipboard {
-	cursor: pointer;
-	transition: all 0.2s;
+/* -------------------------------------------------------------------------
+   Password actions area
+   ------------------------------------------------------------------------- */
+.password-actions {
+	margin: 16px 0 20px;
 }
 
-.button.copy-to-clipboard:hover {
-	background: #0073aa;
-	color: #fff;
-	border-color: #0073aa;
+.password-actions .description {
+	margin-top: 6px;
 }
 
-.button.generate-app-password {
+/* -------------------------------------------------------------------------
+   Status badges (list table + overview tab)
+   Uses WP-native admin colours: green #00a32a, red #d63638
+   ------------------------------------------------------------------------- */
+.acrossai-status-badge {
 	display: inline-block;
-}
-
-/* Status Messages */
-.mcp-status-message {
-	padding: 12px;
-	margin: 10px 0;
+	padding: 2px 8px;
 	border-radius: 3px;
-	border-left: 4px solid;
+	font-size: 12px;
+	font-weight: 600;
+	line-height: 1.8;
+	vertical-align: middle;
 }
 
-.mcp-status-message.success {
-	background: #d4edda;
-	border-color: #28a745;
-	color: #155724;
+.acrossai-status-active {
+	background: #edfaef;
+	color: #00a32a;
+	border: 1px solid #b8e6bf;
 }
 
-.mcp-status-message.error {
-	background: #f8d7da;
-	border-color: #dc3545;
-	color: #721c24;
+.acrossai-status-inactive {
+	background: #fcf0f1;
+	color: #d63638;
+	border: 1px solid #f7b8b9;
 }
 
-.mcp-status-message.info {
-	background: #d1ecf1;
-	border-color: #17a2b8;
-	color: #0c5460;
-}
-
-/* Back link in edit page title */
+/* -------------------------------------------------------------------------
+   Back link in the edit-page title
+   ------------------------------------------------------------------------- */
 .acrossai-back-link {
 	font-size: 13px;
 	font-weight: 400;
 	color: #2271b1;
 	text-decoration: none;
-	margin-right: 10px;
+	margin-right: 8px;
 	vertical-align: middle;
 }
 
@@ -281,56 +118,37 @@
 	text-decoration: underline;
 }
 
-/* Status badges in list table */
-.acrossai-status-badge {
-	display: inline-block;
-	padding: 3px 8px;
-	border-radius: 3px;
-	font-size: 12px;
-	font-weight: 600;
+/* -------------------------------------------------------------------------
+   Supported clients list (overview tab)
+   ------------------------------------------------------------------------- */
+.mcp-clients-list {
+	list-style: none;
+	margin: 8px 0 0;
+	padding: 0;
+}
+
+.mcp-clients-list li {
+	padding: 7px 0;
+	border-bottom: 1px solid #f0f0f1;
+	color: #50575e;
+	font-size: 13px;
 	line-height: 1.5;
-	vertical-align: middle;
 }
 
-.acrossai-status-active {
-	background: #d4edda;
-	color: #155724;
-	border: 1px solid #c3e6cb;
+.mcp-clients-list li:last-child {
+	border-bottom: none;
 }
 
-.acrossai-status-inactive {
-	background: #f8d7da;
-	color: #721c24;
-	border: 1px solid #f5c6cb;
-}
-
-.acrossai-btn-enable,
-.acrossai-btn-disable {
-	vertical-align: middle;
-}
-
-/* Responsive */
+/* -------------------------------------------------------------------------
+   Responsive — narrow viewports
+   ------------------------------------------------------------------------- */
 @media (max-width: 768px) {
-	.password-section {
-		flex-direction: column;
-	}
-
-	.password-section input {
-		width: 100%;
-	}
-
-	.password-section .button {
-		width: 100%;
-	}
-
 	.acrossai-mcp-manager-wrap .nav-tab {
 		font-size: 12px;
 		padding: 8px 10px;
-		margin-right: 2px;
 	}
 
-	.config-item input[type="text"],
-	.config-item textarea {
+	.mcp-config-json textarea {
 		font-size: 11px;
 	}
 }

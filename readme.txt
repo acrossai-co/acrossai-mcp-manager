@@ -1,4 +1,4 @@
-=== MCP Manager ===
+=== AcrossAI MCP Manager ===
 Contributors: raftaar1191
 Tags: mcp, ai, copilot, vscode, claude
 Requires at least: 5.9

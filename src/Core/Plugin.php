@@ -10,11 +10,10 @@ namespace ACROSSAI_MCP_MANAGER\Core;
 
 use ACROSSAI_MCP_MANAGER\Admin\Settings;
 use ACROSSAI_MCP_MANAGER\MCP\Controller;
+use ACROSSAI_MCP_MANAGER\REST\CliController;
 
 /**
- * Plugin singleton class.
- *
- * Manages plugin initialization and provides main plugin instance.
+ * Plugin singleton — boots the admin UI and MCP controller.
  *
  * @since 1.0.0
  */
@@ -42,17 +41,25 @@ class Plugin {
 	private $controller;
 
 	/**
-	 * Private constructor.
+	 * CLI REST controller instance.
+	 *
+	 * @var CliController
+	 */
+	private $cli_controller;
+
+	/**
+	 * Private constructor — use instance() instead.
 	 *
 	 * @since 1.0.0
 	 */
 	private function __construct() {
-		$this->settings   = new Settings( $this );
-		$this->controller = new Controller( $this );
+		$this->settings        = new Settings();
+		$this->controller      = new Controller();
+		$this->cli_controller  = new CliController();
 	}
 
 	/**
-	 * Get singleton instance.
+	 * Return the singleton instance, creating it on first call.
 	 *
 	 * @since 1.0.0
 	 *
@@ -66,29 +73,13 @@ class Plugin {
 	}
 
 	/**
-	 * Get plugin URL.
+	 * Return the plugin URL.
 	 *
 	 * @since 1.0.0
 	 *
-	 * @return string Plugin URL.
+	 * @return string
 	 */
 	public function get_plugin_url() {
 		return ACROSSAI_MCP_MANAGER_URL;
-	}
-
-	/**
-	 * Get plugin option.
-	 *
-	 * Wrapper for WordPress get_option function.
-	 *
-	 * @since 1.0.0
-	 *
-	 * @param string $key     Option key.
-	 * @param mixed  $default Default value.
-	 *
-	 * @return mixed Option value.
-	 */
-	public function get_option( $key, $default = false ) {
-		return get_option( $key, $default );
 	}
 }

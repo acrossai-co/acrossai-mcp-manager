@@ -73,7 +73,7 @@ class MCPServerListTable extends \WP_List_Table {
 				return array(
 					'id'          => (int) $row['id'],
 					'name'        => $row['server_name'],
-					'description' => __( 'WordPress MCP Adapter integration for AI clients (VS Code, Claude, GitHub Codex, ChatGPT).', 'acrossai-mcp-manager' ),
+					'description' => $row['description'],
 					'enabled'     => (bool) $row['is_enabled'],
 				);
 			},

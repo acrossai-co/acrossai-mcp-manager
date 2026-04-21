@@ -16,18 +16,16 @@
  * @package AcrossAI_MCP_Manager
  */
 
-// Exit if accessed directly.
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-// Define plugin constants.
 define( 'ACROSSAI_MCP_MANAGER_VERSION', '1.0.0' );
 define( 'ACROSSAI_MCP_MANAGER_FILE', __FILE__ );
 define( 'ACROSSAI_MCP_MANAGER_DIR', __DIR__ );
 define( 'ACROSSAI_MCP_MANAGER_URL', plugin_dir_url( __FILE__ ) );
 
-// Load Jetpack Autoloader if available.
+// Load Jetpack Autoloader.
 $acrossai_mcp_manager_jetpack_autoloader = __DIR__ . '/vendor/autoload_packages.php';
 if ( is_file( $acrossai_mcp_manager_jetpack_autoloader ) ) {
 	require_once $acrossai_mcp_manager_jetpack_autoloader;
@@ -38,16 +36,11 @@ if ( is_file( __DIR__ . '/vendor/autoload.php' ) ) {
 	require_once __DIR__ . '/vendor/autoload.php';
 }
 
-// Initialize basic auth handler for REST API
-if ( class_exists( 'ACROSSAI_MCP_MANAGER\Auth\BasicAuthHandler' ) ) {
-	ACROSSAI_MCP_MANAGER\Auth\BasicAuthHandler::init();
-}
-
 /**
- * Plugin initialization hook.
+ * Boot the plugin.
  *
- * Creates/upgrades the DB table if the schema version changed, then boots
- * the plugin singleton.
+ * Creates/upgrades the DB table if the schema version changed, then
+ * initialises the plugin singleton.
  *
  * @since 1.0.0
  */
@@ -61,7 +54,7 @@ add_action(
 );
 
 /**
- * Plugin activation hook — create table and seed default server row.
+ * Activation hook — create table and seed the default server row.
  *
  * @since 1.0.0
  */
@@ -74,14 +67,13 @@ register_activation_hook(
 );
 
 /**
- * Plugin deactivation hook.
+ * Deactivation hook — placeholder for future cleanup.
  *
  * @since 1.0.0
  */
 register_deactivation_hook(
 	__FILE__,
 	function () {
-		// Deactivation logic (placeholder for future).
-		// Could be used for cleanup operations.
+		// Intentionally left empty.
 	}
 );

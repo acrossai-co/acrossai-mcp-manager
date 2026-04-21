@@ -15,46 +15,46 @@ if ( ! defined( 'ABSPATH' ) ) {
 /**
  * Manages the {prefix}acrossai_mcp_servers custom table.
  *
- * Table columns:
- *   id          BIGINT UNSIGNED  — auto-increment primary key
- *   server_name VARCHAR(255)     — human-readable server name
- *   is_enabled  TINYINT(1)       — 1 = running, 0 = stopped
- *   created_at  DATETIME         — row creation timestamp
+ * Schema
+ * ------
+ *   id          BIGINT UNSIGNED  PK auto-increment
+ *   server_name VARCHAR(255)     human-readable name
+ *   description VARCHAR(500)     optional description
+ *   is_enabled  TINYINT(1)       1 = running, 0 = stopped
+ *   created_at  DATETIME         row creation timestamp
+ *
+ * Bump DB_VERSION whenever the schema changes — maybe_create_table() will
+ * detect the mismatch and run dbDelta automatically.
+ *
+ * Caching
+ * -------
+ * All read methods use the 'acrossai_mcp' cache group. Write methods
+ * (toggle_status, update_server, insert_default_server) delete the
+ * affected keys so stale data is never served.
  *
  * @since 1.0.0
  */
 class MCPServerTable {
 
-	/**
-	 * Base table name (without DB prefix).
-	 *
-	 * @var string
-	 */
-	const TABLE_NAME = 'acrossai_mcp_servers';
-
-	/**
-	 * Current schema version.
-	 *
-	 * Bump this string whenever the table structure changes so
-	 * maybe_create_table() triggers a dbDelta upgrade automatically.
-	 *
-	 * @var string
-	 */
-	const DB_VERSION = '1.0.0';
-
-	/**
-	 * WordPress option key that stores the installed schema version.
-	 *
-	 * @var string
-	 */
+	const TABLE_NAME        = 'acrossai_mcp_servers';
+	const DB_VERSION        = '1.1.0';
 	const DB_VERSION_OPTION = 'acrossai_mcp_manager_db_version';
 
+	/**
+	 * Object-cache group used for all keys in this class.
+	 */
+	const CACHE_GROUP = 'acrossai_mcp';
+
 	// -------------------------------------------------------------------------
-	// Table lifecycle
+	// Helpers
 	// -------------------------------------------------------------------------
 
 	/**
 	 * Return the full table name including the WordPress DB prefix.
+	 *
+	 * The returned value is always derived from $wpdb->prefix (sanitised by
+	 * WP core) + a hard-coded constant, so it is safe to interpolate into SQL
+	 * after being passed through esc_sql().
 	 *
 	 * @since 1.0.0
 	 *
@@ -65,10 +65,12 @@ class MCPServerTable {
 		return $wpdb->prefix . self::TABLE_NAME;
 	}
 
+	// -------------------------------------------------------------------------
+	// Table lifecycle
+	// -------------------------------------------------------------------------
+
 	/**
-	 * Create or upgrade the table using dbDelta.
-	 *
-	 * Safe to call on every activation — dbDelta is idempotent.
+	 * Create or upgrade the table using dbDelta (idempotent).
 	 *
 	 * @since 1.0.0
 	 *
@@ -80,10 +82,11 @@ class MCPServerTable {
 		$table_name      = self::get_table_name();
 		$charset_collate = $wpdb->get_charset_collate();
 
-		// Note: dbDelta requires two spaces before PRIMARY KEY.
+		// dbDelta requires exactly two spaces before PRIMARY KEY.
 		$sql = "CREATE TABLE {$table_name} (
 			id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
 			server_name VARCHAR(255) NOT NULL,
+			description VARCHAR(500) NOT NULL DEFAULT '',
 			is_enabled TINYINT(1) NOT NULL DEFAULT 0,
 			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			PRIMARY KEY  (id)
@@ -96,9 +99,7 @@ class MCPServerTable {
 	}
 
 	/**
-	 * Create the table only when the stored schema version is outdated.
-	 *
-	 * Called on every plugins_loaded so upgrades are applied automatically.
+	 * Run create_table() only when the stored schema version is outdated.
 	 *
 	 * @since 1.0.0
 	 *
@@ -109,16 +110,12 @@ class MCPServerTable {
 			self::create_table();
 		}
 
-		// Always seed the default row if the table is empty — covers the case
-		// where the table was created but the activation hook never fired
-		// (e.g. the plugin was already active when this code was deployed).
+		// Always seed — insert_default_server() is a no-op when rows exist.
 		self::insert_default_server();
 	}
 
 	/**
-	 * Seed the table with the default server row when the table is empty.
-	 *
-	 * Called once during plugin activation.
+	 * Seed the default server row when the table is empty.
 	 *
 	 * @since 1.0.0
 	 *
@@ -127,20 +124,27 @@ class MCPServerTable {
 	public static function insert_default_server() {
 		global $wpdb;
 
-		$table_name = self::get_table_name();
+		// $table_name is derived from $wpdb->prefix + a constant — safe to interpolate.
+		$table_name = esc_sql( self::get_table_name() );
 
-		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 		$count = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table_name}" );
 
 		if ( 0 === $count ) {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
 			$wpdb->insert(
-				$table_name,
+				self::get_table_name(),
 				array(
 					'server_name' => 'Default MCP Server',
+					'description' => 'WordPress MCP Adapter integration for AI clients (VS Code, Claude, GitHub Codex, ChatGPT).',
 					'is_enabled'  => 0,
 				),
-				array( '%s', '%d' )
+				array( '%s', '%s', '%d' )
 			);
+
+			// Bust caches so the new row is immediately visible.
+			wp_cache_delete( 'all_servers', self::CACHE_GROUP );
+			wp_cache_delete( 'has_enabled', self::CACHE_GROUP );
 		}
 	}
 
@@ -153,17 +157,53 @@ class MCPServerTable {
 	 *
 	 * @since 1.0.0
 	 *
-	 * @return array Array of associative arrays, one per row.
+	 * @return array[] Array of associative-array rows.
 	 */
 	public static function get_all() {
+		$cached = wp_cache_get( 'all_servers', self::CACHE_GROUP );
+		if ( false !== $cached ) {
+			return $cached;
+		}
+
 		global $wpdb;
 
-		$table_name = self::get_table_name();
+		// $table_name is derived from $wpdb->prefix + a constant — safe to interpolate.
+		$table_name = esc_sql( self::get_table_name() );
 
-		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 		$results = $wpdb->get_results( "SELECT * FROM {$table_name} ORDER BY id ASC", ARRAY_A );
+		$results = $results ?: array();
 
-		return $results ?: array();
+		wp_cache_set( 'all_servers', $results, self::CACHE_GROUP );
+
+		return $results;
+	}
+
+	/**
+	 * Return all server rows where is_enabled = 1.
+	 *
+	 * @since 1.0.0
+	 *
+	 * @return array[] Array of associative-array rows.
+	 */
+	public static function get_enabled_servers() {
+		$cached = wp_cache_get( 'enabled_servers', self::CACHE_GROUP );
+		if ( false !== $cached ) {
+			return $cached;
+		}
+
+		global $wpdb;
+
+		// $table_name is derived from $wpdb->prefix + a constant — safe to interpolate.
+		$table_name = esc_sql( self::get_table_name() );
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$results = $wpdb->get_results( "SELECT * FROM {$table_name} WHERE is_enabled = 1 ORDER BY id ASC", ARRAY_A );
+		$results = $results ?: array();
+
+		wp_cache_set( 'enabled_servers', $results, self::CACHE_GROUP );
+
+		return $results;
 	}
 
 	/**
@@ -173,47 +213,112 @@ class MCPServerTable {
 	 *
 	 * @param int $id Server row ID.
 	 *
-	 * @return array|null Associative array on success, null if not found.
+	 * @return array|null Row as associative array, or null if not found.
 	 */
 	public static function get_by_id( $id ) {
+		$id        = absint( $id );
+		$cache_key = 'server_' . $id;
+
+		$cached = wp_cache_get( $cache_key, self::CACHE_GROUP );
+		if ( false !== $cached ) {
+			return $cached;
+		}
+
 		global $wpdb;
 
-		$table_name = self::get_table_name();
+		// $table_name is derived from $wpdb->prefix + a constant — safe to interpolate.
+		$table_name = esc_sql( self::get_table_name() );
 
-		return $wpdb->get_row(
-			$wpdb->prepare( "SELECT * FROM {$table_name} WHERE id = %d", absint( $id ) ),
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
+		$row = $wpdb->get_row(
+			$wpdb->prepare( "SELECT * FROM {$table_name} WHERE id = %d", $id ), // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 			ARRAY_A
 		);
+
+		// Cache null results too so repeated misses don't hit the DB.
+		wp_cache_set( $cache_key, $row, self::CACHE_GROUP );
+
+		return $row;
 	}
 
 	/**
-	 * Toggle the is_enabled flag for a given server row.
-	 *
-	 * 0 → 1 (enable / run)  |  1 → 0 (disable / stop)
+	 * Toggle the is_enabled flag for a server row (0 → 1 or 1 → 0).
 	 *
 	 * @since 1.0.0
 	 *
 	 * @param int $id Server row ID.
 	 *
-	 * @return bool True on success, false if the row was not found or the update failed.
+	 * @return bool True on success, false if not found or update failed.
 	 */
 	public static function toggle_status( $id ) {
-		global $wpdb;
-
+		$id     = absint( $id );
 		$server = self::get_by_id( $id );
+
 		if ( ! $server ) {
 			return false;
 		}
 
+		global $wpdb;
+
 		$new_status = $server['is_enabled'] ? 0 : 1;
 
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
 		$result = $wpdb->update(
 			self::get_table_name(),
 			array( 'is_enabled' => $new_status ),
-			array( 'id'         => absint( $id ) ),
+			array( 'id'         => $id ),
 			array( '%d' ),
 			array( '%d' )
 		);
+
+		if ( false !== $result ) {
+			wp_cache_delete( 'server_' . $id, self::CACHE_GROUP );
+			wp_cache_delete( 'all_servers', self::CACHE_GROUP );
+			wp_cache_delete( 'enabled_servers', self::CACHE_GROUP );
+			wp_cache_delete( 'has_enabled', self::CACHE_GROUP );
+		}
+
+		return false !== $result;
+	}
+
+	/**
+	 * Update editable fields for a server row.
+	 *
+	 * Only whitelisted keys (server_name, description) are persisted.
+	 *
+	 * @since 1.1.0
+	 *
+	 * @param int   $id   Server row ID.
+	 * @param array $data Associative array of fields to update.
+	 *
+	 * @return bool True on success, false on failure.
+	 */
+	public static function update_server( $id, array $data ) {
+		$id      = absint( $id );
+		$allowed = array( 'server_name', 'description' );
+		$fields  = array_intersect_key( $data, array_flip( $allowed ) );
+
+		if ( empty( $fields ) ) {
+			return false;
+		}
+
+		global $wpdb;
+
+		$formats = array_fill( 0, count( $fields ), '%s' );
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
+		$result = $wpdb->update(
+			self::get_table_name(),
+			$fields,
+			array( 'id' => $id ),
+			$formats,
+			array( '%d' )
+		);
+
+		if ( false !== $result ) {
+			wp_cache_delete( 'server_' . $id, self::CACHE_GROUP );
+			wp_cache_delete( 'all_servers', self::CACHE_GROUP );
+		}
 
 		return false !== $result;
 	}
@@ -221,19 +326,26 @@ class MCPServerTable {
 	/**
 	 * Return true if at least one server row has is_enabled = 1.
 	 *
-	 * Used by the MCP Controller to decide whether to start the adapter.
-	 *
 	 * @since 1.0.0
 	 *
 	 * @return bool
 	 */
 	public static function has_any_enabled() {
+		$cached = wp_cache_get( 'has_enabled', self::CACHE_GROUP );
+		if ( false !== $cached ) {
+			return (bool) $cached;
+		}
+
 		global $wpdb;
 
-		$table_name = self::get_table_name();
+		// $table_name is derived from $wpdb->prefix + a constant — safe to interpolate.
+		$table_name = esc_sql( self::get_table_name() );
 
-		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 		$count = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table_name} WHERE is_enabled = 1" );
+
+		// Cache as int (0/1) so false !== 0 and false !== 1 both hold.
+		wp_cache_set( 'has_enabled', $count, self::CACHE_GROUP );
 
 		return $count > 0;
 	}
