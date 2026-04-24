@@ -3,7 +3,7 @@
         'name' => 'acrosswp/acrossai-mcp-manager',
         'pretty_version' => 'dev-main',
         'version' => 'dev-main',
-        'reference' => 'f26f74aa296abb57b94df1014410560253e5a2bd',
+        'reference' => 'c697b94d59f25392c0e5978efe308e1a5e566bf6',
         'type' => 'wordpress-plugin',
         'install_path' => __DIR__ . '/../../',
         'aliases' => array(),
@@ -13,7 +13,7 @@
         'acrosswp/acrossai-mcp-manager' => array(
             'pretty_version' => 'dev-main',
             'version' => 'dev-main',
-            'reference' => 'f26f74aa296abb57b94df1014410560253e5a2bd',
+            'reference' => 'c697b94d59f25392c0e5978efe308e1a5e566bf6',
             'type' => 'wordpress-plugin',
             'install_path' => __DIR__ . '/../../',
             'aliases' => array(),

@@ -12,7 +12,7 @@
 | Text domain     | `acrossai-mcp-manager`                        |
 | PHP NS root     | `ACROSSAI_MCP_MANAGER\`                       |
 | PSR-4 root      | `src/`                                        |
-| Current version | `1.4.0`                                       |
+| Current version | `1.5.0`                                       |
 | Min PHP         | 7.4                                           |
 | Min WP          | 5.9                                           |
 | License         | GPL-2.0-or-later                              |
@@ -293,7 +293,7 @@ Auth codes are **single-use**: both transients are deleted in `auth_exchange` on
 
 Table: `{prefix}acrossai_mcp_servers`
 Class: `ACROSSAI_MCP_MANAGER\Database\MCPServerTable`
-Current schema version: `1.4.0` (option: `acrossai_mcp_manager_db_version`)
+Current schema version: `1.5.0` (option: `acrossai_mcp_manager_db_version`)
 
 | Column                  | Type          | Notes                                                             |
 |-------------------------|---------------|-------------------------------------------------------------------|
@@ -306,12 +306,13 @@ Current schema version: `1.4.0` (option: `acrossai_mcp_manager_db_version`)
 | `server_route_namespace`| VARCHAR(100)  | REST namespace, default `'mcp'`                                   |
 | `server_route`          | VARCHAR(255)  | REST route path, default slug                                     |
 | `server_version`        | VARCHAR(50)   | MCP server version, default `'v1.0.0'`                            |
-| `access_control`        | TEXT          | JSON: `{"type":"wp_role","options":["editor"]}`; `''` = everyone  |
 | `created_at`            | DATETIME      | UTC, default CURRENT_TIMESTAMP                                    |
+
+**No `access_control` column** — access rules are stored in the library-owned `{prefix}wpb_access_control` table, keyed by `(server_route_namespace, server_route)`.
 
 `maybe_create_table()` runs on every `plugins_loaded` and is a no-op unless the stored version differs. Seeds a default "Default MCP Server" row if the table is empty.
 
-`sanitize_access_control( $raw )` — static helper that validates and re-encodes the JSON before any write. Resets to `''` on invalid input.
+**v1.5.0 migration**: On upgrade from `1.4.0`, `migrate_legacy_rows()` detects the old `access_control` column via `information_schema.COLUMNS`, copies non-empty values to `AccessControlTable`, then `ALTER TABLE DROP COLUMN access_control`. `dbDelta` never drops columns — the explicit `ALTER` is required.
 
 All read methods use the `acrossai_mcp` object-cache group. Write methods (`toggle_status`, `update_server`) flush affected cache keys.
 
@@ -321,7 +322,7 @@ All read methods use the `acrossai_mcp` object-cache group. Write methods (`togg
 
 ### Overview
 
-Per-server access control restricts which WordPress users may call a server's MCP REST endpoint. The feature is implemented in the `ACROSSAI_MCP_MANAGER\AccessControl` namespace and is entirely independent of the BuddyBoss Platform Pro plugin (which was used as a reference for the architecture only).
+Per-server access control restricts which WordPress users may call a server's MCP REST endpoint. Rules are stored in the `wpboilerplate/wpb-access-control` library's own DB table (`{prefix}wpb_access_control`), keyed by `(server_route_namespace, server_route)`. The plugin calls `AccessControlManager::user_has_access()` on every matching REST request.
 
 ### Package
 
@@ -332,17 +333,18 @@ Installed at `vendor/wpboilerplate/wpb-access-control/src/`. Namespace: `WPBoile
 ```
 AbstractProvider          — abstract base; every provider extends this
 WpRoleProvider            — built-in provider for WordPress user roles
-AccessControlManager      — registry + REST enforcer; storage-agnostic via callable
+AccessControlManager      — provider registry + user_has_access() decision engine
+AccessControlTable        — owns {prefix}wpb_access_control; CRUD for access rules
 ```
 
-The manager is instantiated in `Plugin::__construct()` with two arguments:
-1. A `$server_fetcher` callable: `fn() => MCPServerTable::get_all()` — decouples storage.
-2. A custom filter tag `'acrossai_mcp_access_control_providers'` — avoids collisions when
-   multiple plugins use the same wpb-access-control library.
+The manager is instantiated in `Plugin::__construct()` with a single argument:
+- A custom filter tag `'acrossai_mcp_access_control_providers'` — avoids collisions when
+  multiple plugins use the same wpb-access-control library.
 
-It registers two hooks automatically:
+The library registers one hook automatically:
 - `init` (priority 5) — loads provider instances via filter (or immediately if init already fired)
-- `rest_pre_dispatch` (priority 10) — enforces access on every MCP REST request
+
+REST enforcement is the consuming plugin's responsibility. `Plugin::enforce_mcp_access_control()` hooks `rest_pre_dispatch` at priority 10, iterates enabled servers, and calls `user_has_access()` for matching routes.
 
 ### Provider contract (`AbstractProvider`)
 
@@ -372,13 +374,15 @@ The filter fires on `init` at priority 5. Providers added after that point are i
 
 ### Access decision hierarchy
 
-1. If the server's `access_control` column is empty or `type = 'everyone'` → **allow**.
+1. If `AccessControlTable::get(namespace, route)` returns empty or `type = 'everyone'` → **allow**.
 2. If the requesting user has `manage_options` capability (administrator) → **allow**.
 3. If the user is not authenticated → **deny** with HTTP 401.
 4. If no provider is registered for the configured `type` → **deny** with HTTP 403.
 5. Call `provider->user_has_access( $user_id, $options )` → allow or **deny** with HTTP 403.
 
-### Storage format (`access_control` column)
+### Storage format
+
+Rules are stored in `{prefix}wpb_access_control` with `namespace = server_route_namespace` and `key = server_route`.
 
 ```json
 { "type": "wp_role", "options": ["editor", "author"] }
@@ -388,7 +392,7 @@ The filter fires on `init` at priority 5. Providers added after that point are i
 - `options` — array of option IDs from `provider->get_options()`.
 - Empty string `''` is the default; the manager treats it as `type = 'everyone'`.
 
-Always write through `MCPServerTable::sanitize_access_control( $raw )` before storing.
+Always write through `AccessControlTable::update( $ns, $route, $json )`. Never write raw `$wpdb` — it bypasses the object cache.
 
 ### Admin UI
 
@@ -401,13 +405,13 @@ Always write through `MCPServerTable::sanitize_access_control( $raw )` before st
 
 ### Firing the `acrossai_mcp_access_denied` action
 
-When a request is denied, the manager fires:
+When a MCP REST request is denied, `Plugin::enforce_mcp_access_control()` fires:
 
 ```php
-do_action( 'acrossai_mcp_access_denied', $current_user_id, $server_row, $ac_config );
+do_action( 'acrossai_mcp_access_denied', $user_id, $server_row, $ns, $server_route );
 ```
 
-Third-party code can hook this for logging or notifications.
+The library also fires `wpb_access_control_denied` (its own action) on every denial from `user_has_access()`. Third-party code can hook either for logging or notifications.
 
 ### Future providers
 
@@ -449,8 +453,8 @@ Registered clients: `openai`, `claude`, `vscode`, `codex`, `cursor`, `custom`.
 - **Server key format** (`{sitename}-{serverslug}`) must stay in sync across `ApplicationPasswords`, `Settings::render_wpcli_tab()`, and the npm CLI. Changing it in one place without updating the others will produce mismatched config keys.
 - **Auth codes are single-use**. `auth_exchange` deletes both the auth-code and session-token transients on success. Do not attempt a second exchange with the same code.
 - **`mcp_url` in `/servers` response** is what the CLI uses as `WP_API_URL`. It must always be a full REST URL pointing to `mcp/mcp-adapter-default-server`. Do not change it to the site base URL.
-- **Access control defaults to "everyone"**. A missing or empty `access_control` column value is treated as `type='everyone'` by `AccessControlManager::parse_access_control()`. Pre-existing rows are never accidentally locked out.
-- **Administrators always bypass access control**. The `manage_options` capability check in `AccessControlManager::enforce_access()` is unconditional and must not be removed.
+- **Access control defaults to "everyone"**. A missing or empty value in `AccessControlTable` is treated as `type='everyone'` by `AccessControlManager`. Pre-existing servers are never accidentally locked out.
+- **Administrators always bypass access control**. The `manage_options` capability check in `AccessControlManager::user_has_access()` is unconditional and must not be removed.
 - **Access control providers are loaded on `init` priority 5** (or immediately if init already fired). Providers registered after that point will be silently ignored. Third-party code must hook at priority 4 or earlier. The filter tag is `'acrossai_mcp_access_control_providers'` — NOT the library default `'wpb_access_control_providers'`.
-- **`sanitize_access_control()` must be called before every DB write**. `update_server()` already does this automatically when `access_control` is in the `$data` array. Do not bypass it.
-- **The `access_control` column is TEXT, not VARCHAR**. Never add a length constraint to it — the options array can theoretically be long for future providers.
+- **Access rules are stored in the library table**, not `wp_acrossai_mcp_servers`. Use `AccessControlTable::update( $ns, $route, $json )` to write and `AccessControlTable::get( $ns, $route )` to read. Never write the `access_control` column directly on the server table — it was removed in v1.5.0.
+- **REST enforcement lives in `Plugin::enforce_mcp_access_control()`**, not the library. The library never adds `rest_pre_dispatch` hooks. Do not add REST enforcement to the library.

@@ -63,6 +63,7 @@ register_activation_hook(
 	function () {
 		ACROSSAI_MCP_MANAGER\Database\MCPServerTable::create_table();
 		ACROSSAI_MCP_MANAGER\Database\MCPServerTable::insert_default_server();
+		WPBoilerplate\AccessControl\AccessControlTable::maybe_create_table();
 
 		// Register and flush the rewrite rule added by FrontendAuth so the
 		// /acrossai-mcp-manager/ slug resolves immediately after activation.

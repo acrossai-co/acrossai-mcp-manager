@@ -13,6 +13,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 use WPBoilerplate\AccessControl\AccessControlManager;
+use WPBoilerplate\AccessControl\AccessControlTable;
 use ACROSSAI_MCP_MANAGER\Database\MCPServerTable;
 
 /**
@@ -302,7 +303,10 @@ class Settings {
 				? ''
 				: wp_json_encode( array( 'type' => $ac_type, 'options' => array_values( $ac_options ) ) );
 
-			MCPServerTable::update_server( $server_id, array( 'access_control' => $access_control_json ) );
+			// Store in the library's own table, keyed by REST namespace + route.
+			$ns    = ! empty( $server['server_route_namespace'] ) ? $server['server_route_namespace'] : 'mcp';
+			$route = ! empty( $server['server_route'] ) ? $server['server_route'] : $server['server_slug'];
+			AccessControlTable::update( $ns, $route, $access_control_json );
 
 			wp_safe_redirect(
 				add_query_arg(
@@ -1745,9 +1749,12 @@ class Settings {
 	private function render_access_control_tab( array $server ) {
 		$server_id = (int) $server['id'];
 
-		// Parse stored config.
-		$raw_ac    = $server['access_control'] ?? '';
-		$ac_config = array( 'type' => 'everyone', 'options' => array() );
+		// Parse stored config — read from the library's own table.
+		$server_slug = ! empty( $server['server_slug'] ) ? $server['server_slug'] : sanitize_title( $server['server_name'] );
+		$ns          = ! empty( $server['server_route_namespace'] ) ? $server['server_route_namespace'] : 'mcp';
+		$route       = ! empty( $server['server_route'] ) ? $server['server_route'] : $server_slug;
+		$raw_ac      = \WPBoilerplate\AccessControl\AccessControlTable::get( $ns, $route );
+		$ac_config   = array( 'type' => 'everyone', 'options' => array() );
 		if ( '' !== $raw_ac ) {
 			$decoded = json_decode( $raw_ac, true );
 			if ( is_array( $decoded ) ) {
