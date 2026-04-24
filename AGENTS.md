@@ -133,10 +133,40 @@ URL format for client sub-tabs: `?tab=clients&client={client_id}`
 
 **npm tab gate**: if `acrossai_mcp_npm_login_enabled` is `false` (default), the npm tab shows a warning notice with a link to Settings instead of the command.
 
-**WP-CLI tab**: Always visible. Shows three commands with copy buttons:
+**WP-CLI tab**: Always visible. Two sections:
+
+**Section 1 — `wp acrossai-mcp setup` (HTTP/credential generation)**
 1. Print config only: `wp acrossai-mcp setup --server={slug}`
 2. Write config files: `wp acrossai-mcp setup --server={slug} --write`
 3. With specific user: `wp acrossai-mcp setup --server={slug} --write --user=admin`
+
+**Section 2 — STDIO Transport (local / subprocess mode)**
+
+The `wordpress/mcp-adapter` package registers its own `wp mcp-adapter` command group:
+
+| Command | Description |
+|---------|-------------|
+| `wp mcp-adapter list` | List all registered MCP servers (ID, name, version, tool/resource/prompt counts) |
+| `wp mcp-adapter serve --server={slug} --user={login\|id\|email}` | Start server via STDIO; blocks until the MCP client disconnects |
+
+The STDIO transport lets MCP clients (Claude Desktop, Cursor, etc.) spawn `wp` as a subprocess instead of connecting over HTTP. The tab shows:
+- `wp mcp-adapter list` command
+- `wp mcp-adapter serve --server={slug} --user=admin` command
+- A ready-to-paste JSON config block using `command: "wp"` with `--path={ABSPATH}`
+
+STDIO config structure:
+```json
+{
+  "command": "wp",
+  "args": ["mcp-adapter", "serve", "--server={slug}", "--user=admin", "--path=/abs/path/to/wordpress"]
+}
+```
+
+The `--path` flag points to `ABSPATH` on the current server. Users must adjust it if the `wp` binary cannot locate WordPress automatically.
+
+**STDIO vs HTTP**:
+- STDIO — wp spawned as subprocess; best for local development; no network exposure
+- HTTP — REST endpoint over network; best for remote/shared servers; uses `npx @automattic/mcp-wordpress-remote`
 
 Command textareas in the npm and WP-CLI tabs use the `mcp-cmd` CSS class for compact single-line display (`resize: none`, `white-space: nowrap`, horizontal scroll).
 

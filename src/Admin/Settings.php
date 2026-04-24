@@ -1377,6 +1377,24 @@ class Settings {
 		$cmd_basic      = sprintf( 'wp acrossai-mcp setup --server=%s', $server_slug );
 		$cmd_write      = sprintf( 'wp acrossai-mcp setup --server=%s --write', $server_slug );
 		$cmd_with_user  = sprintf( 'wp acrossai-mcp setup --server=%s --write --user=admin', $server_slug );
+
+		// STDIO transport commands (built into the mcp-adapter package).
+		$cmd_list  = 'wp mcp-adapter list';
+		$cmd_serve = sprintf( 'wp mcp-adapter serve --server=%s --user=admin', $server_slug );
+
+		// STDIO-mode JSON config snippet — uses `wp` directly as the command.
+		$abspath     = rtrim( ABSPATH, '/' );
+		$stdio_config = array(
+			'command' => 'wp',
+			'args'    => array(
+				'mcp-adapter',
+				'serve',
+				'--server=' . $server_slug,
+				'--user=admin',
+				'--path=' . $abspath,
+			),
+		);
+		$stdio_config_json = wp_json_encode( $stdio_config, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES );
 		?>
 		<div class="mcp-tab-panel">
 
@@ -1471,6 +1489,93 @@ class Settings {
 						wp_kses_post( __( 'Requires <a href="https://wp-cli.org" target="_blank" rel="noopener">WP-CLI</a> to be installed on the server.', 'acrossai-mcp-manager' ) )
 					);
 					?>
+				</p>
+			</div>
+
+			<!-- ── STDIO Transport ───────────────────────────────────────────────── -->
+			<hr style="margin:28px 0 20px;">
+
+			<h3><?php esc_html_e( 'STDIO Transport (Local / Subprocess Mode)', 'acrossai-mcp-manager' ); ?></h3>
+			<p class="description">
+				<?php esc_html_e( 'MCP clients can also connect by launching WP-CLI as a subprocess instead of calling the HTTP endpoint. This is ideal for local WordPress installs — no credentials are transmitted over the network.', 'acrossai-mcp-manager' ); ?>
+			</p>
+
+			<!-- List servers -->
+			<div class="mcp-config-json" style="margin-top:16px;">
+				<label for="wpcli_list_<?php echo esc_attr( $server['id'] ); ?>">
+					<strong><?php esc_html_e( 'List all registered MCP servers', 'acrossai-mcp-manager' ); ?></strong>
+				</label>
+				<textarea
+					id="wpcli_list_<?php echo esc_attr( $server['id'] ); ?>"
+					class="widefat code mcp-cmd"
+					rows="1"
+					readonly><?php echo esc_textarea( $cmd_list ); ?></textarea>
+				<button
+					type="button"
+					class="button copy-to-clipboard"
+					data-field="wpcli_list_<?php echo esc_attr( $server['id'] ); ?>">
+					<?php esc_html_e( 'Copy', 'acrossai-mcp-manager' ); ?>
+				</button>
+			</div>
+
+			<!-- Serve via STDIO -->
+			<div class="mcp-config-json" style="margin-top:16px;">
+				<label for="wpcli_serve_<?php echo esc_attr( $server['id'] ); ?>">
+					<strong><?php esc_html_e( 'Start this server via STDIO', 'acrossai-mcp-manager' ); ?></strong>
+				</label>
+				<p class="description" style="margin-bottom:6px;">
+					<?php esc_html_e( 'Blocks until the MCP client disconnects. Replace "admin" with any WordPress user login or ID.', 'acrossai-mcp-manager' ); ?>
+				</p>
+				<textarea
+					id="wpcli_serve_<?php echo esc_attr( $server['id'] ); ?>"
+					class="widefat code mcp-cmd"
+					rows="1"
+					readonly><?php echo esc_textarea( $cmd_serve ); ?></textarea>
+				<button
+					type="button"
+					class="button copy-to-clipboard"
+					data-field="wpcli_serve_<?php echo esc_attr( $server['id'] ); ?>">
+					<?php esc_html_e( 'Copy', 'acrossai-mcp-manager' ); ?>
+				</button>
+			</div>
+
+			<!-- STDIO JSON config -->
+			<div class="mcp-config-json" style="margin-top:16px;">
+				<label for="wpcli_stdio_config_<?php echo esc_attr( $server['id'] ); ?>">
+					<strong><?php esc_html_e( 'STDIO config block (paste into your MCP client)', 'acrossai-mcp-manager' ); ?></strong>
+				</label>
+				<p class="description" style="margin-bottom:6px;">
+					<?php
+					printf(
+						/* translators: %s: server key */
+						esc_html__( 'Add this under the key "%s" in your MCP client\'s config file. WP-CLI must be in your PATH, or replace "wp" with the full path to the binary.', 'acrossai-mcp-manager' ),
+						esc_html( $server_key )
+					);
+					?>
+				</p>
+				<textarea
+					id="wpcli_stdio_config_<?php echo esc_attr( $server['id'] ); ?>"
+					class="widefat code"
+					rows="8"
+					readonly><?php echo esc_textarea( $stdio_config_json ); ?></textarea>
+				<button
+					type="button"
+					class="button copy-to-clipboard"
+					data-field="wpcli_stdio_config_<?php echo esc_attr( $server['id'] ); ?>">
+					<?php esc_html_e( 'Copy', 'acrossai-mcp-manager' ); ?>
+				</button>
+			</div>
+
+			<div class="notice notice-warning inline" style="margin-top:16px;">
+				<p>
+					<strong><?php esc_html_e( 'STDIO vs HTTP transport', 'acrossai-mcp-manager' ); ?></strong>
+				</p>
+				<ul style="list-style:disc;margin-left:18px;">
+					<li><?php esc_html_e( 'STDIO — MCP client spawns wp as a subprocess. Best for local development; no network exposure.', 'acrossai-mcp-manager' ); ?></li>
+					<li><?php esc_html_e( 'HTTP (npx) — MCP client connects to the REST endpoint over the network. Best for remote or shared servers.', 'acrossai-mcp-manager' ); ?></li>
+				</ul>
+				<p>
+					<?php esc_html_e( 'The --path flag in the STDIO config is the absolute path to this WordPress installation on disk. Adjust it if the wp binary cannot find WordPress automatically.', 'acrossai-mcp-manager' ); ?>
 				</p>
 			</div>
 
