@@ -193,7 +193,8 @@ Registered on `init`. The activation hook also registers + flushes it immediatel
 1. `template_redirect` fires; skips if `acrossai_mcp_auth` query var is absent.
 2. `nocache_headers()` sent unconditionally — this page must never be cached.
 3. Unauthenticated users: redirect to `wp_login_url()` with a return URL.
-4. Non-admin users: `wp_die()` with 403.
+4. **Any logged-in user** may proceed — no `manage_options` check. Each user approves
+   access for their own account; the resulting Application Password belongs to them.
 5. Dispatch by `?action=`:
 
 | `action`            | `acrossai_mcp_npm_login_enabled` | Result                                                      |

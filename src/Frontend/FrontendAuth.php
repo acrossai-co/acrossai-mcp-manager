@@ -9,7 +9,7 @@
  * URL routing
  * -----------
  *   /<slug>/                               → redirect to wp-login.php if not logged in
- *   /<slug>/?action=cli_auth&code=…        → approval page (requires manage_options)
+ *   /<slug>/?action=cli_auth&code=…        → approval page (any logged-in user)
  *   /<slug>/?action=cli_auth_approve&…     → process approval + redirect
  *   /<slug>/?action=cli_auth_approved&…    → confirmation page
  *
@@ -148,15 +148,10 @@ class FrontendAuth {
 			exit;
 		}
 
-		// Only administrators may use the CLI auth flow.
-		if ( ! current_user_can( 'manage_options' ) ) {
-			wp_die(
-				esc_html__( 'You do not have permission to access this page.', 'acrossai-mcp-manager' ),
-				esc_html__( 'Forbidden', 'acrossai-mcp-manager' ),
-				array( 'response' => 403 )
-			);
-		}
-
+		// Any logged-in user may go through the CLI auth flow.
+		// Each user approves access for their own account — the resulting
+		// Application Password belongs to the currently logged-in user.
+		// No elevated capability is required.
 		$npm_enabled = (bool) get_option( 'acrossai_mcp_npm_login_enabled', false );
 
 		if ( 'cli_auth_approve' === $action ) {
