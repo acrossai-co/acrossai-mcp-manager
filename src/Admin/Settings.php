@@ -931,6 +931,10 @@ class Settings {
 				   class="nav-tab <?php echo 'access-control' === $active_tab ? 'nav-tab-active' : ''; ?>">
 					<?php esc_html_e( 'Access Control', 'acrossai-mcp-manager' ); ?>
 				</a>
+				<a href="<?php echo esc_url( $make_tab_url( 'mcp-tracker' ) ); ?>"
+				   class="nav-tab <?php echo 'mcp-tracker' === $active_tab ? 'nav-tab-active' : ''; ?>">
+					<?php esc_html_e( 'MCP Tracker', 'acrossai-mcp-manager' ); ?>
+				</a>
 				<?php if ( 'database' === ( $server['registered_from'] ?? 'plugin' ) ) : ?>
 				<a href="<?php echo esc_url( $make_tab_url( 'update-server' ) ); ?>"
 				   class="nav-tab <?php echo 'update-server' === $active_tab ? 'nav-tab-active' : ''; ?>">
@@ -959,6 +963,8 @@ class Settings {
 					$this->render_abilities_tab( $server );
 				} elseif ( 'access-control' === $active_tab ) {
 					$this->render_access_control_tab( $server );
+				} elseif ( 'mcp-tracker' === $active_tab ) {
+					$this->render_mcp_tracker_tab( $server );
 				} elseif ( 'update-server' === $active_tab ) {
 					$this->render_update_server_tab( $server );
 				} elseif ( 'danger-zone' === $active_tab ) {
@@ -1895,6 +1901,107 @@ class Settings {
 			select.addEventListener('change', toggleRows);
 		}());
 		</script>
+		<?php
+	}
+
+	/**
+	 * Render the MCP Tracker tab.
+	 *
+	 * Promotes the MCP Tracker plugin (wordpress.org/plugins/mcp-tracker/) and
+	 * links directly to its request log filtered to this server's slug when the
+	 * plugin is active.
+	 *
+	 * @since 1.5.0
+	 *
+	 * @param array $server DB row for the server being viewed.
+	 *
+	 * @return void
+	 */
+	private function render_mcp_tracker_tab( array $server ) {
+		$server_slug    = ! empty( $server['server_slug'] ) ? $server['server_slug'] : sanitize_title( $server['server_name'] );
+		$tracker_active = defined( 'WPVMCPT_PLUGIN_VERSION' ) || class_exists( 'WPVMCPT\Plugin' );
+
+		// Build the tracker URL using the MCP server slug as the server parameter.
+		$tracker_url = admin_url( 'admin.php?page=wpvmcpt-requests-list&server=' . rawurlencode( $server_slug ) );
+
+		// WordPress.org plugin page URL — hardcoded, no user input.
+		$wporg_url = 'https://wordpress.org/plugins/mcp-tracker/';
+		?>
+		<div class="mcp-tab-panel">
+
+			<h2><?php esc_html_e( 'MCP Tracker', 'acrossai-mcp-manager' ); ?></h2>
+
+			<?php if ( $tracker_active ) : ?>
+
+				<div class="notice notice-success inline">
+					<p>
+						<strong><?php esc_html_e( 'MCP Tracker is active.', 'acrossai-mcp-manager' ); ?></strong>
+						<?php esc_html_e( 'View all logged requests for this server below.', 'acrossai-mcp-manager' ); ?>
+					</p>
+				</div>
+
+				<p style="margin-top:16px;">
+					<a href="<?php echo esc_url( $tracker_url ); ?>" class="button button-primary">
+						<?php esc_html_e( 'View Request Log', 'acrossai-mcp-manager' ); ?>
+					</a>
+				</p>
+
+				<p class="description" style="margin-top:12px;">
+					<?php
+					printf(
+						/* translators: %s: server slug */
+						esc_html__( 'Direct link filtered to server: %s', 'acrossai-mcp-manager' ),
+						'<code>' . esc_html( $server_slug ) . '</code>'
+					);
+					?>
+					<br>
+					<code style="user-select:all;"><?php echo esc_html( $tracker_url ); ?></code>
+				</p>
+
+			<?php else : ?>
+
+				<div class="notice notice-info inline">
+					<p>
+						<strong><?php esc_html_e( 'MCP Tracker is not installed.', 'acrossai-mcp-manager' ); ?></strong>
+						<?php esc_html_e( 'Install the free MCP Tracker plugin to log and inspect every request made to this MCP server.', 'acrossai-mcp-manager' ); ?>
+					</p>
+				</div>
+
+				<table class="form-table" style="margin-top:8px;">
+					<tr>
+						<th scope="row"><?php esc_html_e( 'Plugin', 'acrossai-mcp-manager' ); ?></th>
+						<td>
+							<a href="<?php echo esc_url( $wporg_url ); ?>" target="_blank" rel="noopener noreferrer">
+								<?php esc_html_e( 'MCP Tracker — WordPress.org', 'acrossai-mcp-manager' ); ?>
+							</a>
+						</td>
+					</tr>
+					<tr>
+						<th scope="row"><?php esc_html_e( 'What it does', 'acrossai-mcp-manager' ); ?></th>
+						<td>
+							<?php esc_html_e( 'Logs every incoming MCP request — tool calls, responses, errors, and timing — so you can audit activity, debug AI clients, and monitor server usage.', 'acrossai-mcp-manager' ); ?>
+						</td>
+					</tr>
+					<tr>
+						<th scope="row"><?php esc_html_e( 'Request log URL', 'acrossai-mcp-manager' ); ?></th>
+						<td>
+							<code style="user-select:all;"><?php echo esc_html( $tracker_url ); ?></code>
+							<p class="description">
+								<?php esc_html_e( 'Once installed and activated, this URL will open the request log filtered to this server.', 'acrossai-mcp-manager' ); ?>
+							</p>
+						</td>
+					</tr>
+				</table>
+
+				<p style="margin-top:16px;">
+					<a href="<?php echo esc_url( $wporg_url ); ?>" class="button" target="_blank" rel="noopener noreferrer">
+						<?php esc_html_e( 'Get MCP Tracker', 'acrossai-mcp-manager' ); ?>
+					</a>
+				</p>
+
+			<?php endif; ?>
+
+		</div>
 		<?php
 	}
 

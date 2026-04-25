@@ -106,6 +106,7 @@ Tabbed view per server. Tabs (in order):
 | `tools`          | Read-only list of 3 built-in MCP tools                                           |
 | `abilities`      | Read-only list of WordPress abilities (MCP-public + private)                     |
 | `access-control` | Per-server access control rules (all server types)                               |
+| `mcp-tracker`    | MCP Tracker plugin promotion + link to request log (all server types)            |
 | `update-server`  | Editable fields — database servers only                                          |
 | `danger-zone`    | Delete server — database servers only                                            |
 
