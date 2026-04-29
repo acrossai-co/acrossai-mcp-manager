@@ -3,7 +3,7 @@
  * Plugin Name: AcrossAI MCP Manager
  * Plugin URI: https://wordpress.org/plugins/mcp-manager/
  * Description: Enable/Disable MCP Adapter Integration for WordPress
- * Version: 1.2.0
+ * Version: 1.6.0
  * Author: raftaar1191
  * Author URI: https://profiles.wordpress.org/raftaar1191/
  * License: GPL-2.0-or-later
@@ -20,7 +20,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'ACROSSAI_MCP_MANAGER_VERSION', '1.2.0' );
+define( 'ACROSSAI_MCP_MANAGER_VERSION', '1.6.0' );
 define( 'ACROSSAI_MCP_MANAGER_FILE', __FILE__ );
 define( 'ACROSSAI_MCP_MANAGER_DIR', __DIR__ );
 define( 'ACROSSAI_MCP_MANAGER_URL', plugin_dir_url( __FILE__ ) );
@@ -48,6 +48,9 @@ add_action(
 	'plugins_loaded',
 	function () {
 		ACROSSAI_MCP_MANAGER\Database\MCPServerTable::maybe_create_table();
+		ACROSSAI_MCP_MANAGER\Database\OAuthClientsTable::maybe_create_table();
+		ACROSSAI_MCP_MANAGER\Database\OAuthTokensTable::maybe_create_table();
+		ACROSSAI_MCP_MANAGER\Database\OAuthAuthCodesTable::maybe_create_table();
 		ACROSSAI_MCP_MANAGER\Core\Plugin::instance();
 	},
 	10
@@ -64,12 +67,29 @@ register_activation_hook(
 		ACROSSAI_MCP_MANAGER\Database\MCPServerTable::create_table();
 		ACROSSAI_MCP_MANAGER\Database\MCPServerTable::insert_default_server();
 		WPBoilerplate\AccessControl\AccessControlTable::maybe_create_table();
+		ACROSSAI_MCP_MANAGER\Database\OAuthClientsTable::create_table();
+		ACROSSAI_MCP_MANAGER\Database\OAuthTokensTable::create_table();
+		ACROSSAI_MCP_MANAGER\Database\OAuthAuthCodesTable::create_table();
 
-		// Register and flush the rewrite rule added by FrontendAuth so the
-		// /acrossai-mcp-manager/ slug resolves immediately after activation.
+		// Register and flush rewrite rules for FrontendAuth and OAuth discovery.
 		add_rewrite_rule(
 			'^' . ACROSSAI_MCP_MANAGER\Frontend\FrontendAuth::PAGE_SLUG . '/?$',
 			'index.php?' . ACROSSAI_MCP_MANAGER\Frontend\FrontendAuth::QUERY_VAR . '=1',
+			'top'
+		);
+		add_rewrite_rule(
+			'^\.well-known/oauth-authorization-server/?$',
+			'index.php?' . ACROSSAI_MCP_MANAGER\OAuth\Discovery::QV_AS . '=1',
+			'top'
+		);
+		add_rewrite_rule(
+			'^\.well-known/oauth-protected-resource/([^/]+)/?$',
+			'index.php?' . ACROSSAI_MCP_MANAGER\OAuth\Discovery::QV_PR . '=$matches[1]',
+			'top'
+		);
+		add_rewrite_rule(
+			'^acrossai-mcp-manager/oauth/authorize/?$',
+			'index.php?' . ACROSSAI_MCP_MANAGER\OAuth\AuthorizationEndpoint::QUERY_VAR . '=1',
 			'top'
 		);
 		flush_rewrite_rules();

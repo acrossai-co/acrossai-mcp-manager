@@ -1,0 +1,6 @@
+{
+  "dependencies": {
+    "@acrossai/mcp-manager": "^1.0.4",
+    "@wporg/mcp": "^1.2.0"
+  }
+}

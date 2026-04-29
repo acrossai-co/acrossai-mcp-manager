@@ -75,7 +75,7 @@ class Settings {
 		$action = isset( $_GET['action'] ) ? sanitize_key( $_GET['action'] ) : '';
 		// phpcs:enable WordPress.Security.NonceVerification
 
-		if ( ! in_array( $action, array( 'toggle_status', 'delete', 'create', 'update', 'save_access_control' ), true ) ) {
+		if ( ! in_array( $action, array( 'toggle_status', 'delete', 'create', 'update', 'save_access_control', 'save_connector_settings', 'create_oauth_client', 'revoke_oauth_client' ), true ) ) {
 			return;
 		}
 
@@ -322,6 +322,129 @@ class Settings {
 			);
 			exit;
 		}
+
+		// ── save_connector_settings (POST) ───────────────────────────────────────
+		if ( 'save_connector_settings' === $action && 'POST' === $_SERVER['REQUEST_METHOD'] ) {
+			$server_id = isset( $_GET['server'] ) ? absint( $_GET['server'] ) : 0; // phpcs:ignore WordPress.Security.NonceVerification
+
+			check_admin_referer( 'acrossai_mcp_connector_' . $server_id );
+
+			$server = $server_id ? MCPServerTable::get_by_id( $server_id ) : null;
+			if ( ! $server ) {
+				wp_die( esc_html__( 'Invalid server.', 'acrossai-mcp-manager' ) );
+			}
+
+			$enabled = isset( $_POST['connector_enabled'] ) && '1' === $_POST['connector_enabled'];
+			MCPServerTable::set_connector_enabled( $server_id, $enabled );
+
+			wp_safe_redirect(
+				add_query_arg(
+					array(
+						'page'    => 'acrossai_mcp_manager',
+						'action'  => 'edit',
+						'server'  => $server_id,
+						'tab'     => 'connector',
+						'updated' => '1',
+					),
+					admin_url( 'admin.php' )
+				)
+			);
+			exit;
+		}
+
+		// ── create_oauth_client (POST) ────────────────────────────────────────────
+		if ( 'create_oauth_client' === $action && 'POST' === $_SERVER['REQUEST_METHOD'] ) {
+			$server_id = isset( $_GET['server'] ) ? absint( $_GET['server'] ) : 0; // phpcs:ignore WordPress.Security.NonceVerification
+
+			check_admin_referer( 'acrossai_mcp_oauth_create_client_' . $server_id );
+
+			$server = $server_id ? MCPServerTable::get_by_id( $server_id ) : null;
+			if ( ! $server ) {
+				wp_die( esc_html__( 'Invalid server.', 'acrossai-mcp-manager' ) );
+			}
+
+			$client_name  = isset( $_POST['client_name'] ) ? substr( sanitize_text_field( wp_unslash( $_POST['client_name'] ) ), 0, 100 ) : '';
+			$redirect_uri = isset( $_POST['redirect_uri'] ) ? esc_url_raw( wp_unslash( $_POST['redirect_uri'] ) ) : 'https://claude.ai/api/mcp/auth_callback';
+
+			if ( empty( $client_name ) ) {
+				wp_safe_redirect(
+					add_query_arg(
+						array(
+							'page'   => 'acrossai_mcp_manager',
+							'action' => 'edit',
+							'server' => $server_id,
+							'tab'    => 'connector',
+							'error'  => 'missing_name',
+						),
+						admin_url( 'admin.php' )
+					)
+				);
+				exit;
+			}
+
+			$client_id     = 'mcpc_' . bin2hex( random_bytes( 12 ) );
+			$client_secret = bin2hex( random_bytes( 32 ) );
+			$secret_hash   = wp_hash_password( $client_secret );
+
+			\ACROSSAI_MCP_MANAGER\Database\OAuthClientsTable::insert(
+				$client_id,
+				$secret_hash,
+				$client_name,
+				array( $redirect_uri )
+			);
+
+			// Store plaintext secret once (60 s) so the renderer can show it.
+			set_transient(
+				'acrossai_mcp_oauth_new_secret_' . get_current_user_id(),
+				array(
+					'client_id'   => $client_id,
+					'client_name' => $client_name,
+					'secret'      => $client_secret,
+				),
+				60
+			);
+
+			wp_safe_redirect(
+				add_query_arg(
+					array(
+						'page'    => 'acrossai_mcp_manager',
+						'action'  => 'edit',
+						'server'  => $server_id,
+						'tab'     => 'connector',
+						'created' => '1',
+					),
+					admin_url( 'admin.php' )
+				)
+			);
+			exit;
+		}
+
+		// ── revoke_oauth_client (POST) ────────────────────────────────────────────
+		if ( 'revoke_oauth_client' === $action && 'POST' === $_SERVER['REQUEST_METHOD'] ) {
+			$server_id = isset( $_GET['server'] ) ? absint( $_GET['server'] ) : 0; // phpcs:ignore WordPress.Security.NonceVerification
+			$client_id = isset( $_POST['client_id'] ) ? sanitize_text_field( wp_unslash( $_POST['client_id'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification
+
+			check_admin_referer( 'acrossai_mcp_oauth_revoke_client_' . $client_id );
+
+			if ( $client_id ) {
+				\ACROSSAI_MCP_MANAGER\Database\OAuthTokensTable::delete_by_client( $client_id );
+				\ACROSSAI_MCP_MANAGER\Database\OAuthClientsTable::delete( $client_id );
+			}
+
+			wp_safe_redirect(
+				add_query_arg(
+					array(
+						'page'    => 'acrossai_mcp_manager',
+						'action'  => 'edit',
+						'server'  => $server_id,
+						'tab'     => 'connector',
+						'revoked' => '1',
+					),
+					admin_url( 'admin.php' )
+				)
+			);
+			exit;
+		}
 	}
 
 	/**
@@ -362,6 +485,31 @@ class Settings {
 	public function register_settings() {
 		register_setting(
 			'acrossai_mcp_manager_settings',
+			'acrossai_mcp_oauth_enabled',
+			array(
+				'type'              => 'boolean',
+				'default'           => false,
+				'sanitize_callback' => 'rest_sanitize_boolean',
+			)
+		);
+
+		add_settings_section(
+			'acrossai_mcp_oauth_section',
+			__( 'Claude.ai Connectors (BETA)', 'acrossai-mcp-manager' ),
+			array( $this, 'render_oauth_section_description' ),
+			'acrossai_mcp_manager_settings'
+		);
+
+		add_settings_field(
+			'acrossai_mcp_oauth_enabled',
+			__( 'Enable Claude.ai Connectors', 'acrossai-mcp-manager' ),
+			array( $this, 'render_oauth_enabled_field' ),
+			'acrossai_mcp_manager_settings',
+			'acrossai_mcp_oauth_section'
+		);
+
+		register_setting(
+			'acrossai_mcp_manager_settings',
 			'acrossai_mcp_npm_login_enabled',
 			array(
 				'type'              => 'boolean',
@@ -384,6 +532,67 @@ class Settings {
 			'acrossai_mcp_manager_settings',
 			'acrossai_mcp_npm_section'
 		);
+	}
+
+	/**
+	 * Render the description for the Claude.ai Connectors settings section.
+	 *
+	 * @since 1.6.0
+	 *
+	 * @return void
+	 */
+	public function render_oauth_section_description() {
+		$is_https  = is_ssl();
+		$is_local  = strpos( home_url(), '.local' ) !== false || strpos( home_url(), 'localhost' ) !== false;
+		?>
+		<p class="description">
+			<?php esc_html_e( 'Allow Claude.ai to connect to your MCP servers directly as a custom connector. Each server gets a unique URL you can paste into the Claude.ai "Add custom connector" dialog — no manual credentials required.', 'acrossai-mcp-manager' ); ?>
+		</p>
+		<?php if ( ! $is_https || $is_local ) : ?>
+		<div class="notice notice-warning inline" style="margin:8px 0 0;">
+			<p>
+				<strong><?php esc_html_e( 'Requirements not met:', 'acrossai-mcp-manager' ); ?></strong>
+				<?php if ( ! $is_https ) : ?>
+					<?php esc_html_e( 'Your site must use HTTPS. Claude.ai cannot connect to HTTP sites.', 'acrossai-mcp-manager' ); ?>
+				<?php endif; ?>
+				<?php if ( $is_local ) : ?>
+					<?php esc_html_e( 'Your site is on a local domain (.local / localhost) that Claude.ai cannot reach. Use a public HTTPS URL.', 'acrossai-mcp-manager' ); ?>
+				<?php endif; ?>
+			</p>
+		</div>
+		<?php endif; ?>
+		<?php
+	}
+
+	/**
+	 * Render the Claude.ai Connectors master enable/disable field.
+	 *
+	 * @since 1.6.0
+	 *
+	 * @return void
+	 */
+	public function render_oauth_enabled_field() {
+		$enabled = (bool) get_option( 'acrossai_mcp_oauth_enabled', false );
+		?>
+		<label for="acrossai_mcp_oauth_enabled">
+			<input
+				type="checkbox"
+				id="acrossai_mcp_oauth_enabled"
+				name="acrossai_mcp_oauth_enabled"
+				value="1"
+				<?php checked( $enabled ); ?>
+			>
+			<?php esc_html_e( 'Enable OAuth 2.1 connector support', 'acrossai-mcp-manager' ); ?>
+		</label>
+		<p class="description">
+			<?php
+			esc_html_e(
+				'When enabled, OAuth 2.1 discovery endpoints are registered and each server can optionally be connected to Claude.ai. Disable to remove all OAuth functionality without deleting token data.',
+				'acrossai-mcp-manager'
+			);
+			?>
+		</p>
+		<?php
 	}
 
 	/**
@@ -935,6 +1144,10 @@ class Settings {
 				   class="nav-tab <?php echo 'mcp-tracker' === $active_tab ? 'nav-tab-active' : ''; ?>">
 					<?php esc_html_e( 'MCP Tracker', 'acrossai-mcp-manager' ); ?>
 				</a>
+				<a href="<?php echo esc_url( $make_tab_url( 'connector' ) ); ?>"
+				   class="nav-tab <?php echo 'connector' === $active_tab ? 'nav-tab-active' : ''; ?>">
+					<?php esc_html_e( 'Claude.ai Connector', 'acrossai-mcp-manager' ); ?>
+				</a>
 				<?php if ( 'database' === ( $server['registered_from'] ?? 'plugin' ) ) : ?>
 				<a href="<?php echo esc_url( $make_tab_url( 'update-server' ) ); ?>"
 				   class="nav-tab <?php echo 'update-server' === $active_tab ? 'nav-tab-active' : ''; ?>">
@@ -965,6 +1178,8 @@ class Settings {
 					$this->render_access_control_tab( $server );
 				} elseif ( 'mcp-tracker' === $active_tab ) {
 					$this->render_mcp_tracker_tab( $server );
+				} elseif ( 'connector' === $active_tab ) {
+					$this->render_connector_tab( $server );
 				} elseif ( 'update-server' === $active_tab ) {
 					$this->render_update_server_tab( $server );
 				} elseif ( 'danger-zone' === $active_tab ) {
@@ -2235,6 +2450,380 @@ class Settings {
 				?>
 			</p>
 		</div>
+		<?php
+	}
+
+	// -------------------------------------------------------------------------
+	// Connector tab
+	// -------------------------------------------------------------------------
+
+	/**
+	 * Render the Claude.ai Connector tab for a server.
+	 *
+	 * Shows the copy-pasteable MCP URL, an enable/disable toggle for this server,
+	 * and a list of active OAuth tokens with per-token revoke buttons.
+	 *
+	 * @since 1.6.0
+	 *
+	 * @param array $server DB row for the server being edited.
+	 *
+	 * @return void
+	 */
+	private function render_connector_tab( array $server ) {
+		$server_id      = (int) $server['id'];
+		$oauth_enabled  = (bool) get_option( 'acrossai_mcp_oauth_enabled', false );
+		$connector_on   = ! empty( $server['connector_enabled'] );
+		$server_enabled = ! empty( $server['is_enabled'] );
+
+		$ns      = ! empty( $server['server_route_namespace'] ) ? $server['server_route_namespace'] : 'mcp';
+		$route   = ! empty( $server['server_route'] ) ? $server['server_route'] : $server['server_slug'];
+		$slug    = $server['server_slug'];
+		$mcp_url = rest_url( $ns . '/' . $route );
+
+		$settings_url = admin_url( 'admin.php?page=acrossai_mcp_manager_settings' );
+
+		$save_url = add_query_arg(
+			array(
+				'page'   => 'acrossai_mcp_manager',
+				'action' => 'save_connector_settings',
+				'server' => $server_id,
+			),
+			admin_url( 'admin.php' )
+		);
+
+		$create_url = add_query_arg(
+			array(
+				'page'   => 'acrossai_mcp_manager',
+				'action' => 'create_oauth_client',
+				'server' => $server_id,
+			),
+			admin_url( 'admin.php' )
+		);
+
+		$revoke_url = add_query_arg(
+			array(
+				'page'   => 'acrossai_mcp_manager',
+				'action' => 'revoke_oauth_client',
+				'server' => $server_id,
+			),
+			admin_url( 'admin.php' )
+		);
+
+		// One-shot new-credential notice (set by handle_create_oauth_client).
+		$new_cred = get_transient( 'acrossai_mcp_oauth_new_secret_' . get_current_user_id() );
+		if ( $new_cred ) {
+			delete_transient( 'acrossai_mcp_oauth_new_secret_' . get_current_user_id() );
+		}
+		?>
+		<div class="mcp-tab-panel">
+
+			<h2><?php esc_html_e( 'Claude.ai Connector', 'acrossai-mcp-manager' ); ?></h2>
+
+			<?php if ( ! $oauth_enabled ) : ?>
+				<div class="notice notice-warning inline">
+					<p>
+						<strong><?php esc_html_e( 'Claude.ai Connectors are disabled.', 'acrossai-mcp-manager' ); ?></strong>
+						<?php
+						printf(
+							/* translators: %s: link to settings page */
+							wp_kses_post( __( 'Enable them in <a href="%s">Settings → Claude.ai Connectors</a> first.', 'acrossai-mcp-manager' ) ),
+							esc_url( $settings_url )
+						);
+						?>
+					</p>
+				</div>
+			<?php else : ?>
+
+				<?php if ( $new_cred ) : ?>
+					<!-- ── One-time credential display ── -->
+					<div class="notice notice-success inline acrossai-new-cred-notice" style="border-left-color:#00a32a;padding:16px 20px;">
+						<h3 style="margin-top:0;color:#1d2327;">
+							<?php esc_html_e( 'Credential created — copy now (shown only once)', 'acrossai-mcp-manager' ); ?>
+						</h3>
+						<table class="form-table" role="presentation" style="margin:0;">
+							<tr>
+								<th style="width:160px;padding:6px 0;"><?php esc_html_e( 'Server URL', 'acrossai-mcp-manager' ); ?></th>
+								<td style="padding:6px 0;">
+									<code id="acrossai-new-url" style="word-break:break-all;"><?php echo esc_html( $mcp_url ); ?></code>
+									<button type="button" class="button button-small acrossai-copy" data-target="acrossai-new-url" style="margin-left:6px;"><?php esc_html_e( 'Copy', 'acrossai-mcp-manager' ); ?></button>
+								</td>
+							</tr>
+							<tr>
+								<th style="padding:6px 0;"><?php esc_html_e( 'Client ID', 'acrossai-mcp-manager' ); ?></th>
+								<td style="padding:6px 0;">
+									<code id="acrossai-new-client-id"><?php echo esc_html( $new_cred['client_id'] ); ?></code>
+									<button type="button" class="button button-small acrossai-copy" data-target="acrossai-new-client-id" style="margin-left:6px;"><?php esc_html_e( 'Copy', 'acrossai-mcp-manager' ); ?></button>
+								</td>
+							</tr>
+							<tr>
+								<th style="padding:6px 0;"><?php esc_html_e( 'Client Secret', 'acrossai-mcp-manager' ); ?></th>
+								<td style="padding:6px 0;">
+									<code id="acrossai-new-client-secret"><?php echo esc_html( $new_cred['secret'] ); ?></code>
+									<button type="button" class="button button-small acrossai-copy" data-target="acrossai-new-client-secret" style="margin-left:6px;"><?php esc_html_e( 'Copy', 'acrossai-mcp-manager' ); ?></button>
+								</td>
+							</tr>
+						</table>
+						<p style="margin:12px 0 0;color:#646970;">
+							<?php esc_html_e( 'In Claude.ai → Settings → Connectors → Add custom connector: paste the Server URL, then open Advanced settings and paste the Client ID and Client Secret.', 'acrossai-mcp-manager' ); ?>
+						</p>
+					</div>
+				<?php endif; ?>
+
+				<!-- ── Server URL ── -->
+				<table class="form-table" role="presentation">
+					<tr>
+						<th scope="row"><?php esc_html_e( 'Server URL', 'acrossai-mcp-manager' ); ?></th>
+						<td>
+							<div class="mcp-config-json" style="margin:0;">
+								<input
+									type="text"
+									class="large-text code"
+									readonly
+									value="<?php echo esc_attr( $mcp_url ); ?>"
+									onclick="this.select()"
+									style="font-family:Consolas,'Courier New',monospace;font-size:13px;"
+								>
+							</div>
+							<p class="description" style="margin-top:6px;">
+								<?php esc_html_e( 'Paste this into Claude.ai → Settings → Connectors → Add custom connector.', 'acrossai-mcp-manager' ); ?>
+							</p>
+						</td>
+					</tr>
+					<tr>
+						<th scope="row"><?php esc_html_e( 'Connector status', 'acrossai-mcp-manager' ); ?></th>
+						<td>
+							<?php if ( $connector_on ) : ?>
+								<span class="acrossai-status-badge acrossai-status-active">
+									<?php esc_html_e( 'Enabled', 'acrossai-mcp-manager' ); ?>
+								</span>
+							<?php else : ?>
+								<span class="acrossai-status-badge acrossai-status-inactive">
+									<?php esc_html_e( 'Disabled', 'acrossai-mcp-manager' ); ?>
+								</span>
+							<?php endif; ?>
+							<?php if ( ! $server_enabled ) : ?>
+								<p class="description" style="color:#d63638;margin-top:4px;">
+									<?php esc_html_e( 'The server is inactive. Enable it on the Overview tab first.', 'acrossai-mcp-manager' ); ?>
+								</p>
+							<?php endif; ?>
+						</td>
+					</tr>
+				</table>
+
+				<!-- ── Enable/Disable form ── -->
+				<form method="post" action="<?php echo esc_url( $save_url ); ?>">
+					<?php wp_nonce_field( 'acrossai_mcp_connector_' . $server_id ); ?>
+					<input type="hidden" name="connector_enabled" value="<?php echo $connector_on ? '0' : '1'; ?>">
+					<p>
+						<button type="submit" class="button <?php echo $connector_on ? '' : 'button-primary'; ?>">
+							<?php echo $connector_on ? esc_html__( 'Disable Connector Access', 'acrossai-mcp-manager' ) : esc_html__( 'Enable Connector Access', 'acrossai-mcp-manager' ); ?>
+						</button>
+					</p>
+				</form>
+
+				<?php if ( $connector_on ) : ?>
+
+					<!-- ── Connector Credentials ── -->
+					<hr style="margin:24px 0;">
+					<h3><?php esc_html_e( 'Connector Credentials', 'acrossai-mcp-manager' ); ?></h3>
+					<p class="description">
+						<?php esc_html_e( 'Generate one credential per Claude.ai workspace. Anyone with a credential can connect to this server. You can revoke credentials at any time.', 'acrossai-mcp-manager' ); ?>
+					</p>
+
+					<h4><?php esc_html_e( 'How to connect Claude.ai', 'acrossai-mcp-manager' ); ?></h4>
+					<ol style="max-width:540px;line-height:1.8;">
+						<li><?php esc_html_e( 'Click "Generate Credential" below to create a Client ID and Client Secret pair.', 'acrossai-mcp-manager' ); ?></li>
+						<li><?php esc_html_e( 'Copy the Server URL, Client ID, and Client Secret from the green notice that appears.', 'acrossai-mcp-manager' ); ?></li>
+						<li><?php esc_html_e( 'In Claude.ai → Settings → Connectors → Add custom connector: paste the Server URL, then expand Advanced settings and paste the Client ID and Client Secret.', 'acrossai-mcp-manager' ); ?></li>
+						<li><?php esc_html_e( 'Approve the login screen that opens on this site.', 'acrossai-mcp-manager' ); ?></li>
+					</ol>
+
+					<!-- Generate form -->
+					<form method="post" action="<?php echo esc_url( $create_url ); ?>" style="margin:16px 0;">
+						<?php wp_nonce_field( 'acrossai_mcp_oauth_create_client_' . $server_id ); ?>
+						<table class="form-table" role="presentation" style="margin:0 0 12px;">
+							<tr>
+								<th scope="row" style="width:160px;">
+									<label for="acrossai-client-name"><?php esc_html_e( 'Label', 'acrossai-mcp-manager' ); ?></label>
+								</th>
+								<td>
+									<input
+										type="text"
+										id="acrossai-client-name"
+										name="client_name"
+										class="regular-text"
+										placeholder="<?php esc_attr_e( 'e.g. My Claude workspace', 'acrossai-mcp-manager' ); ?>"
+										maxlength="100"
+										required
+									>
+									<p class="description"><?php esc_html_e( 'A name to identify this credential in the list.', 'acrossai-mcp-manager' ); ?></p>
+								</td>
+							</tr>
+							<tr>
+								<th scope="row">
+									<label for="acrossai-redirect-uri"><?php esc_html_e( 'Redirect URI', 'acrossai-mcp-manager' ); ?></label>
+								</th>
+								<td>
+									<input
+										type="url"
+										id="acrossai-redirect-uri"
+										name="redirect_uri"
+										class="regular-text code"
+										value="https://claude.ai/api/mcp/auth_callback"
+										required
+									>
+									<p class="description"><?php esc_html_e( 'Keep the default unless Claude.ai uses a different callback URL.', 'acrossai-mcp-manager' ); ?></p>
+								</td>
+							</tr>
+						</table>
+						<button type="submit" class="button button-primary">
+							<?php esc_html_e( 'Generate Credential', 'acrossai-mcp-manager' ); ?>
+						</button>
+					</form>
+
+					<!-- Existing credentials list -->
+					<?php
+					$clients         = \ACROSSAI_MCP_MANAGER\Database\OAuthClientsTable::get_all();
+					$revoke_base_url = rest_url( 'acrossai-mcp-manager/v1/oauth/tokens/' );
+					?>
+
+					<?php if ( ! empty( $clients ) ) : ?>
+						<table class="wp-list-table widefat fixed striped" style="margin-top:8px;">
+							<thead>
+								<tr>
+									<th><?php esc_html_e( 'Label', 'acrossai-mcp-manager' ); ?></th>
+									<th><?php esc_html_e( 'Client ID', 'acrossai-mcp-manager' ); ?></th>
+									<th><?php esc_html_e( 'Created', 'acrossai-mcp-manager' ); ?></th>
+									<th><?php esc_html_e( 'Actions', 'acrossai-mcp-manager' ); ?></th>
+								</tr>
+							</thead>
+							<tbody>
+								<?php foreach ( $clients as $cred ) : ?>
+									<tr>
+										<td><?php echo esc_html( $cred['client_name'] ); ?></td>
+										<td><code><?php echo esc_html( $cred['client_id'] ); ?></code></td>
+										<td><?php echo esc_html( get_date_from_gmt( $cred['created_at'], 'Y-m-d' ) ); ?></td>
+										<td>
+											<form method="post" action="<?php echo esc_url( $revoke_url ); ?>" style="display:inline;">
+												<?php wp_nonce_field( 'acrossai_mcp_oauth_revoke_client_' . $cred['client_id'] ); ?>
+												<input type="hidden" name="client_id" value="<?php echo esc_attr( $cred['client_id'] ); ?>">
+												<button
+													type="submit"
+													class="button button-small button-link-delete"
+													onclick="return confirm('<?php echo esc_js( __( 'This will revoke all active tokens for this credential. Continue?', 'acrossai-mcp-manager' ) ); ?>')"
+												>
+													<?php esc_html_e( 'Revoke', 'acrossai-mcp-manager' ); ?>
+												</button>
+											</form>
+										</td>
+									</tr>
+								<?php endforeach; ?>
+							</tbody>
+						</table>
+					<?php else : ?>
+						<p class="description"><?php esc_html_e( 'No credentials yet. Generate one above to connect Claude.ai.', 'acrossai-mcp-manager' ); ?></p>
+					<?php endif; ?>
+
+					<!-- ── OAuth discovery URLs ── -->
+					<hr style="margin:24px 0;">
+					<h3><?php esc_html_e( 'OAuth discovery URLs', 'acrossai-mcp-manager' ); ?></h3>
+					<table class="form-table" role="presentation">
+						<tr>
+							<th scope="row"><?php esc_html_e( 'Protected resource', 'acrossai-mcp-manager' ); ?></th>
+							<td>
+								<code style="user-select:all;"><?php echo esc_html( home_url( '.well-known/oauth-protected-resource/' . $slug ) ); ?></code>
+							</td>
+						</tr>
+						<tr>
+							<th scope="row"><?php esc_html_e( 'Authorization server', 'acrossai-mcp-manager' ); ?></th>
+							<td>
+								<code style="user-select:all;"><?php echo esc_html( home_url( '.well-known/oauth-authorization-server' ) ); ?></code>
+							</td>
+						</tr>
+					</table>
+
+					<!-- ── Active tokens ── -->
+					<?php $tokens = \ACROSSAI_MCP_MANAGER\Database\OAuthTokensTable::get_active_by_audience( $mcp_url ); ?>
+
+					<h3><?php esc_html_e( 'Active connections', 'acrossai-mcp-manager' ); ?></h3>
+
+					<?php if ( empty( $tokens ) ) : ?>
+						<p class="description">
+							<?php esc_html_e( 'No active OAuth connections for this server yet.', 'acrossai-mcp-manager' ); ?>
+						</p>
+					<?php else : ?>
+						<table class="wp-list-table widefat fixed striped" style="margin-top:8px;">
+							<thead>
+								<tr>
+									<th><?php esc_html_e( 'User', 'acrossai-mcp-manager' ); ?></th>
+									<th><?php esc_html_e( 'Client', 'acrossai-mcp-manager' ); ?></th>
+									<th><?php esc_html_e( 'Expires', 'acrossai-mcp-manager' ); ?></th>
+									<th><?php esc_html_e( 'Actions', 'acrossai-mcp-manager' ); ?></th>
+								</tr>
+							</thead>
+							<tbody>
+								<?php foreach ( $tokens as $tok ) : ?>
+									<tr>
+										<td><?php echo esc_html( $tok['user_login'] ?? '—' ); ?></td>
+										<td><code><?php echo esc_html( $tok['client_id'] ); ?></code></td>
+										<td><?php echo esc_html( get_date_from_gmt( $tok['expires_at'], 'Y-m-d H:i' ) ); ?></td>
+										<td>
+											<button
+												type="button"
+												class="button button-small acrossai-revoke-token"
+												data-token-id="<?php echo esc_attr( (int) $tok['id'] ); ?>"
+												data-nonce="<?php echo esc_attr( wp_create_nonce( 'wp_rest' ) ); ?>"
+												data-revoke-base="<?php echo esc_attr( rest_url( 'acrossai-mcp-manager/v1/oauth/tokens/' ) ); ?>"
+											>
+												<?php esc_html_e( 'Revoke', 'acrossai-mcp-manager' ); ?>
+											</button>
+										</td>
+									</tr>
+								<?php endforeach; ?>
+							</tbody>
+						</table>
+					<?php endif; ?>
+
+				<?php endif; // connector_on ?>
+
+			<?php endif; // oauth_enabled ?>
+
+		</div>
+		<script>
+		(function() {
+			// Copy-to-clipboard buttons.
+			document.querySelectorAll('.acrossai-copy').forEach(function(btn) {
+				btn.addEventListener('click', function() {
+					var target = document.getElementById(btn.dataset.target);
+					if ( ! target ) { return; }
+					navigator.clipboard.writeText(target.textContent.trim()).then(function() {
+						var orig = btn.textContent;
+						btn.textContent = '<?php echo esc_js( __( 'Copied!', 'acrossai-mcp-manager' ) ); ?>';
+						setTimeout(function() { btn.textContent = orig; }, 1500);
+					});
+				});
+			});
+
+			// Active-token revoke buttons (admin DELETE endpoint).
+			document.querySelectorAll('.acrossai-revoke-token').forEach(function(btn) {
+				btn.addEventListener('click', function() {
+					var tokenId = btn.dataset.tokenId;
+					var nonce   = btn.dataset.nonce;
+					var url     = btn.dataset.revokeBase + tokenId;
+					var row     = btn.closest('tr');
+
+					fetch(url, {
+						method: 'DELETE',
+						headers: { 'X-WP-Nonce': nonce }
+					}).then(function() {
+						row.style.opacity = '0.4';
+						btn.textContent = '<?php echo esc_js( __( 'Revoked', 'acrossai-mcp-manager' ) ); ?>';
+						btn.disabled = true;
+					});
+				});
+			});
+		})();
+		</script>
 		<?php
 	}
 }

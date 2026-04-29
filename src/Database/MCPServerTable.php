@@ -48,7 +48,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 class MCPServerTable {
 
 	const TABLE_NAME        = 'acrossai_mcp_servers';
-	const DB_VERSION        = '1.5.0';
+	const DB_VERSION        = '1.6.0';
 	const DB_VERSION_OPTION = 'acrossai_mcp_manager_db_version';
 
 	/**
@@ -106,6 +106,7 @@ class MCPServerTable {
 			server_route_namespace VARCHAR(100) NOT NULL DEFAULT 'mcp',
 			server_route VARCHAR(255) NOT NULL DEFAULT '',
 			server_version VARCHAR(50) NOT NULL DEFAULT 'v1.0.0',
+			connector_enabled TINYINT(1) NOT NULL DEFAULT 0,
 			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			PRIMARY KEY  (id)
 		) {$charset_collate};";
@@ -556,6 +557,38 @@ class MCPServerTable {
 			wp_cache_delete( 'enabled_servers', self::CACHE_GROUP );
 			wp_cache_delete( 'enabled_database_servers', self::CACHE_GROUP );
 			wp_cache_delete( 'has_enabled', self::CACHE_GROUP );
+		}
+
+		return false !== $result;
+	}
+
+	/**
+	 * Set the connector_enabled flag (0 or 1) for a server row.
+	 *
+	 * @since 1.6.0
+	 *
+	 * @param int  $id      Server row ID.
+	 * @param bool $enabled True to enable connector access, false to disable.
+	 *
+	 * @return bool True on success.
+	 */
+	public static function set_connector_enabled( $id, $enabled ) {
+		$id = absint( $id );
+
+		global $wpdb;
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
+		$result = $wpdb->update(
+			self::get_table_name(),
+			array( 'connector_enabled' => $enabled ? 1 : 0 ),
+			array( 'id'                => $id ),
+			array( '%d' ),
+			array( '%d' )
+		);
+
+		if ( false !== $result ) {
+			wp_cache_delete( 'server_' . $id, self::CACHE_GROUP );
+			wp_cache_delete( 'all_servers', self::CACHE_GROUP );
 		}
 
 		return false !== $result;

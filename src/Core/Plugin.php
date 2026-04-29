@@ -14,6 +14,7 @@ use ACROSSAI_MCP_MANAGER\Admin\Settings;
 use ACROSSAI_MCP_MANAGER\Database\MCPServerTable;
 use ACROSSAI_MCP_MANAGER\Frontend\FrontendAuth;
 use ACROSSAI_MCP_MANAGER\MCP\Controller;
+use ACROSSAI_MCP_MANAGER\OAuth\Server as OAuthServer;
 use ACROSSAI_MCP_MANAGER\REST\CliController;
 
 /**
@@ -66,6 +67,13 @@ class Plugin {
 	private $access_control;
 
 	/**
+	 * OAuth 2.1 server instance.
+	 *
+	 * @var OAuthServer
+	 */
+	private $oauth_server;
+
+	/**
 	 * Private constructor — use instance() instead.
 	 *
 	 * @since 1.0.0
@@ -82,7 +90,11 @@ class Plugin {
 		// other plugins using the same wpb-access-control library.
 		$this->access_control = new AccessControlManager( 'acrossai_mcp_access_control_providers' );
 
-		// Enforce per-server access control on MCP REST requests.
+		// OAuth 2.1 server — registers rewrite rules, REST routes, and bearer validation (priority 5).
+		$this->oauth_server = new OAuthServer();
+		$this->oauth_server->boot();
+
+		// Enforce per-server access control on MCP REST requests (priority 10, after OAuth at 5).
 		add_filter( 'rest_pre_dispatch', array( $this, 'enforce_mcp_access_control' ), 10, 3 );
 	}
 
