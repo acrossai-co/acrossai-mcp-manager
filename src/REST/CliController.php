@@ -30,6 +30,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
+use ACROSSAI_MCP_MANAGER\Database\CliAuthLogTable;
 use ACROSSAI_MCP_MANAGER\Database\MCPServerTable;
 
 /**
@@ -306,29 +307,11 @@ class CliController {
 	 * @return \WP_REST_Response
 	 */
 	public function list_servers() {
-		$rows    = MCPServerTable::get_all();
-		$servers = array();
-
-		foreach ( $rows as $row ) {
-			// Use stored server_slug when available; fall back to sanitizing the name
-			// so that installations mid-migration still return a working URL.
-			$slug      = ! empty( $row['server_slug'] ) ? $row['server_slug'] : sanitize_title( $row['server_name'] );
-			$namespace = ! empty( $row['server_route_namespace'] ) ? $row['server_route_namespace'] : 'mcp';
-			$route     = ! empty( $row['server_route'] ) ? $row['server_route'] : $slug;
-
-			$servers[] = array(
-				'id'          => $slug,
-				'name'        => $row['server_name'],
-				'description' => $row['description'],
-				'enabled'     => (bool) $row['is_enabled'],
-				'version'     => ! empty( $row['server_version'] ) ? $row['server_version'] : 'v1.0.0',
-				'namespace'   => $namespace,
-				'route'       => $route,
-				'mcp_url'     => rest_url( $namespace . '/' . $route ),
-			);
-		}
-
-		return rest_ensure_response( array( 'servers' => $servers ) );
+		return rest_ensure_response(
+			array(
+				'servers' => $this->get_accessible_servers_for_user( get_current_user_id() ),
+			)
+		);
 	}
 
 	/**
@@ -344,12 +327,13 @@ class CliController {
 	 * @return \WP_REST_Response|\WP_Error
 	 */
 	public function auth_exchange( \WP_REST_Request $request ) {
-		$code      = $request->get_param( 'code' );
-		$server_id = $request->get_param( 'server_id' );
+		$code                = sanitize_text_field( (string) $request->get_param( 'code' ) );
+		$requested_server_id = sanitize_title( (string) $request->get_param( 'server_id' ) );
 
 		$data = get_transient( self::AUTH_TRANSIENT_PREFIX . $code );
 
 		if ( false === $data ) {
+			$this->record_failed_cli_auth( $code, 'invalid_code', $requested_server_id );
 			return new \WP_Error(
 				'invalid_code',
 				__( 'Auth code not found or expired.', 'acrossai-mcp-manager' ),
@@ -358,6 +342,7 @@ class CliController {
 		}
 
 		if ( 'approved' !== $data['status'] ) {
+			$this->record_failed_cli_auth( $code, 'not_approved', $requested_server_id, (int) ( $data['user_id'] ?? 0 ) );
 			return new \WP_Error(
 				'not_approved',
 				__( 'Auth code has not been approved yet.', 'acrossai-mcp-manager' ),
@@ -369,6 +354,7 @@ class CliController {
 		$user    = get_user_by( 'id', $user_id );
 
 		if ( ! $user ) {
+			$this->record_failed_cli_auth( $code, 'invalid_user', $requested_server_id, $user_id );
 			return new \WP_Error(
 				'invalid_user',
 				__( 'Approving user not found.', 'acrossai-mcp-manager' ),
@@ -377,6 +363,7 @@ class CliController {
 		}
 
 		if ( ! class_exists( 'WP_Application_Passwords' ) ) {
+			$this->record_failed_cli_auth( $code, 'not_supported', $requested_server_id, $user_id );
 			return new \WP_Error(
 				'not_supported',
 				__( 'Application Passwords are not supported on this server.', 'acrossai-mcp-manager' ),
@@ -384,17 +371,59 @@ class CliController {
 			);
 		}
 
-		$app_name = sprintf( 'AcrossAI MCP Manager CLI - %s', sanitize_text_field( $server_id ) );
-		$result   = \WP_Application_Passwords::create_new_application_password(
+		$approved_server_id  = sanitize_title( (string) ( $data['server_id'] ?? '' ) );
+
+		if ( '' === $requested_server_id ) {
+			$this->record_failed_cli_auth( $code, 'missing_server', $approved_server_id, $user_id );
+			return new \WP_Error(
+				'missing_server',
+				__( 'A server ID is required.', 'acrossai-mcp-manager' ),
+				array( 'status' => 400 )
+			);
+		}
+
+		if ( '' !== $approved_server_id && $approved_server_id !== $requested_server_id ) {
+			$this->record_failed_cli_auth( $code, 'server_mismatch', $requested_server_id, $user_id );
+			return new \WP_Error(
+				'server_mismatch',
+				__( 'The requested server does not match the approved server.', 'acrossai-mcp-manager' ),
+				array( 'status' => 400 )
+			);
+		}
+
+		$selected_server = $this->get_accessible_server_row_by_id( $user_id, $requested_server_id );
+		if ( null === $selected_server ) {
+			$this->record_failed_cli_auth( $code, 'invalid_server', $requested_server_id, $user_id );
+			return new \WP_Error(
+				'invalid_server',
+				__( 'The requested server is not available for this user.', 'acrossai-mcp-manager' ),
+				array( 'status' => 403 )
+			);
+		}
+
+		$server_public_id = ! empty( $selected_server['server_slug'] ) ? $selected_server['server_slug'] : sanitize_title( $selected_server['server_name'] );
+		$app_name         = sprintf( 'AcrossAI MCP Manager CLI - %s', sanitize_text_field( $server_public_id ) );
+		$result           = \WP_Application_Passwords::create_new_application_password(
 			$user_id,
 			array( 'name' => $app_name )
 		);
 
 		if ( is_wp_error( $result ) ) {
+			$this->record_failed_cli_auth( $code, $result->get_error_code(), $server_public_id, $user_id );
 			return $result;
 		}
 
-		list( $password, ) = $result;
+		list( $password, $app_details ) = $result;
+
+		CliAuthLogTable::record_success(
+			$code,
+			isset( $app_details['uuid'] ) ? (string) $app_details['uuid'] : '',
+			array(
+				'server_id'   => (int) $selected_server['id'],
+				'server_slug' => $server_public_id,
+				'user_id'     => $user_id,
+			)
+		);
 
 		// Consume both transients — auth code is single-use.
 		delete_transient( self::AUTH_TRANSIENT_PREFIX . $code );
@@ -408,7 +437,7 @@ class CliController {
 				'username'     => $user->user_login,
 				'user_id'      => $user_id,
 				'expires_in'   => 2592000,
-				'server_id'    => $server_id,
+				'server_id'    => $server_public_id,
 			)
 		);
 	}
@@ -449,6 +478,109 @@ class CliController {
 		// Shorter-lived token used only for the /servers request.
 		set_transient( self::SESSION_TRANSIENT_PREFIX . $session_token, (int) $user_id, self::SESSION_TOKEN_TTL );
 
+		$server_slug = sanitize_title( (string) ( $data['server_id'] ?? '' ) );
+		$server_row  = $server_slug ? MCPServerTable::get_by_slug( $server_slug ) : null;
+
+		CliAuthLogTable::record_approved(
+			$auth_code,
+			is_array( $server_row ) ? $server_row : array(),
+			(int) $user_id,
+			$server_slug
+		);
+
 		return true;
+	}
+
+	/**
+	 * Return all enabled servers the given user may access.
+	 *
+	 * @since 1.6.0
+	 *
+	 * @param int $user_id WordPress user ID.
+	 *
+	 * @return array<int, array<string, mixed>>
+	 */
+	private function get_accessible_servers_for_user( int $user_id ): array {
+		$access_control = \ACROSSAI_MCP_MANAGER\Core\Plugin::instance()->get_access_control_manager();
+		$servers        = array();
+
+		foreach ( MCPServerTable::get_enabled_servers() as $row ) {
+			$slug      = ! empty( $row['server_slug'] ) ? $row['server_slug'] : sanitize_title( $row['server_name'] );
+			$namespace = ! empty( $row['server_route_namespace'] ) ? $row['server_route_namespace'] : 'mcp';
+			$route     = ! empty( $row['server_route'] ) ? $row['server_route'] : $slug;
+
+			if ( ! $access_control->user_has_access( $user_id, $namespace, $route ) ) {
+				continue;
+			}
+
+			$servers[] = array(
+				'id'          => $slug,
+				'name'        => $row['server_name'],
+				'description' => $row['description'],
+				'enabled'     => (bool) $row['is_enabled'],
+				'version'     => ! empty( $row['server_version'] ) ? $row['server_version'] : 'v1.0.0',
+				'namespace'   => $namespace,
+				'route'       => $route,
+				'mcp_url'     => rest_url( $namespace . '/' . $route ),
+			);
+		}
+
+		return $servers;
+	}
+
+	/**
+	 * Return one enabled, accessible server by its public ID.
+	 *
+	 * @since 1.6.0
+	 *
+	 * @param int    $user_id   WordPress user ID.
+	 * @param string $server_id Public server ID/slug.
+	 *
+	 * @return array<string, mixed>|null
+	 */
+	private function get_accessible_server_row_by_id( int $user_id, string $server_id ): ?array {
+		$access_control = \ACROSSAI_MCP_MANAGER\Core\Plugin::instance()->get_access_control_manager();
+
+		foreach ( MCPServerTable::get_enabled_servers() as $row ) {
+			$slug      = ! empty( $row['server_slug'] ) ? $row['server_slug'] : sanitize_title( $row['server_name'] );
+			$namespace = ! empty( $row['server_route_namespace'] ) ? $row['server_route_namespace'] : 'mcp';
+			$route     = ! empty( $row['server_route'] ) ? $row['server_route'] : $slug;
+
+			if ( $slug !== $server_id ) {
+				continue;
+			}
+
+			if ( ! $access_control->user_has_access( $user_id, $namespace, $route ) ) {
+				return null;
+			}
+
+			return $row;
+		}
+
+		return null;
+	}
+
+	/**
+	 * Write a failed CLI auth audit record.
+	 *
+	 * @param string $auth_code        Raw auth code.
+	 * @param string $failure_code     Machine-readable failure code.
+	 * @param string $public_server_id Public server slug.
+	 * @param int    $user_id          WordPress user ID when known.
+	 *
+	 * @return void
+	 */
+	private function record_failed_cli_auth( string $auth_code, string $failure_code, string $public_server_id = '', int $user_id = 0 ): void {
+		$server_row = $public_server_id ? MCPServerTable::get_by_slug( $public_server_id ) : null;
+
+		CliAuthLogTable::record_failed(
+			$auth_code,
+			$failure_code,
+			array(
+				'server_id'   => is_array( $server_row ) ? (int) $server_row['id'] : 0,
+				'server_slug' => is_array( $server_row ) && ! empty( $server_row['server_slug'] ) ? $server_row['server_slug'] : $public_server_id,
+				'user_id'     => $user_id,
+			)
+		);
 	}
 }

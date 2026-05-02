@@ -10,8 +10,8 @@
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
  * Text Domain: acrossai-mcp-manager
  * Domain Path: /languages
- * Requires PHP: 7.4
- * Requires WP: 5.9
+ * Requires PHP: 8.0
+ * Requires WP: 6.9
  *
  * @package AcrossAI_MCP_Manager
  */
@@ -31,11 +31,6 @@ if ( is_file( $acrossai_mcp_manager_jetpack_autoloader ) ) {
 	require_once $acrossai_mcp_manager_jetpack_autoloader;
 }
 
-// Load Composer Autoloader.
-if ( is_file( __DIR__ . '/vendor/autoload.php' ) ) {
-	require_once __DIR__ . '/vendor/autoload.php';
-}
-
 /**
  * Boot the plugin.
  *
@@ -48,9 +43,7 @@ add_action(
 	'plugins_loaded',
 	function () {
 		ACROSSAI_MCP_MANAGER\Database\MCPServerTable::maybe_create_table();
-		ACROSSAI_MCP_MANAGER\Database\OAuthClientsTable::maybe_create_table();
-		ACROSSAI_MCP_MANAGER\Database\OAuthTokensTable::maybe_create_table();
-		ACROSSAI_MCP_MANAGER\Database\OAuthAuthCodesTable::maybe_create_table();
+		ACROSSAI_MCP_MANAGER\Database\LegacyConnectorCleanup::maybe_cleanup();
 		ACROSSAI_MCP_MANAGER\Core\Plugin::instance();
 	},
 	10
@@ -66,30 +59,30 @@ register_activation_hook(
 	function () {
 		ACROSSAI_MCP_MANAGER\Database\MCPServerTable::create_table();
 		ACROSSAI_MCP_MANAGER\Database\MCPServerTable::insert_default_server();
+		ACROSSAI_MCP_MANAGER\Database\CliAuthLogTable::maybe_create_table();
+		ACROSSAI_MCP_MANAGER\Database\ConnectorAuditLogTable::maybe_create_table();
 		WPBoilerplate\AccessControl\AccessControlTable::maybe_create_table();
-		ACROSSAI_MCP_MANAGER\Database\OAuthClientsTable::create_table();
-		ACROSSAI_MCP_MANAGER\Database\OAuthTokensTable::create_table();
-		ACROSSAI_MCP_MANAGER\Database\OAuthAuthCodesTable::create_table();
+		ACROSSAI_MCP_MANAGER\Database\LegacyConnectorCleanup::maybe_cleanup();
 
-		// Register and flush rewrite rules for FrontendAuth and OAuth discovery.
+		// Register and flush the frontend CLI auth page rewrite rule.
 		add_rewrite_rule(
 			'^' . ACROSSAI_MCP_MANAGER\Frontend\FrontendAuth::PAGE_SLUG . '/?$',
 			'index.php?' . ACROSSAI_MCP_MANAGER\Frontend\FrontendAuth::QUERY_VAR . '=1',
 			'top'
 		);
 		add_rewrite_rule(
+			'^' . ACROSSAI_MCP_MANAGER\OAuth\ClaudeConnectors::AUTHORIZE_PATH . '/?$',
+			'index.php?' . ACROSSAI_MCP_MANAGER\OAuth\ClaudeConnectors::AUTHORIZE_QUERY_VAR . '=1',
+			'top'
+		);
+		add_rewrite_rule(
 			'^\.well-known/oauth-authorization-server/?$',
-			'index.php?' . ACROSSAI_MCP_MANAGER\OAuth\Discovery::QV_AS . '=1',
+			'index.php?' . ACROSSAI_MCP_MANAGER\OAuth\ClaudeConnectors::AUTH_SERVER_QUERY_VAR . '=1',
 			'top'
 		);
 		add_rewrite_rule(
-			'^\.well-known/oauth-protected-resource/([^/]+)/?$',
-			'index.php?' . ACROSSAI_MCP_MANAGER\OAuth\Discovery::QV_PR . '=$matches[1]',
-			'top'
-		);
-		add_rewrite_rule(
-			'^acrossai-mcp-manager/oauth/authorize/?$',
-			'index.php?' . ACROSSAI_MCP_MANAGER\OAuth\AuthorizationEndpoint::QUERY_VAR . '=1',
+			'^\.well-known/oauth-protected-resource/?$',
+			'index.php?' . ACROSSAI_MCP_MANAGER\OAuth\ClaudeConnectors::RESOURCE_QUERY_VAR . '=1',
 			'top'
 		);
 		flush_rewrite_rules();

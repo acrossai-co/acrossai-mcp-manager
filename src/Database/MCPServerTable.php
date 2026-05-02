@@ -15,7 +15,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 /**
  * Manages the {prefix}acrossai_mcp_servers custom table.
  *
- * Schema (v1.4.0)
+ * Schema (v1.8.0)
  * ------
  *   id                     BIGINT UNSIGNED  PK auto-increment
  *   server_name            VARCHAR(255)     human-readable name
@@ -26,6 +26,9 @@ if ( ! defined( 'ABSPATH' ) ) {
  *   server_route_namespace VARCHAR(100)     REST namespace (e.g. 'mcp')
  *   server_route           VARCHAR(255)     REST route path (e.g. 'mcp-adapter-default-server')
  *   server_version         VARCHAR(50)      MCP server version (e.g. 'v1.0.0')
+ *   claude_connector_client_id VARCHAR(255) OAuth client ID for the per-server Claude connector
+ *   claude_connector_client_secret VARCHAR(255) OAuth client secret for the per-server Claude connector
+ *   claude_connector_redirect_uri VARCHAR(500) OAuth redirect URI for the per-server Claude connector
  *   created_at             DATETIME         row creation timestamp
  *
  * registered_from values
@@ -48,7 +51,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 class MCPServerTable {
 
 	const TABLE_NAME        = 'acrossai_mcp_servers';
-	const DB_VERSION        = '1.6.0';
+	const DB_VERSION        = '1.8.0';
 	const DB_VERSION_OPTION = 'acrossai_mcp_manager_db_version';
 
 	/**
@@ -106,7 +109,9 @@ class MCPServerTable {
 			server_route_namespace VARCHAR(100) NOT NULL DEFAULT 'mcp',
 			server_route VARCHAR(255) NOT NULL DEFAULT '',
 			server_version VARCHAR(50) NOT NULL DEFAULT 'v1.0.0',
-			connector_enabled TINYINT(1) NOT NULL DEFAULT 0,
+			claude_connector_client_id VARCHAR(255) NOT NULL DEFAULT '',
+			claude_connector_client_secret VARCHAR(255) NOT NULL DEFAULT '',
+			claude_connector_redirect_uri VARCHAR(500) NOT NULL DEFAULT '',
 			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			PRIMARY KEY  (id)
 		) {$charset_collate};";
@@ -146,8 +151,17 @@ class MCPServerTable {
 			)
 		);
 
+		$has_connector_column = (bool) $wpdb->get_var( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			$wpdb->prepare(
+				'SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = %s AND TABLE_NAME = %s AND COLUMN_NAME = %s',
+				DB_NAME,
+				$wpdb->prefix . self::TABLE_NAME,
+				'connector_enabled'
+			)
+		);
+
 		// Build SELECT — only include access_control when the column exists.
-		$select_cols = 'id, server_name, server_slug, registered_from, server_route_namespace, server_route, server_version';
+		$select_cols = 'id, server_name, server_slug, registered_from, server_route_namespace, server_route, server_version, claude_connector_client_id, claude_connector_client_secret, claude_connector_redirect_uri';
 		if ( $has_ac_column ) {
 			$select_cols .= ', access_control';
 		}
@@ -158,6 +172,10 @@ class MCPServerTable {
 		if ( empty( $rows ) ) {
 			return;
 		}
+
+		$legacy_connector_client_id     = (string) get_option( 'acrossai_mcp_claude_connector_client_id', '' );
+		$legacy_connector_client_secret = (string) get_option( 'acrossai_mcp_claude_connector_client_secret', '' );
+		$legacy_connector_redirect_uri  = (string) get_option( 'acrossai_mcp_claude_connector_redirect_uri', '' );
 
 		foreach ( $rows as $row ) {
 			$needs_update   = false;
@@ -202,6 +220,24 @@ class MCPServerTable {
 				$needs_update                  = true;
 			}
 
+			if ( '' === ( $row['claude_connector_client_id'] ?? '' ) && '' !== $legacy_connector_client_id ) {
+				$update_data['claude_connector_client_id'] = sanitize_text_field( $legacy_connector_client_id );
+				$update_fmt[]                              = '%s';
+				$needs_update                              = true;
+			}
+
+			if ( '' === ( $row['claude_connector_client_secret'] ?? '' ) && '' !== $legacy_connector_client_secret ) {
+				$update_data['claude_connector_client_secret'] = sanitize_text_field( $legacy_connector_client_secret );
+				$update_fmt[]                                  = '%s';
+				$needs_update                                  = true;
+			}
+
+			if ( '' === ( $row['claude_connector_redirect_uri'] ?? '' ) && '' !== $legacy_connector_redirect_uri ) {
+				$update_data['claude_connector_redirect_uri'] = esc_url_raw( $legacy_connector_redirect_uri );
+				$update_fmt[]                                 = '%s';
+				$needs_update                                 = true;
+			}
+
 			if ( $needs_update ) {
 				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
 				$wpdb->update(
@@ -225,6 +261,11 @@ class MCPServerTable {
 		if ( $has_ac_column ) {
 			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 			$wpdb->query( "ALTER TABLE {$table_name} DROP COLUMN access_control" );
+		}
+
+		if ( $has_connector_column ) {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$wpdb->query( "ALTER TABLE {$table_name} DROP COLUMN connector_enabled" );
 		}
 	}
 
@@ -269,12 +310,15 @@ class MCPServerTable {
 					'server_slug'            => self::DEFAULT_SERVER_SLUG,
 					'description'            => 'WordPress MCP Adapter integration for AI clients (VS Code, Claude, GitHub Codex, ChatGPT).',
 					'is_enabled'             => 0,
-					'registered_from'        => 'plugin',
-					'server_route_namespace' => 'mcp',
-					'server_route'           => self::DEFAULT_SERVER_SLUG,
-					'server_version'         => 'v1.0.0',
-				),
-				array( '%s', '%s', '%s', '%d', '%s', '%s', '%s', '%s' )
+				'registered_from'        => 'plugin',
+				'server_route_namespace' => 'mcp',
+				'server_route'           => self::DEFAULT_SERVER_SLUG,
+				'server_version'         => 'v1.0.0',
+				'claude_connector_client_id' => '',
+				'claude_connector_client_secret' => '',
+				'claude_connector_redirect_uri' => '',
+			),
+			array( '%s', '%s', '%s', '%d', '%s', '%s', '%s', '%s', '%s', '%s', '%s' )
 			);
 
 			wp_cache_delete( 'all_servers', self::CACHE_GROUP );
@@ -406,6 +450,39 @@ class MCPServerTable {
 	}
 
 	/**
+	 * Return a single server row by its public slug.
+	 *
+	 * @param string $slug Public server slug.
+	 *
+	 * @return array|null
+	 */
+	public static function get_by_slug( $slug ) {
+		$slug      = sanitize_title( $slug );
+		$cache_key = 'server_slug_' . $slug;
+
+		$cached = wp_cache_get( $cache_key, self::CACHE_GROUP );
+		if ( false !== $cached ) {
+			return $cached;
+		}
+
+		global $wpdb;
+
+		$table_name = esc_sql( self::get_table_name() );
+
+		$row = $wpdb->get_row(
+			$wpdb->prepare(
+				"SELECT * FROM {$table_name} WHERE server_slug = %s LIMIT 1", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				$slug
+			),
+			ARRAY_A
+		);
+
+		wp_cache_set( $cache_key, $row, self::CACHE_GROUP );
+
+		return $row;
+	}
+
+	/**
 	 * Check if a server_slug is already taken by an existing row.
 	 *
 	 * Also blocks the hardcoded DefaultServerFactory slug regardless of DB state.
@@ -500,8 +577,11 @@ class MCPServerTable {
 				'server_route_namespace' => $namespace,
 				'server_route'           => $route,
 				'server_version'         => $version,
+				'claude_connector_client_id' => '',
+				'claude_connector_client_secret' => '',
+				'claude_connector_redirect_uri' => '',
 			),
-			array( '%s', '%s', '%s', '%d', '%s', '%s', '%s', '%s' )
+			array( '%s', '%s', '%s', '%d', '%s', '%s', '%s', '%s', '%s', '%s', '%s' )
 		);
 
 		if ( false === $result ) {
@@ -510,6 +590,7 @@ class MCPServerTable {
 
 		$new_id = (int) $wpdb->insert_id;
 
+		wp_cache_delete( 'server_slug_' . $server_slug, self::CACHE_GROUP );
 		wp_cache_delete( 'all_servers', self::CACHE_GROUP );
 		wp_cache_delete( 'has_enabled', self::CACHE_GROUP );
 		wp_cache_delete( 'enabled_database_servers', self::CACHE_GROUP );
@@ -553,42 +634,13 @@ class MCPServerTable {
 
 		if ( false !== $result ) {
 			wp_cache_delete( 'server_' . $id, self::CACHE_GROUP );
+			if ( ! empty( $server['server_slug'] ) ) {
+				wp_cache_delete( 'server_slug_' . $server['server_slug'], self::CACHE_GROUP );
+			}
 			wp_cache_delete( 'all_servers', self::CACHE_GROUP );
 			wp_cache_delete( 'enabled_servers', self::CACHE_GROUP );
 			wp_cache_delete( 'enabled_database_servers', self::CACHE_GROUP );
 			wp_cache_delete( 'has_enabled', self::CACHE_GROUP );
-		}
-
-		return false !== $result;
-	}
-
-	/**
-	 * Set the connector_enabled flag (0 or 1) for a server row.
-	 *
-	 * @since 1.6.0
-	 *
-	 * @param int  $id      Server row ID.
-	 * @param bool $enabled True to enable connector access, false to disable.
-	 *
-	 * @return bool True on success.
-	 */
-	public static function set_connector_enabled( $id, $enabled ) {
-		$id = absint( $id );
-
-		global $wpdb;
-
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
-		$result = $wpdb->update(
-			self::get_table_name(),
-			array( 'connector_enabled' => $enabled ? 1 : 0 ),
-			array( 'id'                => $id ),
-			array( '%d' ),
-			array( '%d' )
-		);
-
-		if ( false !== $result ) {
-			wp_cache_delete( 'server_' . $id, self::CACHE_GROUP );
-			wp_cache_delete( 'all_servers', self::CACHE_GROUP );
 		}
 
 		return false !== $result;
@@ -626,6 +678,9 @@ class MCPServerTable {
 
 		if ( false !== $result ) {
 			wp_cache_delete( 'server_' . $id, self::CACHE_GROUP );
+			if ( ! empty( $server['server_slug'] ) ) {
+				wp_cache_delete( 'server_slug_' . $server['server_slug'], self::CACHE_GROUP );
+			}
 			wp_cache_delete( 'all_servers', self::CACHE_GROUP );
 			wp_cache_delete( 'enabled_servers', self::CACHE_GROUP );
 			wp_cache_delete( 'enabled_database_servers', self::CACHE_GROUP );
@@ -651,6 +706,7 @@ class MCPServerTable {
 	 */
 	public static function update_server( $id, array $data ) {
 		$id      = absint( $id );
+		$server  = self::get_by_id( $id );
 		$allowed = array( 'server_name', 'description', 'server_route_namespace', 'server_route', 'server_version' );
 		$fields  = array_intersect_key( $data, array_flip( $allowed ) );
 
@@ -673,7 +729,56 @@ class MCPServerTable {
 
 		if ( false !== $result ) {
 			wp_cache_delete( 'server_' . $id, self::CACHE_GROUP );
+			if ( ! empty( $server['server_slug'] ) ) {
+				wp_cache_delete( 'server_slug_' . $server['server_slug'], self::CACHE_GROUP );
+			}
 			wp_cache_delete( 'all_servers', self::CACHE_GROUP );
+		}
+
+		return false !== $result;
+	}
+
+	/**
+	 * Update per-server Claude connector OAuth settings.
+	 *
+	 * @param int   $id   Server row ID.
+	 * @param array $data Connector settings.
+	 *
+	 * @return bool
+	 */
+	public static function update_claude_connector_settings( $id, array $data ) {
+		$id     = absint( $id );
+		$server = self::get_by_id( $id );
+
+		if ( ! $server ) {
+			return false;
+		}
+
+		$fields = array(
+			'claude_connector_client_id'     => isset( $data['claude_connector_client_id'] ) ? sanitize_text_field( $data['claude_connector_client_id'] ) : '',
+			'claude_connector_client_secret' => isset( $data['claude_connector_client_secret'] ) ? sanitize_text_field( $data['claude_connector_client_secret'] ) : '',
+			'claude_connector_redirect_uri'  => isset( $data['claude_connector_redirect_uri'] ) ? esc_url_raw( $data['claude_connector_redirect_uri'] ) : '',
+		);
+
+		global $wpdb;
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
+		$result = $wpdb->update(
+			self::get_table_name(),
+			$fields,
+			array( 'id' => $id ),
+			array( '%s', '%s', '%s' ),
+			array( '%d' )
+		);
+
+		if ( false !== $result ) {
+			wp_cache_delete( 'server_' . $id, self::CACHE_GROUP );
+			if ( ! empty( $server['server_slug'] ) ) {
+				wp_cache_delete( 'server_slug_' . $server['server_slug'], self::CACHE_GROUP );
+			}
+			wp_cache_delete( 'all_servers', self::CACHE_GROUP );
+			wp_cache_delete( 'enabled_servers', self::CACHE_GROUP );
+			wp_cache_delete( 'enabled_database_servers', self::CACHE_GROUP );
 		}
 
 		return false !== $result;

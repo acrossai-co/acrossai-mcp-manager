@@ -6,4 +6,6 @@ $vendorDir = dirname(__DIR__);
 $baseDir = dirname($vendorDir);
 
 return array(
+    'OAuth2\\HttpFoundationBridge' => array($vendorDir . '/bshaffer/oauth2-server-httpfoundation-bridge/src'),
+    'OAuth2' => array($vendorDir . '/bshaffer/oauth2-server-php/src'),
 );

@@ -10,4 +10,284 @@ return array(
 		'version' => '2.12.0',
 		'path'    => $vendorDir . '/automattic/jetpack-autoloader/src/AutoloadGenerator.php'
 	),
+	'OAuth2\\Autoloader' => array(
+		'version' => '1.14.2.0',
+		'path'    => $vendorDir . '/bshaffer/oauth2-server-php/src/OAuth2/Autoloader.php'
+	),
+	'OAuth2\\ClientAssertionType\\ClientAssertionTypeInterface' => array(
+		'version' => '1.14.2.0',
+		'path'    => $vendorDir . '/bshaffer/oauth2-server-php/src/OAuth2/ClientAssertionType/ClientAssertionTypeInterface.php'
+	),
+	'OAuth2\\ClientAssertionType\\HttpBasic' => array(
+		'version' => '1.14.2.0',
+		'path'    => $vendorDir . '/bshaffer/oauth2-server-php/src/OAuth2/ClientAssertionType/HttpBasic.php'
+	),
+	'OAuth2\\Controller\\AuthorizeController' => array(
+		'version' => '1.14.2.0',
+		'path'    => $vendorDir . '/bshaffer/oauth2-server-php/src/OAuth2/Controller/AuthorizeController.php'
+	),
+	'OAuth2\\Controller\\AuthorizeControllerInterface' => array(
+		'version' => '1.14.2.0',
+		'path'    => $vendorDir . '/bshaffer/oauth2-server-php/src/OAuth2/Controller/AuthorizeControllerInterface.php'
+	),
+	'OAuth2\\Controller\\ResourceController' => array(
+		'version' => '1.14.2.0',
+		'path'    => $vendorDir . '/bshaffer/oauth2-server-php/src/OAuth2/Controller/ResourceController.php'
+	),
+	'OAuth2\\Controller\\ResourceControllerInterface' => array(
+		'version' => '1.14.2.0',
+		'path'    => $vendorDir . '/bshaffer/oauth2-server-php/src/OAuth2/Controller/ResourceControllerInterface.php'
+	),
+	'OAuth2\\Controller\\TokenController' => array(
+		'version' => '1.14.2.0',
+		'path'    => $vendorDir . '/bshaffer/oauth2-server-php/src/OAuth2/Controller/TokenController.php'
+	),
+	'OAuth2\\Controller\\TokenControllerInterface' => array(
+		'version' => '1.14.2.0',
+		'path'    => $vendorDir . '/bshaffer/oauth2-server-php/src/OAuth2/Controller/TokenControllerInterface.php'
+	),
+	'OAuth2\\Encryption\\EncryptionInterface' => array(
+		'version' => '1.14.2.0',
+		'path'    => $vendorDir . '/bshaffer/oauth2-server-php/src/OAuth2/Encryption/EncryptionInterface.php'
+	),
+	'OAuth2\\Encryption\\FirebaseJwt' => array(
+		'version' => '1.14.2.0',
+		'path'    => $vendorDir . '/bshaffer/oauth2-server-php/src/OAuth2/Encryption/FirebaseJwt.php'
+	),
+	'OAuth2\\Encryption\\Jwt' => array(
+		'version' => '1.14.2.0',
+		'path'    => $vendorDir . '/bshaffer/oauth2-server-php/src/OAuth2/Encryption/Jwt.php'
+	),
+	'OAuth2\\GrantType\\AuthorizationCode' => array(
+		'version' => '1.14.2.0',
+		'path'    => $vendorDir . '/bshaffer/oauth2-server-php/src/OAuth2/GrantType/AuthorizationCode.php'
+	),
+	'OAuth2\\GrantType\\ClientCredentials' => array(
+		'version' => '1.14.2.0',
+		'path'    => $vendorDir . '/bshaffer/oauth2-server-php/src/OAuth2/GrantType/ClientCredentials.php'
+	),
+	'OAuth2\\GrantType\\GrantTypeInterface' => array(
+		'version' => '1.14.2.0',
+		'path'    => $vendorDir . '/bshaffer/oauth2-server-php/src/OAuth2/GrantType/GrantTypeInterface.php'
+	),
+	'OAuth2\\GrantType\\JwtBearer' => array(
+		'version' => '1.14.2.0',
+		'path'    => $vendorDir . '/bshaffer/oauth2-server-php/src/OAuth2/GrantType/JwtBearer.php'
+	),
+	'OAuth2\\GrantType\\RefreshToken' => array(
+		'version' => '1.14.2.0',
+		'path'    => $vendorDir . '/bshaffer/oauth2-server-php/src/OAuth2/GrantType/RefreshToken.php'
+	),
+	'OAuth2\\GrantType\\UserCredentials' => array(
+		'version' => '1.14.2.0',
+		'path'    => $vendorDir . '/bshaffer/oauth2-server-php/src/OAuth2/GrantType/UserCredentials.php'
+	),
+	'OAuth2\\HttpFoundationBridge\\Request' => array(
+		'version' => '1.7.1.0',
+		'path'    => $vendorDir . '/bshaffer/oauth2-server-httpfoundation-bridge/src/OAuth2/HttpFoundationBridge/Request.php'
+	),
+	'OAuth2\\HttpFoundationBridge\\Response' => array(
+		'version' => '1.7.1.0',
+		'path'    => $vendorDir . '/bshaffer/oauth2-server-httpfoundation-bridge/src/OAuth2/HttpFoundationBridge/Response.php'
+	),
+	'OAuth2\\OpenID\\Controller\\AuthorizeController' => array(
+		'version' => '1.14.2.0',
+		'path'    => $vendorDir . '/bshaffer/oauth2-server-php/src/OAuth2/OpenID/Controller/AuthorizeController.php'
+	),
+	'OAuth2\\OpenID\\Controller\\AuthorizeControllerInterface' => array(
+		'version' => '1.14.2.0',
+		'path'    => $vendorDir . '/bshaffer/oauth2-server-php/src/OAuth2/OpenID/Controller/AuthorizeControllerInterface.php'
+	),
+	'OAuth2\\OpenID\\Controller\\UserInfoController' => array(
+		'version' => '1.14.2.0',
+		'path'    => $vendorDir . '/bshaffer/oauth2-server-php/src/OAuth2/OpenID/Controller/UserInfoController.php'
+	),
+	'OAuth2\\OpenID\\Controller\\UserInfoControllerInterface' => array(
+		'version' => '1.14.2.0',
+		'path'    => $vendorDir . '/bshaffer/oauth2-server-php/src/OAuth2/OpenID/Controller/UserInfoControllerInterface.php'
+	),
+	'OAuth2\\OpenID\\GrantType\\AuthorizationCode' => array(
+		'version' => '1.14.2.0',
+		'path'    => $vendorDir . '/bshaffer/oauth2-server-php/src/OAuth2/OpenID/GrantType/AuthorizationCode.php'
+	),
+	'OAuth2\\OpenID\\ResponseType\\AuthorizationCode' => array(
+		'version' => '1.14.2.0',
+		'path'    => $vendorDir . '/bshaffer/oauth2-server-php/src/OAuth2/OpenID/ResponseType/AuthorizationCode.php'
+	),
+	'OAuth2\\OpenID\\ResponseType\\AuthorizationCodeInterface' => array(
+		'version' => '1.14.2.0',
+		'path'    => $vendorDir . '/bshaffer/oauth2-server-php/src/OAuth2/OpenID/ResponseType/AuthorizationCodeInterface.php'
+	),
+	'OAuth2\\OpenID\\ResponseType\\CodeIdToken' => array(
+		'version' => '1.14.2.0',
+		'path'    => $vendorDir . '/bshaffer/oauth2-server-php/src/OAuth2/OpenID/ResponseType/CodeIdToken.php'
+	),
+	'OAuth2\\OpenID\\ResponseType\\CodeIdTokenInterface' => array(
+		'version' => '1.14.2.0',
+		'path'    => $vendorDir . '/bshaffer/oauth2-server-php/src/OAuth2/OpenID/ResponseType/CodeIdTokenInterface.php'
+	),
+	'OAuth2\\OpenID\\ResponseType\\IdToken' => array(
+		'version' => '1.14.2.0',
+		'path'    => $vendorDir . '/bshaffer/oauth2-server-php/src/OAuth2/OpenID/ResponseType/IdToken.php'
+	),
+	'OAuth2\\OpenID\\ResponseType\\IdTokenInterface' => array(
+		'version' => '1.14.2.0',
+		'path'    => $vendorDir . '/bshaffer/oauth2-server-php/src/OAuth2/OpenID/ResponseType/IdTokenInterface.php'
+	),
+	'OAuth2\\OpenID\\ResponseType\\IdTokenToken' => array(
+		'version' => '1.14.2.0',
+		'path'    => $vendorDir . '/bshaffer/oauth2-server-php/src/OAuth2/OpenID/ResponseType/IdTokenToken.php'
+	),
+	'OAuth2\\OpenID\\ResponseType\\IdTokenTokenInterface' => array(
+		'version' => '1.14.2.0',
+		'path'    => $vendorDir . '/bshaffer/oauth2-server-php/src/OAuth2/OpenID/ResponseType/IdTokenTokenInterface.php'
+	),
+	'OAuth2\\OpenID\\Storage\\AuthorizationCodeInterface' => array(
+		'version' => '1.14.2.0',
+		'path'    => $vendorDir . '/bshaffer/oauth2-server-php/src/OAuth2/OpenID/Storage/AuthorizationCodeInterface.php'
+	),
+	'OAuth2\\OpenID\\Storage\\UserClaimsInterface' => array(
+		'version' => '1.14.2.0',
+		'path'    => $vendorDir . '/bshaffer/oauth2-server-php/src/OAuth2/OpenID/Storage/UserClaimsInterface.php'
+	),
+	'OAuth2\\Request' => array(
+		'version' => '1.14.2.0',
+		'path'    => $vendorDir . '/bshaffer/oauth2-server-php/src/OAuth2/Request.php'
+	),
+	'OAuth2\\RequestInterface' => array(
+		'version' => '1.14.2.0',
+		'path'    => $vendorDir . '/bshaffer/oauth2-server-php/src/OAuth2/RequestInterface.php'
+	),
+	'OAuth2\\Response' => array(
+		'version' => '1.14.2.0',
+		'path'    => $vendorDir . '/bshaffer/oauth2-server-php/src/OAuth2/Response.php'
+	),
+	'OAuth2\\ResponseInterface' => array(
+		'version' => '1.14.2.0',
+		'path'    => $vendorDir . '/bshaffer/oauth2-server-php/src/OAuth2/ResponseInterface.php'
+	),
+	'OAuth2\\ResponseType\\AccessToken' => array(
+		'version' => '1.14.2.0',
+		'path'    => $vendorDir . '/bshaffer/oauth2-server-php/src/OAuth2/ResponseType/AccessToken.php'
+	),
+	'OAuth2\\ResponseType\\AccessTokenInterface' => array(
+		'version' => '1.14.2.0',
+		'path'    => $vendorDir . '/bshaffer/oauth2-server-php/src/OAuth2/ResponseType/AccessTokenInterface.php'
+	),
+	'OAuth2\\ResponseType\\AuthorizationCode' => array(
+		'version' => '1.14.2.0',
+		'path'    => $vendorDir . '/bshaffer/oauth2-server-php/src/OAuth2/ResponseType/AuthorizationCode.php'
+	),
+	'OAuth2\\ResponseType\\AuthorizationCodeInterface' => array(
+		'version' => '1.14.2.0',
+		'path'    => $vendorDir . '/bshaffer/oauth2-server-php/src/OAuth2/ResponseType/AuthorizationCodeInterface.php'
+	),
+	'OAuth2\\ResponseType\\JwtAccessToken' => array(
+		'version' => '1.14.2.0',
+		'path'    => $vendorDir . '/bshaffer/oauth2-server-php/src/OAuth2/ResponseType/JwtAccessToken.php'
+	),
+	'OAuth2\\ResponseType\\ResponseTypeInterface' => array(
+		'version' => '1.14.2.0',
+		'path'    => $vendorDir . '/bshaffer/oauth2-server-php/src/OAuth2/ResponseType/ResponseTypeInterface.php'
+	),
+	'OAuth2\\Scope' => array(
+		'version' => '1.14.2.0',
+		'path'    => $vendorDir . '/bshaffer/oauth2-server-php/src/OAuth2/Scope.php'
+	),
+	'OAuth2\\ScopeInterface' => array(
+		'version' => '1.14.2.0',
+		'path'    => $vendorDir . '/bshaffer/oauth2-server-php/src/OAuth2/ScopeInterface.php'
+	),
+	'OAuth2\\Server' => array(
+		'version' => '1.14.2.0',
+		'path'    => $vendorDir . '/bshaffer/oauth2-server-php/src/OAuth2/Server.php'
+	),
+	'OAuth2\\Storage\\AccessTokenInterface' => array(
+		'version' => '1.14.2.0',
+		'path'    => $vendorDir . '/bshaffer/oauth2-server-php/src/OAuth2/Storage/AccessTokenInterface.php'
+	),
+	'OAuth2\\Storage\\AuthorizationCodeInterface' => array(
+		'version' => '1.14.2.0',
+		'path'    => $vendorDir . '/bshaffer/oauth2-server-php/src/OAuth2/Storage/AuthorizationCodeInterface.php'
+	),
+	'OAuth2\\Storage\\Cassandra' => array(
+		'version' => '1.14.2.0',
+		'path'    => $vendorDir . '/bshaffer/oauth2-server-php/src/OAuth2/Storage/Cassandra.php'
+	),
+	'OAuth2\\Storage\\ClientCredentialsInterface' => array(
+		'version' => '1.14.2.0',
+		'path'    => $vendorDir . '/bshaffer/oauth2-server-php/src/OAuth2/Storage/ClientCredentialsInterface.php'
+	),
+	'OAuth2\\Storage\\ClientInterface' => array(
+		'version' => '1.14.2.0',
+		'path'    => $vendorDir . '/bshaffer/oauth2-server-php/src/OAuth2/Storage/ClientInterface.php'
+	),
+	'OAuth2\\Storage\\CouchbaseDB' => array(
+		'version' => '1.14.2.0',
+		'path'    => $vendorDir . '/bshaffer/oauth2-server-php/src/OAuth2/Storage/CouchbaseDB.php'
+	),
+	'OAuth2\\Storage\\DynamoDB' => array(
+		'version' => '1.14.2.0',
+		'path'    => $vendorDir . '/bshaffer/oauth2-server-php/src/OAuth2/Storage/DynamoDB.php'
+	),
+	'OAuth2\\Storage\\JwtAccessToken' => array(
+		'version' => '1.14.2.0',
+		'path'    => $vendorDir . '/bshaffer/oauth2-server-php/src/OAuth2/Storage/JwtAccessToken.php'
+	),
+	'OAuth2\\Storage\\JwtAccessTokenInterface' => array(
+		'version' => '1.14.2.0',
+		'path'    => $vendorDir . '/bshaffer/oauth2-server-php/src/OAuth2/Storage/JwtAccessTokenInterface.php'
+	),
+	'OAuth2\\Storage\\JwtBearerInterface' => array(
+		'version' => '1.14.2.0',
+		'path'    => $vendorDir . '/bshaffer/oauth2-server-php/src/OAuth2/Storage/JwtBearerInterface.php'
+	),
+	'OAuth2\\Storage\\Memory' => array(
+		'version' => '1.14.2.0',
+		'path'    => $vendorDir . '/bshaffer/oauth2-server-php/src/OAuth2/Storage/Memory.php'
+	),
+	'OAuth2\\Storage\\Mongo' => array(
+		'version' => '1.14.2.0',
+		'path'    => $vendorDir . '/bshaffer/oauth2-server-php/src/OAuth2/Storage/Mongo.php'
+	),
+	'OAuth2\\Storage\\MongoDB' => array(
+		'version' => '1.14.2.0',
+		'path'    => $vendorDir . '/bshaffer/oauth2-server-php/src/OAuth2/Storage/MongoDB.php'
+	),
+	'OAuth2\\Storage\\Pdo' => array(
+		'version' => '1.14.2.0',
+		'path'    => $vendorDir . '/bshaffer/oauth2-server-php/src/OAuth2/Storage/Pdo.php'
+	),
+	'OAuth2\\Storage\\PublicKeyInterface' => array(
+		'version' => '1.14.2.0',
+		'path'    => $vendorDir . '/bshaffer/oauth2-server-php/src/OAuth2/Storage/PublicKeyInterface.php'
+	),
+	'OAuth2\\Storage\\Redis' => array(
+		'version' => '1.14.2.0',
+		'path'    => $vendorDir . '/bshaffer/oauth2-server-php/src/OAuth2/Storage/Redis.php'
+	),
+	'OAuth2\\Storage\\RefreshTokenInterface' => array(
+		'version' => '1.14.2.0',
+		'path'    => $vendorDir . '/bshaffer/oauth2-server-php/src/OAuth2/Storage/RefreshTokenInterface.php'
+	),
+	'OAuth2\\Storage\\ScopeInterface' => array(
+		'version' => '1.14.2.0',
+		'path'    => $vendorDir . '/bshaffer/oauth2-server-php/src/OAuth2/Storage/ScopeInterface.php'
+	),
+	'OAuth2\\Storage\\UserCredentialsInterface' => array(
+		'version' => '1.14.2.0',
+		'path'    => $vendorDir . '/bshaffer/oauth2-server-php/src/OAuth2/Storage/UserCredentialsInterface.php'
+	),
+	'OAuth2\\TokenType\\Bearer' => array(
+		'version' => '1.14.2.0',
+		'path'    => $vendorDir . '/bshaffer/oauth2-server-php/src/OAuth2/TokenType/Bearer.php'
+	),
+	'OAuth2\\TokenType\\Mac' => array(
+		'version' => '1.14.2.0',
+		'path'    => $vendorDir . '/bshaffer/oauth2-server-php/src/OAuth2/TokenType/Mac.php'
+	),
+	'OAuth2\\TokenType\\TokenTypeInterface' => array(
+		'version' => '1.14.2.0',
+		'path'    => $vendorDir . '/bshaffer/oauth2-server-php/src/OAuth2/TokenType/TokenTypeInterface.php'
+	),
 );

@@ -12,10 +12,12 @@ use WPBoilerplate\AccessControl\Admin\AccessControlUI;
 use WPBoilerplate\AccessControl\AccessControlManager;
 use WPBoilerplate\AccessControl\AccessControlTable;
 use ACROSSAI_MCP_MANAGER\Admin\Settings;
+use ACROSSAI_MCP_MANAGER\Database\CliAuthLogTable;
+use ACROSSAI_MCP_MANAGER\Database\ConnectorAuditLogTable;
 use ACROSSAI_MCP_MANAGER\Database\MCPServerTable;
 use ACROSSAI_MCP_MANAGER\Frontend\FrontendAuth;
 use ACROSSAI_MCP_MANAGER\MCP\Controller;
-use ACROSSAI_MCP_MANAGER\OAuth\Server as OAuthServer;
+use ACROSSAI_MCP_MANAGER\OAuth\ClaudeConnectors;
 use ACROSSAI_MCP_MANAGER\REST\CliController;
 
 /**
@@ -68,11 +70,11 @@ class Plugin {
 	private $access_control;
 
 	/**
-	 * OAuth 2.1 server instance.
+	 * Experimental Claude connectors OAuth integration.
 	 *
-	 * @var OAuthServer
+	 * @var ClaudeConnectors
 	 */
-	private $oauth_server;
+	private $claude_connectors;
 
 	/**
 	 * Private constructor — use instance() instead.
@@ -84,19 +86,18 @@ class Plugin {
 		$this->controller      = new Controller();
 		$this->cli_controller  = new CliController();
 		$this->frontend_auth   = new FrontendAuth();
+		$this->claude_connectors = new ClaudeConnectors();
 		// Ensure the access control table exists before any provider logic runs.
 		AccessControlTable::maybe_create_table();
+		CliAuthLogTable::maybe_create_table();
+		ConnectorAuditLogTable::maybe_create_table();
 
 		// Custom filter tag so this plugin's providers don't collide with
 		// other plugins using the same wpb-access-control library.
 		$this->access_control = new AccessControlManager( 'acrossai_mcp_access_control_providers' );
 		AccessControlUI::bootstrap();
 
-		// OAuth 2.1 server — registers rewrite rules, REST routes, and bearer validation (priority 5).
-		$this->oauth_server = new OAuthServer();
-		$this->oauth_server->boot();
-
-		// Enforce per-server access control on MCP REST requests (priority 10, after OAuth at 5).
+		// Enforce per-server access control on MCP REST requests.
 		add_filter( 'rest_pre_dispatch', array( $this, 'enforce_mcp_access_control' ), 10, 3 );
 	}
 

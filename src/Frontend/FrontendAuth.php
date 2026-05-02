@@ -157,7 +157,7 @@ class FrontendAuth {
 		if ( 'cli_auth_approve' === $action ) {
 			if ( ! $npm_enabled ) {
 				wp_die(
-					esc_html__( 'CLI authentication is disabled. Enable npm Login in MCP Manager Settings first.', 'acrossai-mcp-manager' ),
+					esc_html__( 'CLI connections are disabled. Enable CLI Connections in MCP Manager Settings first.', 'acrossai-mcp-manager' ),
 					esc_html__( 'Feature Disabled', 'acrossai-mcp-manager' ),
 					array( 'response' => 403 )
 				);
@@ -221,7 +221,7 @@ class FrontendAuth {
 		$server = isset( $_GET['server'] ) ? sanitize_text_field( wp_unslash( $_GET['server'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification
 
 		$this->render_html_open(
-			esc_html__( 'MCP Manager — CLI Authorization', 'acrossai-mcp-manager' )
+			esc_html__( 'MCP Manager — Authorize CLI Connection', 'acrossai-mcp-manager' )
 		);
 
 		if ( 'cli_auth_approved' === $action ) {
@@ -271,7 +271,7 @@ class FrontendAuth {
 		);
 		?>
 		<div class="acrossai-notice acrossai-notice-warning">
-			<strong><?php esc_html_e( 'A CLI tool is requesting access to your MCP server.', 'acrossai-mcp-manager' ); ?></strong>
+			<strong><?php esc_html_e( 'A CLI tool wants to connect to your MCP server.', 'acrossai-mcp-manager' ); ?></strong>
 		</div>
 
 		<table class="acrossai-table">
@@ -285,7 +285,7 @@ class FrontendAuth {
 			</tr>
 		</table>
 
-		<p><?php esc_html_e( 'Approving will allow the CLI tool to generate an Application Password for this site and server.', 'acrossai-mcp-manager' ); ?></p>
+		<p><?php esc_html_e( 'Approving access will let the CLI tool generate a WordPress Application Password for this site and server.', 'acrossai-mcp-manager' ); ?></p>
 
 		<div class="acrossai-actions">
 			<a href="<?php echo esc_url( $approve_url ); ?>" class="acrossai-btn acrossai-btn-primary">
@@ -310,14 +310,14 @@ class FrontendAuth {
 	private function render_approved_view( $server ) {
 		?>
 		<div class="acrossai-notice acrossai-notice-success">
-			<strong><?php esc_html_e( 'Authorization approved!', 'acrossai-mcp-manager' ); ?></strong>
+			<strong><?php esc_html_e( 'Connection authorized!', 'acrossai-mcp-manager' ); ?></strong>
 		</div>
 
 		<p>
 			<?php
 			printf(
 				/* translators: %s: server slug */
-				esc_html__( 'The CLI tool has been granted access to the "%s" server. You can now return to your terminal.', 'acrossai-mcp-manager' ),
+				esc_html__( 'The CLI tool can now connect to the "%s" server. You can return to your terminal.', 'acrossai-mcp-manager' ),
 				esc_html( $server )
 			);
 			?>
@@ -332,7 +332,7 @@ class FrontendAuth {
 	}
 
 	/**
-	 * Render the blocked view shown when npm Login is disabled.
+	 * Render the blocked view shown when CLI connections are disabled.
 	 *
 	 * @since 1.0.0
 	 *
@@ -342,14 +342,14 @@ class FrontendAuth {
 		$settings_url = admin_url( 'admin.php?page=acrossai_mcp_manager_settings' );
 		?>
 		<div class="acrossai-notice acrossai-notice-error">
-			<strong><?php esc_html_e( 'CLI authentication is disabled.', 'acrossai-mcp-manager' ); ?></strong>
+			<strong><?php esc_html_e( 'CLI connections are disabled.', 'acrossai-mcp-manager' ); ?></strong>
 		</div>
 
 		<p>
 			<?php
 			printf(
 				/* translators: %s: link to settings page */
-				wp_kses_post( __( 'To use CLI-based login, please <a href="%s">enable npm Login in Settings</a> first.', 'acrossai-mcp-manager' ) ),
+				wp_kses_post( __( 'To use the CLI connection flow, please <a href="%s">enable CLI Connections in Settings</a> first.', 'acrossai-mcp-manager' ) ),
 				esc_url( $settings_url )
 			);
 			?>
@@ -358,7 +358,7 @@ class FrontendAuth {
 		<p class="acrossai-description">
 			<?php
 			esc_html_e(
-				'Enabling npm Login allows the AcrossAI MCP Manager CLI tool to authenticate with this site via the npx command. It automatically generates a WordPress Application Password so terminal users can connect to MCP servers without manually editing JSON config files.',
+				'Enabling CLI Connections allows the AcrossAI MCP Manager CLI tool to connect to this site via the npx command. Users sign in through WordPress and approve access in the browser, then the CLI receives a WordPress Application Password automatically so terminal users can connect to MCP servers without manually editing JSON config files.',
 				'acrossai-mcp-manager'
 			);
 			?>

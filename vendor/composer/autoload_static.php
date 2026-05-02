@@ -6,12 +6,22 @@ namespace Composer\Autoload;
 
 class ComposerStaticInit78d47bad24c2e5d7b4e3841b5c8074c6
 {
+    public static $files = array (
+        '6e3fae29631ef280660b3cdad06f25a8' => __DIR__ . '/..' . '/symfony/deprecation-contracts/function.php',
+        '0e6d7bf4a5811bfa5cf40c5ccd6fae6a' => __DIR__ . '/..' . '/symfony/polyfill-mbstring/bootstrap.php',
+    );
+
     public static $prefixLengthsPsr4 = array (
         'W' => 
         array (
             'WP\\McpSchema\\' => 13,
             'WP\\MCP\\' => 7,
             'WPBoilerplate\\AccessControl\\' => 28,
+        ),
+        'S' => 
+        array (
+            'Symfony\\Polyfill\\Mbstring\\' => 26,
+            'Symfony\\Component\\HttpFoundation\\' => 33,
         ),
         'A' => 
         array (
@@ -33,6 +43,14 @@ class ComposerStaticInit78d47bad24c2e5d7b4e3841b5c8074c6
         array (
             0 => __DIR__ . '/..' . '/wpboilerplate/wpb-access-control/src',
         ),
+        'Symfony\\Polyfill\\Mbstring\\' => 
+        array (
+            0 => __DIR__ . '/..' . '/symfony/polyfill-mbstring',
+        ),
+        'Symfony\\Component\\HttpFoundation\\' => 
+        array (
+            0 => __DIR__ . '/..' . '/symfony/http-foundation',
+        ),
         'Automattic\\Jetpack\\Autoloader\\' => 
         array (
             0 => __DIR__ . '/..' . '/automattic/jetpack-autoloader/src',
@@ -40,6 +58,20 @@ class ComposerStaticInit78d47bad24c2e5d7b4e3841b5c8074c6
         'ACROSSAI_MCP_MANAGER\\' => 
         array (
             0 => __DIR__ . '/../..' . '/src',
+        ),
+    );
+
+    public static $prefixesPsr0 = array (
+        'O' => 
+        array (
+            'OAuth2\\HttpFoundationBridge' => 
+            array (
+                0 => __DIR__ . '/..' . '/bshaffer/oauth2-server-httpfoundation-bridge/src',
+            ),
+            'OAuth2' => 
+            array (
+                0 => __DIR__ . '/..' . '/bshaffer/oauth2-server-php/src',
+            ),
         ),
     );
 
@@ -53,6 +85,7 @@ class ComposerStaticInit78d47bad24c2e5d7b4e3841b5c8074c6
         return \Closure::bind(function () use ($loader) {
             $loader->prefixLengthsPsr4 = ComposerStaticInit78d47bad24c2e5d7b4e3841b5c8074c6::$prefixLengthsPsr4;
             $loader->prefixDirsPsr4 = ComposerStaticInit78d47bad24c2e5d7b4e3841b5c8074c6::$prefixDirsPsr4;
+            $loader->prefixesPsr0 = ComposerStaticInit78d47bad24c2e5d7b4e3841b5c8074c6::$prefixesPsr0;
             $loader->classMap = ComposerStaticInit78d47bad24c2e5d7b4e3841b5c8074c6::$classMap;
 
         }, null, ClassLoader::class);
