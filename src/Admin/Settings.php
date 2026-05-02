@@ -730,14 +730,7 @@ class Settings {
 		<?php if ( $updated ) : ?>
 			<div class="notice notice-success is-dismissible">
 				<p>
-					<?php
-					$updated_messages = array(
-						'overview'       => __( 'MCP Server status updated successfully.', 'acrossai-mcp-manager' ),
-						'access-control' => __( 'Access control updated successfully.', 'acrossai-mcp-manager' ),
-						'update-server'  => __( 'MCP Server updated successfully.', 'acrossai-mcp-manager' ),
-					);
-					echo esc_html( $updated_messages[ $active_tab ] ?? __( 'Settings updated successfully.', 'acrossai-mcp-manager' ) );
-					?>
+					<?php esc_html_e( 'Settings updated successfully.', 'acrossai-mcp-manager' ); ?>
 				</p>
 			</div>
 		<?php endif; ?>
