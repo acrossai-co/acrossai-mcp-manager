@@ -165,11 +165,11 @@ class AccessControlUI {
 
 		// Resolve current stored config.
 		$raw_ac    = AccessControlTable::get( $namespace, $key );
-		$ac_config = array( 'type' => 'everyone', 'options' => array() );
+		$ac_config = array( 'type' => '', 'options' => array() );
 		if ( '' !== $raw_ac ) {
 			$decoded = json_decode( $raw_ac, true );
 			if ( is_array( $decoded ) ) {
-				$ac_config['type']    = sanitize_key( $decoded['type'] ?? 'everyone' );
+				$ac_config['type']    = sanitize_key( $decoded['type'] ?? '' );
 				$ac_config['options'] = array_map( 'sanitize_key', (array) ( $decoded['options'] ?? array() ) );
 			}
 		}
@@ -211,6 +211,9 @@ class AccessControlUI {
 								<select name="ac_type"
 								        id="<?php echo esc_attr( $form_id . '-type' ); ?>"
 								        class="regular-text wpb-ac-type-select">
+									<option value="" <?php selected( $ac_config['type'], '' ); ?>>
+										<?php esc_html_e( 'No user access added by admin', 'wpb-access-control' ); ?>
+									</option>
 									<option value="everyone" <?php selected( $ac_config['type'], 'everyone' ); ?>>
 										<?php esc_html_e( 'Everyone (no restriction)', 'wpb-access-control' ); ?>
 									</option>
@@ -316,7 +319,7 @@ class AccessControlUI {
 	public static function extract_posted_config( array $post ): string {
 		$ac_type = isset( $post['ac_type'] ) ? sanitize_key( wp_unslash( $post['ac_type'] ) ) : 'everyone';
 
-		if ( 'everyone' === $ac_type ) {
+		if ( '' === $ac_type || 'everyone' === $ac_type ) {
 			return '';
 		}
 

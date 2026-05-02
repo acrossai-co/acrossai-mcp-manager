@@ -45,6 +45,7 @@ All of that is the consuming plugin's responsibility.
 src/
   AccessControlTable.php       Custom DB table: {prefix}wpb_access_control.
                                 CRUD helpers, sanitization, object-cache integration.
+                                Exposes target-length constants used by AJAX save validation.
                                 Consuming plugins call maybe_create_table() on
                                 activation and plugins_loaded.
 
@@ -67,13 +68,14 @@ src/
 
   Admin/
     AccessControlUI.php        Ready-to-use admin panel renderer. Ships CSS + JS.
-                                Consuming plugin calls render() + enqueue_assets().
-                                Registers the shared user-search AJAX action.
-                                extract_posted_config() static helper for save handlers.
+                                Consuming plugin bootstraps it once, then calls
+                                render() + enqueue_assets().
+                                Registers the shared user-search + save AJAX actions.
+                                extract_posted_config() is optional for custom saves.
 
 assets/
   css/admin.css                Panel styles: search dropdown, user tags, remove button.
-  js/admin.js                  Toggle logic + user search AJAX. Scoped per form via
+  js/admin.js                  Toggle logic + user search/save AJAX. Scoped per form via
                                 data-wpb-ac-form attribute. No dependencies.
 
 README.md                      Usage documentation for consuming plugins.
@@ -111,6 +113,10 @@ Unique constraint: `(namespace, key)` — one rule per resource.
 | `delete(ns, key)` | Deletes one row and flushes its cache entry. |
 | `delete_all_for_namespace(ns)` | For plugin uninstall — removes all rows for a namespace. |
 | `sanitize(raw)` | Static. Validates JSON and returns clean string or `''`. |
+
+Constants:
+- `AccessControlTable::NAMESPACE_LENGTH` = `100`
+- `AccessControlTable::KEY_LENGTH` = `255`
 
 ---
 
@@ -228,18 +234,17 @@ need zero UI code for access control.
 
 | Method | Description |
 |--------|-------------|
-| `__construct( AccessControlManager $manager )` | Registers the user-search AJAX action (idempotent). |
+| `__construct( AccessControlManager $manager )` | Registers the shared user-search and save AJAX actions (idempotent). |
+| `static bootstrap()` | Registers the shared AJAX actions without needing a UI instance yet. |
 | `set_assets_url( string $url )` | Override auto-detected asset base URL. |
-| `render( string $ns, string $key, array $args )` | Render the panel. Always wraps in a `<form>` with nonce field and submit button. |
+| `render( string $ns, string $key, array $args )` | Render the panel. Always wraps in a `<form>` with library-owned AJAX save wiring. |
 | `enqueue_assets()` | Enqueue library CSS + JS. Call from `admin_enqueue_scripts`. |
-| `static extract_posted_config( array $post ): string` | Extract sanitized JSON from `$_POST` for the save handler. |
+| `static extract_posted_config( array $post ): string` | Extract sanitized JSON from `$_POST`; used internally for AJAX save and reusable for custom flows. |
 
 ### `$args` for `render()`
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `form_action` | string | `''` | Form action URL (required). |
-| `nonce_action` | string | `''` | Nonce action for `wp_nonce_field()` (required). |
 | `submit_label` | string | "Save Access Control" | Submit button label. |
 | `description` | string | Generic copy | Paragraph below heading. |
 
@@ -248,6 +253,12 @@ need zero UI code for access control.
 Action: `wpb_access_control_search_users` (shared, library-owned)
 Nonce: `wpb_access_control_search_users`
 Capability check: `manage_options`
+
+Action: `wpb_access_control_save` (shared, library-owned)
+Nonce field: `wpb_ac_nonce` using action `wpb_access_control_save`
+Capability check: `manage_options`
+Save authorization filter: `wpb_access_control_can_save`
+Post-save action: `wpb_access_control_saved`
 
 The action is registered exactly once per request via a static `$ajax_registered` flag,
 even when multiple plugins instantiate `AccessControlUI`.
@@ -283,10 +294,14 @@ $ui->set_assets_url( plugins_url( 'vendor/wpboilerplate/wpb-access-control/asset
 - **`maybe_create_table()` must be called on both activation AND `plugins_loaded`.**
 
 ### AccessControlUI
-- **Single shared AJAX action** `wpb_access_control_search_users` — registered exactly once via the `$ajax_registered` static flag. Do not add a second registration.
-- **No DB writes inside the UI class.** `render()` and `ajax_search_users()` are read-only. Only `extract_posted_config()` + the consuming plugin's call to `AccessControlTable::update()` writes.
+- **Bootstrap AJAX handlers on requests that do not render the panel.** Either instantiate `AccessControlUI` once during plugin bootstrap or call `AccessControlUI::bootstrap()` early so `admin-ajax.php` requests have the shared callbacks registered.
+- **Shared AJAX actions** `wpb_access_control_search_users` and `wpb_access_control_save` are registered exactly once via the `$ajax_registered` static flag. Do not add duplicate registrations.
+- **The UI class owns its AJAX save path.** `ajax_save()` must persist through `AccessControlTable::update()`; consuming plugins do not need a separate save handler for the standard panel.
+- **Validate submitted targets before writing.** `ajax_save()` must reject empty or overlong namespace/key values using `AccessControlTable::NAMESPACE_LENGTH` and `AccessControlTable::KEY_LENGTH`.
+- **Built-in save extensibility lives in hooks.** Use `wpb_access_control_can_save` to authorize a submitted namespace/key and `wpb_access_control_saved` for post-save side effects.
 - **`extract_posted_config()` does NOT call `sanitize_key()` on options** — `AccessControlTable::sanitize()` does that on `update()`. Avoid double-processing.
 - **JS scopes by `data-wpb-ac-form` attribute, never `getElementById`.** Required so two panels can coexist on one page.
+- **Ignore stale live-search responses.** User search requests may return out of order; the active query must win.
 - **Asset URL auto-detection uses `WP_CONTENT_DIR`/`WP_CONTENT_URL`.** Call `set_assets_url()` when the package is in a non-standard location.
 
 ### WpUserProvider

@@ -157,41 +157,77 @@ An empty string `""` means **no restriction** — all users pass.
 
 ## Admin UI
 
-The library ships a ready-to-use admin panel — type dropdown, role checkboxes, and user search-as-you-type with multi-select tags. Consuming plugins need three lines of integration code.
+The library ships a ready-to-use admin panel — type dropdown, role checkboxes, and user search-as-you-type with multi-select tags. It handles search and saving via AJAX, so consuming plugins only need to bootstrap it correctly, enqueue assets, and render the panel.
 
-### 1. Enqueue assets
+### 1. Bootstrap the UI once
+
+Instantiate `AccessControlUI` once during plugin bootstrap so its shared AJAX
+handlers are registered on both normal admin requests and `admin-ajax.php`
+requests:
 
 ```php
+use WPBoilerplate\AccessControl\AccessControlManager;
 use WPBoilerplate\AccessControl\Admin\AccessControlUI;
 
-add_action( 'admin_enqueue_scripts', function() use ( $manager ) {
-    $ui = new AccessControlUI( $manager );
-    $ui->enqueue_assets();
-} );
+$manager = new AccessControlManager( 'my_plugin_access_control_providers' );
+$ui      = new AccessControlUI( $manager );
 ```
 
-### 2. Render the panel
+If your plugin cannot create the UI instance until later, call the shared
+bootstrap explicitly:
+
+```php
+add_action( 'plugins_loaded', [ AccessControlUI::class, 'bootstrap' ] );
+```
+
+Do **not** instantiate `AccessControlUI` only inside `admin_enqueue_scripts`
+or a page callback when you rely on the built-in AJAX search/save flow.
+
+### 2. Enqueue assets
+
+```php
+add_action( 'admin_enqueue_scripts', [ $ui, 'enqueue_assets' ] );
+```
+
+### 3. Render the panel
 
 ```php
 $ui->render( 'my-namespace', 'my-resource', [
-    'form_action'  => admin_url( 'admin.php?page=my-plugin&action=save_ac' ),
-    'nonce_action' => 'my_plugin_save_ac',
     'submit_label' => __( 'Save', 'my-plugin' ),
 ] );
 ```
 
-The panel always renders a complete `<form>` element — including the nonce field and submit button. Provide `form_action` and `nonce_action` so the library can wire the form correctly.
+The panel renders a complete `<form>` element and saves through the library-owned `wpb_access_control_save` AJAX action. Namespace, key, nonce, and success/error handling are all wired internally.
 
-### 3. Handle save
+If you need to restrict which resources a given admin screen may save, hook `wpb_access_control_can_save`:
 
 ```php
-// In your admin_init POST handler:
-check_admin_referer( 'my_plugin_save_ac' );
+add_filter( 'wpb_access_control_can_save', function( bool $can_save, string $namespace, string $key, int $user_id ) {
+    if ( 'my-namespace' !== $namespace ) {
+        return false;
+    }
+
+    return user_can( $user_id, 'manage_options' ) && 'my-resource' === $key;
+}, 10, 4 );
+```
+
+After a successful built-in AJAX save, the library fires `wpb_access_control_saved`:
+
+```php
+add_action( 'wpb_access_control_saved', function( string $namespace, string $key, string $json, int $user_id ) {
+    // Optional: audit logging, plugin cache invalidation, etc.
+}, 10, 4 );
+```
+
+### 4. Optional: custom save flow
+
+```php
+// Only needed if you want to save outside the built-in UI flow.
 $json = AccessControlUI::extract_posted_config( $_POST );
 AccessControlTable::update( 'my-namespace', 'my-resource', $json );
 ```
 
-`extract_posted_config()` reads `ac_type` and `ac_options[]` from the posted data and returns a sanitized JSON string (or `''` for "everyone"). It does not verify a nonce — that is the caller's responsibility.
+`extract_posted_config()` reads `ac_type` and `ac_options[]` from the posted data and returns a sanitized JSON string (or `''` for "everyone"). The built-in panel already uses this internally for AJAX saving; keep it for custom integrations only.
 
 ### Overriding the asset URL
 
@@ -290,8 +326,9 @@ add_action( 'wpb_access_control_denied', function( $user_id, $namespace, $key, $
 ### `WpUserProvider`
 
 Allows the site administrator to pick one or more specific WordPress users by
-searching for their username or email. The search happens via AJAX in the
-consuming plugin's admin UI — the library provides the data layer.
+searching for their username or email. When you use `AccessControlUI`, the
+library renders the search field, performs the AJAX lookup, renders selected
+user tags, and saves the chosen IDs through the built-in save flow.
 
 **JSON config format:**
 
@@ -303,46 +340,17 @@ Options contain **user IDs stored as strings**. IDs survive the
 `sanitize_key()` pass that `AccessControlTable::sanitize()` applies to all
 option values; email addresses would not.
 
-**Static helpers for your AJAX handler:**
+**Static helpers (optional advanced use):**
 
 ```php
 use WPBoilerplate\AccessControl\WpUserProvider;
 
-// Live search — call from your wp_ajax_ handler.
+// Live search.
 $results = WpUserProvider::search_users( 'jane' );
 // Returns: [['id'=>'5','login'=>'jane','email'=>'jane@example.com','display_name'=>'Jane Doe'], ...]
 
 // Hydrate saved IDs back into display data for the settings page.
 $users = WpUserProvider::get_users_by_ids( ['5', '42'] );
-```
-
-**Wiring up the AJAX search in your consuming plugin:**
-
-```php
-// Register the AJAX action (admin only).
-add_action( 'wp_ajax_my_plugin_search_users', function () {
-    check_ajax_referer( 'my_plugin_ac_nonce' );
-    if ( ! current_user_can( 'manage_options' ) ) {
-        wp_send_json_error( 'Forbidden', 403 );
-    }
-    $term    = sanitize_text_field( wp_unslash( $_GET['term'] ?? '' ) );
-    $results = WpUserProvider::search_users( $term );
-    wp_send_json_success( $results );
-} );
-```
-
-**Saving the selected users from your admin form:**
-
-```php
-// $user_ids is an array of user IDs from the submitted form.
-$user_ids = array_map( 'absint', (array) ( $_POST['allowed_users'] ?? [] ) );
-$options  = array_map( 'strval', $user_ids );
-
-AccessControlTable::update(
-    'my-namespace',
-    'my-resource',
-    wp_json_encode( [ 'type' => 'wp_user', 'options' => $options ] )
-);
 ```
 
 **`WpUserProvider` filters:**
