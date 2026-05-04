@@ -160,13 +160,13 @@ class CliAuthLogTable {
 
 		$table = self::get_table_name();
 
-		$query = $wpdb->prepare(
-			'SELECT COUNT(*) FROM %i WHERE server_id = %d',
-			$table,
-			absint( $server_id )
+		return (int) $wpdb->get_var(
+			$wpdb->prepare(
+				'SELECT COUNT(*) FROM %i WHERE server_id = %d',
+				$table,
+				absint( $server_id )
+			)
 		);
-
-		return (int) $wpdb->get_var( $query );
 	}
 
 	/**
@@ -187,15 +187,16 @@ class CliAuthLogTable {
 
 		$table = self::get_table_name();
 
-		$query = $wpdb->prepare(
-			'SELECT * FROM %i WHERE server_id = %d ORDER BY created_at DESC, id DESC LIMIT %d OFFSET %d',
-			$table,
-			absint( $server_id ),
-			$per_page,
-			$offset
+		$results = $wpdb->get_results(
+			$wpdb->prepare(
+				'SELECT * FROM %i WHERE server_id = %d ORDER BY created_at DESC, id DESC LIMIT %d OFFSET %d',
+				$table,
+				absint( $server_id ),
+				$per_page,
+				$offset
+			),
+			ARRAY_A
 		);
-
-		$results = $wpdb->get_results( $query, ARRAY_A );
 
 		return $results ?: array();
 	}
@@ -282,13 +283,14 @@ class CliAuthLogTable {
 
 		$table = self::get_table_name();
 
-		$query = $wpdb->prepare(
-			'SELECT * FROM %i WHERE auth_code_hash = %s LIMIT 1',
-			$table,
-			$auth_code_hash
+		return $wpdb->get_row(
+			$wpdb->prepare(
+				'SELECT * FROM %i WHERE auth_code_hash = %s LIMIT 1',
+				$table,
+				$auth_code_hash
+			),
+			ARRAY_A
 		);
-
-		return $wpdb->get_row( $query, ARRAY_A );
 	}
 
 	/**

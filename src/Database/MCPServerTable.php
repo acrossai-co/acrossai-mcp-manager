@@ -166,6 +166,7 @@ class MCPServerTable {
 			$select_cols .= ', access_control';
 		}
 
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Column list built from hardcoded values only; table name prepared with %i
 		$query = sprintf( 'SELECT %s FROM %%i', $select_cols );
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
 		$rows = $wpdb->get_results(

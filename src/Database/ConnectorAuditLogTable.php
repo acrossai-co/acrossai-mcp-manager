@@ -166,20 +166,22 @@ class ConnectorAuditLogTable {
 		$table = self::get_table_name();
 
 		if ( $include_global ) {
-			$query = $wpdb->prepare(
-				'SELECT COUNT(*) FROM %i WHERE server_id = %d OR server_id = 0',
-				$table,
-				absint( $server_id )
+			return (int) $wpdb->get_var(
+				$wpdb->prepare(
+					'SELECT COUNT(*) FROM %i WHERE server_id = %d OR server_id = 0',
+					$table,
+					absint( $server_id )
+				)
 			);
-			return (int) $wpdb->get_var( $query );
 		}
 
-		$query = $wpdb->prepare(
-			'SELECT COUNT(*) FROM %i WHERE server_id = %d',
-			$table,
-			absint( $server_id )
+		return (int) $wpdb->get_var(
+			$wpdb->prepare(
+				'SELECT COUNT(*) FROM %i WHERE server_id = %d',
+				$table,
+				absint( $server_id )
+			)
 		);
-		return (int) $wpdb->get_var( $query );
 	}
 
 	/**
@@ -202,23 +204,27 @@ class ConnectorAuditLogTable {
 		$table = self::get_table_name();
 
 		if ( $include_global ) {
-			$query = $wpdb->prepare(
-				'SELECT * FROM %i WHERE server_id = %d OR server_id = 0 ORDER BY created_at DESC, id DESC LIMIT %d OFFSET %d',
-				$table,
-				absint( $server_id ),
-				$per_page,
-				$offset
+			$results = $wpdb->get_results(
+				$wpdb->prepare(
+					'SELECT * FROM %i WHERE server_id = %d OR server_id = 0 ORDER BY created_at DESC, id DESC LIMIT %d OFFSET %d',
+					$table,
+					absint( $server_id ),
+					$per_page,
+					$offset
+				),
+				ARRAY_A
 			);
-			$results = $wpdb->get_results( $query, ARRAY_A );
 		} else {
-			$query = $wpdb->prepare(
-				'SELECT * FROM %i WHERE server_id = %d ORDER BY created_at DESC, id DESC LIMIT %d OFFSET %d',
-				$table,
-				absint( $server_id ),
-				$per_page,
-				$offset
+			$results = $wpdb->get_results(
+				$wpdb->prepare(
+					'SELECT * FROM %i WHERE server_id = %d ORDER BY created_at DESC, id DESC LIMIT %d OFFSET %d',
+					$table,
+					absint( $server_id ),
+					$per_page,
+					$offset
+				),
+				ARRAY_A
 			);
-			$results = $wpdb->get_results( $query, ARRAY_A );
 		}
 
 		return $results ?: array();
