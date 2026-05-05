@@ -2043,6 +2043,10 @@ class Settings {
 	 * Shows nothing meaningful when the server is disabled.
 	 * Requires the WordPress Abilities API (wp_get_abilities) to be available.
 	 *
+	 * When the AcrossAI Abilities Manager plugin is active, the list is filtered
+	 * to show only abilities that are actually assigned to this specific server
+	 * (matching the per-server MCP visibility set in the Abilities Manager admin).
+	 *
 	 * @since 1.2.0
 	 *
 	 * @param array $server DB row for the server being edited.
@@ -2050,7 +2054,8 @@ class Settings {
 	 * @return void
 	 */
 	private function render_abilities_tab( array $server ) {
-		$enabled = (bool) $server['is_enabled'];
+		$enabled     = (bool) $server['is_enabled'];
+		$server_slug = ! empty( $server['server_slug'] ) ? $server['server_slug'] : '';
 		?>
 		<div class="mcp-tab-panel">
 
@@ -2069,14 +2074,27 @@ class Settings {
 				</div>
 			<?php else : ?>
 				<?php
-				$abilities = wp_get_abilities();
+				$abilities   = wp_get_abilities();
+				$has_manager = class_exists( '\AcrossAI_Abilities_Manager\Runtime\Override_Applier' );
 
-				// Separate MCP-public abilities from all others for display.
-				$mcp_public = array();
+				// Separate MCP-exposed abilities for this server from all others.
+				$mcp_public  = array();
 				$mcp_private = array();
 				foreach ( $abilities as $ability ) {
-					$meta = $ability->get_meta();
-					if ( ! empty( $meta['mcp']['public'] ) ) {
+					$meta      = $ability->get_meta();
+					$slug      = $ability->get_name();
+					$is_public = ! empty( $meta['mcp']['public'] );
+
+					if ( $is_public && $has_manager && ! empty( $server_slug ) ) {
+						// Apply per-server filtering from the Abilities Manager when active.
+						if ( \AcrossAI_Abilities_Manager\Runtime\Override_Applier::has_server_restriction( $slug ) ) {
+							// Specific-server mode: only include if this server is in the allowlist.
+							$is_public = \AcrossAI_Abilities_Manager\Runtime\Override_Applier::should_expose_to_mcp_server( $slug, $server_slug );
+						}
+						// else: no restriction means "Allow in all servers" — keep $is_public=true.
+					}
+
+					if ( $is_public ) {
 						$mcp_public[] = $ability;
 					} else {
 						$mcp_private[] = $ability;
@@ -2088,7 +2106,7 @@ class Settings {
 					<?php
 					printf(
 						/* translators: 1: count of MCP-exposed abilities, 2: total count */
-						esc_html__( '%1$d of %2$d registered abilities are exposed via MCP (mcp.public = true).', 'acrossai-mcp-manager' ),
+						esc_html__( '%1$d of %2$d registered abilities are exposed on this server.', 'acrossai-mcp-manager' ),
 						count( $mcp_public ),
 						count( $abilities )
 					);
