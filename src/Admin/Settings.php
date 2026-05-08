@@ -1810,7 +1810,9 @@ class Settings {
 		$cmd_serve = sprintf( 'wp mcp-adapter serve --server=%s --user=admin', $server_slug );
 
 		// STDIO-mode JSON config snippet — uses `wp` directly as the command.
-		$abspath     = untrailingslashit( get_home_path() );
+		// get_home_path() returns the filesystem path to the WP root without a
+		// trailing slash, correctly handling subdirectory and moved-root installs.
+		$wp_root      = untrailingslashit( get_home_path() );
 		$stdio_config = array(
 			'command' => 'wp',
 			'args'    => array(
@@ -1818,7 +1820,7 @@ class Settings {
 				'serve',
 				'--server=' . $server_slug,
 				'--user=admin',
-				'--path=' . $abspath,
+				'--path=' . $wp_root,
 			),
 		);
 		$stdio_config_json = wp_json_encode( $stdio_config, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES );
