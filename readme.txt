@@ -2,7 +2,7 @@
 Contributors: raftaar1191
 Tags: mcp, ai, copilot, vscode, claude
 Requires at least: 6.9
-Requires PHP: 8.0
+Requires PHP: 7.4
 Tested up to: 7.0
 Stable tag: 0.0.4
 License: GPL-2.0-or-later
@@ -118,7 +118,7 @@ Important notes:
 = Requirements =
 
 * WordPress 5.9 or higher
-* PHP 8.0 or higher
+* PHP 7.4 or higher
 * WordPress Application Passwords support (built-in since WP 5.6)
 
 == Installation ==
@@ -215,7 +215,7 @@ Questions? Check the FAQ section or look for documentation in the plugin setting
 == Development ==
 
 This plugin follows WordPress coding standards and best practices:
-- PHP 8.0+ compatible
+- PHP 7.4+ compatible
 - Full object-oriented architecture
 - Secure nonce verification
 - Proper capability checks

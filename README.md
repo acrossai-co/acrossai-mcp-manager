@@ -228,7 +228,7 @@ Settings are stored in WordPress options table:
 
 ## Requirements
 
-- PHP 8.0+
+- PHP 7.4+
 - WordPress 5.9+
 - Composer (for development/installation)
 
