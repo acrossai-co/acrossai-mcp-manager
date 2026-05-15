@@ -4,7 +4,7 @@ Tags: mcp, ai, copilot, vscode, claude
 Requires at least: 6.9
 Requires PHP: 8.0
 Tested up to: 7.0
-Stable tag: 0.0.3
+Stable tag: 0.0.4
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -180,6 +180,9 @@ No additional software is needed on the WordPress side. Your MCP clients (VS Cod
 4. Per-provider configuration file locations and top-level keys
 
 == Changelog ==
+
+= 0.0.4 =
+* Improved: bundle access-control UI assets (CSS + JS) directly in the plugin at assets/access-control/ so the admin panel works regardless of whether the wpb-access-control vendor package ships them
 
 = 0.0.3 =
 * Dependencies: update wpb-access-control to BerlinDB-backed version; add berlindb/core; update bshaffer/oauth2-server-httpfoundation-bridge and symfony/deprecation-contracts

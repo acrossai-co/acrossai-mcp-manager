@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.0.4] - 2026-05-15
+
+### Improved
+
+- Bundle access-control UI assets (`assets/access-control/css/admin.css` and `assets/access-control/js/admin.js`) directly in the plugin; `Settings::get_access_control_ui()` now points `set_assets_url()` at the plugin's own copy so the admin panel renders correctly regardless of whether the `wpboilerplate/wpb-access-control` vendor package ships those files
+
 ## [0.0.3] - 2026-05-14
 
 ### Dependencies
