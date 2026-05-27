@@ -4,20 +4,20 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "f75f1ad354d237cf19c2d666d824baa1",
+    "content-hash": "c389aa11adb231ea4a408c9522ee0ad0",
     "packages": [
         {
             "name": "automattic/jetpack-autoloader",
-            "version": "v5.0.17",
+            "version": "v5.0.18",
             "source": {
                 "type": "git",
                 "url": "https://github.com/Automattic/jetpack-autoloader.git",
-                "reference": "6933cc3d91d155ed6935d9c189077e7e1a8845bd"
+                "reference": "be5ea0f2109f3300a22a05727721587c9116ffe8"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/Automattic/jetpack-autoloader/zipball/6933cc3d91d155ed6935d9c189077e7e1a8845bd",
-                "reference": "6933cc3d91d155ed6935d9c189077e7e1a8845bd",
+                "url": "https://api.github.com/repos/Automattic/jetpack-autoloader/zipball/be5ea0f2109f3300a22a05727721587c9116ffe8",
+                "reference": "be5ea0f2109f3300a22a05727721587c9116ffe8",
                 "shasum": ""
             },
             "require": {
@@ -25,7 +25,7 @@
                 "php": ">=7.2"
             },
             "require-dev": {
-                "automattic/phpunit-select-config": "^1.0.5",
+                "automattic/phpunit-select-config": "^1.0.6",
                 "composer/composer": "^2.2",
                 "yoast/phpunit-polyfills": "^4.0.0"
             },
@@ -66,9 +66,9 @@
                 "wordpress"
             ],
             "support": {
-                "source": "https://github.com/Automattic/jetpack-autoloader/tree/v5.0.17"
+                "source": "https://github.com/Automattic/jetpack-autoloader/tree/v5.0.18"
             },
-            "time": "2026-05-04T16:17:55+00:00"
+            "time": "2026-05-19T09:17:26+00:00"
         },
         {
             "name": "berlindb/core",
@@ -313,16 +313,16 @@
         },
         {
             "name": "wpboilerplate/wpb-access-control",
-            "version": "dev-main",
+            "version": "v1.0.1",
             "source": {
                 "type": "git",
                 "url": "https://github.com/WPBoilerplate/wpb-access-control.git",
-                "reference": "de2300ecf1a341365054bcbcc5a9747e1385dbe3"
+                "reference": "8902fa920d0ae4fb7952d55d4120adbff675e41c"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/WPBoilerplate/wpb-access-control/zipball/de2300ecf1a341365054bcbcc5a9747e1385dbe3",
-                "reference": "de2300ecf1a341365054bcbcc5a9747e1385dbe3",
+                "url": "https://api.github.com/repos/WPBoilerplate/wpb-access-control/zipball/8902fa920d0ae4fb7952d55d4120adbff675e41c",
+                "reference": "8902fa920d0ae4fb7952d55d4120adbff675e41c",
                 "shasum": ""
             },
             "require": {
@@ -334,7 +334,6 @@
                 "brain/monkey": "^2.6",
                 "phpunit/phpunit": "^9.6"
             },
-            "default-branch": true,
             "type": "library",
             "autoload": {
                 "psr-4": {
@@ -352,6 +351,12 @@
                     "/.github",
                     "/tests",
                     "/vendor",
+                    "/node_modules",
+                    "/js",
+                    "/assets/build",
+                    "/webpack.config.js",
+                    "/package.json",
+                    "/package-lock.json",
                     "/AGENTS.md",
                     "/phpunit.xml"
                 ]
@@ -383,15 +388,13 @@
                 "issues": "https://github.com/WPBoilerplate/wpb-access-control/issues",
                 "source": "https://github.com/WPBoilerplate/wpb-access-control"
             },
-            "time": "2026-05-15T12:29:10+00:00"
+            "time": "2026-05-19T17:23:16+00:00"
         }
     ],
     "packages-dev": [],
     "aliases": [],
     "minimum-stability": "dev",
-    "stability-flags": {
-        "wpboilerplate/wpb-access-control": 20
-    },
+    "stability-flags": {},
     "prefer-stable": true,
     "prefer-lowest": false,
     "platform": {

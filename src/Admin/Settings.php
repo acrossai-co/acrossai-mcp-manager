@@ -12,7 +12,6 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-use WPBoilerplate\AccessControl\Admin\AccessControlUI;
 use ACROSSAI_MCP_MANAGER\Database\MCPServerTable;
 use ACROSSAI_MCP_MANAGER\Admin\ConnectorAuditLogListTable;
 use ACROSSAI_MCP_MANAGER\OAuth\ClaudeConnectors;
@@ -632,8 +631,7 @@ class Settings {
 			)
 		);
 
-		// Enqueue library access-control assets (CSS + JS for provider-rendered UI).
-		$this->get_access_control_ui()->enqueue_assets();
+		$this->enqueue_access_control_assets();
 	}
 
 	// -------------------------------------------------------------------------
@@ -2157,39 +2155,126 @@ class Settings {
 	 * @return void
 	 */
 	private function render_access_control_tab( array $server ) {
-		$server_id = (int) $server['id'];
-		$ns        = ! empty( $server['server_route_namespace'] ) ? $server['server_route_namespace'] : 'mcp';
-		$route     = ! empty( $server['server_route'] ) ? $server['server_route'] : ( $server['server_slug'] ?? sanitize_title( $server['server_name'] ) );
-
-		$ui = $this->get_access_control_ui();
-
 		echo '<div class="mcp-tab-panel">';
-		$ui->render(
-			$ns,
-			$route,
-			array(
-				'submit_label' => __( 'Save Access Control', 'acrossai-mcp-manager' ),
-				'description'  => __( 'Control which users are allowed to connect to this MCP server. Administrators always have access regardless of this setting.', 'acrossai-mcp-manager' ),
-			)
-		);
+
+		if ( ! $this->has_access_control_assets_available() ) {
+			echo '<div class="notice notice-warning inline"><p>' . esc_html__( 'The installed wpb-access-control package does not include the admin UI bundle required for this screen. Access-control enforcement remains active, but editing rules from this tab is currently unavailable until the bundled assets are installed.', 'acrossai-mcp-manager' ) . '</p></div>';
+			echo '</div>';
+			return;
+		}
+
+		echo '<div id="wpb-access-control"></div>';
 		echo '</div>';
 	}
 
 	/**
-	 * Return a configured access-control UI instance for this plugin.
+	 * Enqueue the access-control bundle when assets are available.
 	 *
-	 * Assets (CSS + JS) are served from the vendor package's own assets folder.
+	 * @since 1.6.1
 	 *
-	 * @since 1.6.0
-	 *
-	 * @return AccessControlUI
+	 * @return void
 	 */
-	private function get_access_control_ui(): AccessControlUI {
-		$manager = \ACROSSAI_MCP_MANAGER\Core\Plugin::instance()->get_access_control_manager();
-		$ui      = new AccessControlUI( $manager );
-		$ui->set_assets_url( plugins_url( 'vendor/wpboilerplate/wpb-access-control/assets', ACROSSAI_MCP_MANAGER_FILE ) );
+	private function enqueue_access_control_assets(): void {
+		$assets = $this->get_access_control_asset_locations();
 
-		return $ui;
+		if ( empty( $assets ) ) {
+			return;
+		}
+
+		// phpcs:disable WordPress.Security.NonceVerification.Recommended
+		$action    = isset( $_GET['action'] ) ? sanitize_key( wp_unslash( $_GET['action'] ) ) : '';
+		$server_id = isset( $_GET['server'] ) ? absint( $_GET['server'] ) : 0;
+		// phpcs:enable WordPress.Security.NonceVerification.Recommended
+
+		if ( 'edit' !== $action || $server_id <= 0 ) {
+			return;
+		}
+
+		$server = MCPServerTable::get_by_id( $server_id );
+
+		if ( ! $server ) {
+			return;
+		}
+
+		$asset_file = $assets['path'] . '/index.asset.php';
+		$asset_data = include $asset_file;
+		$namespace  = ! empty( $server['server_route_namespace'] ) ? $server['server_route_namespace'] : 'mcp';
+		$route      = ! empty( $server['server_route'] ) ? $server['server_route'] : ( $server['server_slug'] ?? sanitize_title( $server['server_name'] ) );
+
+		if ( is_readable( $assets['path'] . '/index.css' ) ) {
+			wp_enqueue_style(
+				'acrossai-mcp-access-control',
+				$assets['url'] . '/index.css',
+				array(),
+				$asset_data['version'] ?? ACROSSAI_MCP_MANAGER_VERSION
+			);
+		}
+
+		wp_enqueue_script(
+			'acrossai-mcp-access-control',
+			$assets['url'] . '/index.js',
+			$asset_data['dependencies'] ?? array(),
+			$asset_data['version'] ?? ACROSSAI_MCP_MANAGER_VERSION,
+			true
+		);
+
+		wp_add_inline_script(
+			'acrossai-mcp-access-control',
+			'window.wpbAcConfig = ' . wp_json_encode(
+				array(
+					'namespace'   => $namespace,
+					'resourceKey' => $route,
+					'restApiRoot' => untrailingslashit( get_rest_url() ),
+					'nonce'       => wp_create_nonce( 'wp_rest' ),
+					'title'       => __( 'Access Control', 'acrossai-mcp-manager' ),
+					'description' => __( 'Control which users are allowed to connect to this MCP server. Administrators always have access regardless of this setting.', 'acrossai-mcp-manager' ),
+					'saveLabel'   => __( 'Save Access Control', 'acrossai-mcp-manager' ),
+				)
+			) . ';',
+			'before'
+		);
+	}
+
+	/**
+	 * Check whether access-control UI assets are available.
+	 *
+	 * @since 1.6.1
+	 *
+	 * @return bool
+	 */
+	private function has_access_control_assets_available(): bool {
+		return ! empty( $this->get_access_control_asset_locations() );
+	}
+
+	/**
+	 * Resolve access-control bundle file system and URL locations.
+	 *
+	 * Prefers the installed vendor copy and falls back to the local sibling
+	 * checkout used in development.
+	 *
+	 * @since 1.6.1
+	 *
+	 * @return array<string, string>
+	 */
+	private function get_access_control_asset_locations(): array {
+		$candidates = array(
+			array(
+				'path' => ACROSSAI_MCP_MANAGER_DIR . '/vendor/wpboilerplate/wpb-access-control/assets/build',
+				'url'  => plugins_url( 'vendor/wpboilerplate/wpb-access-control/assets/build', ACROSSAI_MCP_MANAGER_FILE ),
+			),
+			array(
+				'path' => dirname( dirname( ACROSSAI_MCP_MANAGER_DIR ) ) . '/wpb-access-control/assets/build',
+				'url'  => content_url( 'wpb-access-control/assets/build' ),
+			),
+		);
+
+		foreach ( $candidates as $candidate ) {
+			if ( is_readable( $candidate['path'] . '/index.asset.php' ) && is_readable( $candidate['path'] . '/index.js' ) ) {
+				return $candidate;
+			}
+		}
+
+		return array();
 	}
 
 	/**

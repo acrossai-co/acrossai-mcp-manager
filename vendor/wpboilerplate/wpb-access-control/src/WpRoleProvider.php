@@ -60,13 +60,17 @@ class WpRoleProvider extends AbstractProvider {
 	 * @return array<int, array{id: string, label: string}>
 	 */
 	public function get_options(): array {
-		$editable_roles = get_editable_roles();
+		if ( ! function_exists( 'get_editable_roles' ) ) {
+			require_once ABSPATH . 'wp-admin/includes/user.php';
+		}
+
+		$editable_roles = \get_editable_roles();
 		$options        = array();
 
 		foreach ( $editable_roles as $role_slug => $role_data ) {
 			$options[] = array(
 				'id'    => $role_slug,
-				'label' => translate_user_role( $role_data['name'] ),
+				'label' => \translate_user_role( $role_data['name'] ),
 			);
 		}
 

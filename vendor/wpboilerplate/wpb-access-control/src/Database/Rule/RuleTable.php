@@ -6,7 +6,7 @@
  * automatically on first use — consuming plugins do not need to manage it.
  *
  * @package WPBoilerplate\AccessControl\Database\Rule
- * @since   3.0.0
+ * @since   1.0.0
  */
 
 namespace WPBoilerplate\AccessControl\Database\Rule;
@@ -23,7 +23,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  * One flat row per option value — no JSON storage. See AGENTS.md for the
  * full schema and rule storage convention.
  *
- * @since 3.0.0
+ * @since 1.0.0
  */
 class RuleTable extends Table {
 
@@ -75,7 +75,7 @@ class RuleTable extends Table {
 	/**
 	 * Define the table columns (called by BerlinDB during install/upgrade).
 	 *
-	 * @since 3.0.0
+	 * @since 1.0.0
 	 *
 	 * @return void
 	 */
@@ -111,7 +111,7 @@ class RuleTable extends Table {
 	 * intentionally discarded — resources default to "no restriction" until
 	 * an admin reconfigures them.
 	 *
-	 * @since 3.0.0
+	 * @since 1.0.0
 	 *
 	 * @return bool True on success.
 	 */

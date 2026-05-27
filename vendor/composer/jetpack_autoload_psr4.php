@@ -15,7 +15,7 @@ return array(
 		'path'    => array( $vendorDir . '/wordpress/mcp-adapter/includes' )
 	),
 	'WPBoilerplate\\AccessControl\\' => array(
-		'version' => 'dev-main',
+		'version' => '1.0.1.0',
 		'path'    => array( $vendorDir . '/wpboilerplate/wpb-access-control/src' )
 	),
 	'BerlinDB\\' => array(
@@ -23,7 +23,7 @@ return array(
 		'path'    => array( $vendorDir . '/berlindb/core/src' )
 	),
 	'Automattic\\Jetpack\\Autoloader\\' => array(
-		'version' => '5.0.17',
+		'version' => '5.0.18',
 		'path'    => array( $vendorDir . '/automattic/jetpack-autoloader/src' )
 	),
 	'ACROSSAI_MCP_MANAGER\\' => array(

@@ -3,7 +3,7 @@
  * Rule table row object for BerlinDB.
  *
  * @package WPBoilerplate\AccessControl\Database\Rule
- * @since   3.0.0
+ * @since   1.0.0
  */
 
 namespace WPBoilerplate\AccessControl\Database\Rule;
@@ -20,7 +20,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  * BerlinDB populates public properties from column data. Typed here for
  * static-analysis clarity.
  *
- * @since 3.0.0
+ * @since 1.0.0
  */
 class RuleRow extends Row {
 

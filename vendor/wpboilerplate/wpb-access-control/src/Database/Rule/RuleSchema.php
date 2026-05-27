@@ -3,7 +3,7 @@
  * Rule table column schema for BerlinDB.
  *
  * @package WPBoilerplate\AccessControl\Database\Rule
- * @since   3.0.0
+ * @since   1.0.0
  */
 
 namespace WPBoilerplate\AccessControl\Database\Rule;
@@ -21,7 +21,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  * `sortable` control which query parameters BerlinDB makes available on
  * Rule\Query.
  *
- * @since 3.0.0
+ * @since 1.0.0
  */
 class RuleSchema extends Schema {
 

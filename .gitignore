@@ -12,6 +12,8 @@ node_modules/
 # Build
 dist/
 build/
+!vendor/wpboilerplate/wpb-access-control/assets/build/
+!vendor/wpboilerplate/wpb-access-control/assets/build/**
 
 # OS
 Thumbs.db

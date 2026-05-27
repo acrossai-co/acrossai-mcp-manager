@@ -39,6 +39,7 @@
 namespace WPBoilerplate\AccessControl;
 
 use WPBoilerplate\AccessControl\Database\Rule\RuleQuery;
+use WPBoilerplate\AccessControl\RestApi\RulesController;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -151,14 +152,31 @@ class AccessControlManager {
 	/**
 	 * Return the RuleQuery instance for direct rule reads and writes.
 	 *
-	 * AccessControlUI uses this to save rules in the AJAX handler.
-	 *
-	 * @since 3.0.0
+	 * @since 1.0.0
 	 *
 	 * @return RuleQuery
 	 */
 	public function get_query(): RuleQuery {
 		return $this->query;
+	}
+
+	/**
+	 * Register the REST API controller for the wpb-ac/v1 namespace.
+	 *
+	 * Call this inside a `rest_api_init` hook. The consuming plugin decides
+	 * whether to expose the REST API and is responsible for the hook timing.
+	 *
+	 * Example:
+	 *   add_action( 'rest_api_init', function() use ( $manager ) {
+	 *       $manager->register_rest_api();
+	 *   } );
+	 *
+	 * @since 1.0.0
+	 *
+	 * @return void
+	 */
+	public function register_rest_api(): void {
+		( new RulesController( $this ) )->register_routes();
 	}
 
 	// -------------------------------------------------------------------------

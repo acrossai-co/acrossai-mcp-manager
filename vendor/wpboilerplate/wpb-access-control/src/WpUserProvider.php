@@ -17,13 +17,15 @@
  * integer user ID as a string ("42") is the only value that survives
  * sanitization unchanged.
  *
- * Admin UI
- * --------
- * get_options() returns an empty array — there is no static checkbox list.
- * render_options() is overridden to emit an AJAX search input + selected-user
- * tags. AccessControlUI registers the AJAX handler and enqueues the JS/CSS;
- * consuming plugins call AccessControlUI::render() and enqueue_assets() and
- * need no additional code for user search.
+ * REST API integration
+ * --------------------
+ * Use GET /wpb-ac/v1/users?search=... to search for users when building a
+ * rule-configuration UI. Pass the returned `id` values as `ac_options` when
+ * calling PUT /wpb-ac/v1/rules/{namespace}/{key}.
+ *
+ * Static helpers (available for advanced use):
+ *   WpUserProvider::search_users( string $search, int $limit = 10 ): array
+ *   WpUserProvider::get_users_by_ids( string[] $ids ): array
  *
  * @package WPBoilerplate\AccessControl
  * @since   1.1.0
@@ -65,10 +67,11 @@ class WpUserProvider extends AbstractProvider {
 	}
 
 	/**
-	 * Users are selected dynamically via AJAX search — no static list.
+	 * Users are selected dynamically via the REST API /users endpoint — no static list.
 	 *
-	 * The consuming plugin must render the selected user IDs itself. Use
-	 * WpUserProvider::get_users_by_ids() to hydrate IDs back into display data.
+	 * Call GET /wpb-ac/v1/users?search=... to find users, then pass their IDs
+	 * as `ac_options` when writing a rule via PUT /wpb-ac/v1/rules/{ns}/{key}.
+	 * Use WpUserProvider::get_users_by_ids() to hydrate stored IDs into display data.
 	 *
 	 * @since 1.1.0
 	 *
@@ -111,61 +114,15 @@ class WpUserProvider extends AbstractProvider {
 		return (bool) apply_filters( 'wpb_access_control_wp_user_has_access', $result, $user_id, $selected_options );
 	}
 
-	/**
-	 * Render the user search input and selected-user tags.
-	 *
-	 * Called by AccessControlUI::render() — do not call directly.
-	 *
-	 * @since 1.2.0
-	 *
-	 * @param string[] $selected_options User IDs (as strings) currently saved.
-	 * @param string   $form_id          Unique DOM ID scoping this panel instance.
-	 *
-	 * @return void
-	 */
-	public function render_options( array $selected_options, string $form_id ): void {
-		$saved_users = self::get_users_by_ids( $selected_options );
-		?>
-		<p class="description" style="margin-bottom:10px;">
-			<?php esc_html_e( 'Search by username or email and select one or more users. Administrators always have access regardless of this list.', 'wpb-access-control' ); ?>
-		</p>
-
-		<!-- Search input -->
-		<div class="wpb-ac-user-search-wrap">
-			<input type="text"
-			       class="wpb-ac-user-search regular-text"
-			       data-wpb-ac-form="<?php echo esc_attr( $form_id ); ?>"
-			       placeholder="<?php esc_attr_e( 'Search by username or email…', 'wpb-access-control' ); ?>"
-			       autocomplete="off">
-			<div class="wpb-ac-search-results" style="display:none;"></div>
-		</div>
-
-		<!-- Selected user tags -->
-		<div class="wpb-ac-selected-users">
-			<?php foreach ( $saved_users as $u ) : ?>
-				<span class="wpb-ac-user-tag" data-id="<?php echo esc_attr( $u['id'] ); ?>">
-					<span><?php echo esc_html( $u['display_name'] ); ?></span>
-					<span class="wpb-ac-user-tag-login">(<?php echo esc_html( $u['login'] ); ?>)</span>
-					<button type="button" class="wpb-ac-remove-user"
-					        aria-label="<?php esc_attr_e( 'Remove user', 'wpb-access-control' ); ?>">&times;</button>
-					<input type="hidden" name="ac_options[]" value="<?php echo esc_attr( $u['id'] ); ?>">
-				</span>
-			<?php endforeach; ?>
-		</div>
-		<?php
-	}
-
 	// -------------------------------------------------------------------------
-	// Static helpers — used internally by AccessControlUI and available to
-	// consuming plugins that need to query users outside the standard flow.
+	// Static helpers
 	// -------------------------------------------------------------------------
 
 	/**
 	 * Search for WordPress users by login, email, or display name.
 	 *
-	 * AccessControlUI registers a wp_ajax_ handler that calls this method.
-	 * Consuming plugins do not need to create their own AJAX handler when
-	 * using AccessControlUI::render().
+	 * Called by RulesController::search_users() for the GET /wpb-ac/v1/users
+	 * endpoint. Also available to consuming plugins for custom UI flows.
 	 *
 	 * @since 1.1.0
 	 *
@@ -208,8 +165,8 @@ class WpUserProvider extends AbstractProvider {
 	/**
 	 * Hydrate a list of stored user ID strings back into display data.
 	 *
-	 * Use this when rendering the admin settings page to show who is currently
-	 * allowed, rather than just their raw IDs.
+	 * Use this when building a settings UI to show who is currently allowed,
+	 * rather than displaying raw IDs stored in the database.
 	 *
 	 * @since 1.1.0
 	 *

@@ -1,0 +1,21 @@
+{
+	"name": "wpb-access-control",
+	"version": "1.0.0",
+	"private": true,
+	"scripts": {
+		"build": "wp-scripts build",
+		"start": "wp-scripts start"
+	},
+	"devDependencies": {
+		"@wordpress/scripts": "^32.2.0"
+	},
+	"overrides": {
+		"copy-webpack-plugin": {
+			"serialize-javascript": "7.0.5"
+		},
+		"markdownlint-cli": {
+			"minimatch": "3.1.5"
+		},
+		"webpack-dev-server": "5.2.4"
+	}
+}

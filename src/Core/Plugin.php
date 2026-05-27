@@ -12,7 +12,6 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-use WPBoilerplate\AccessControl\Admin\AccessControlUI;
 use WPBoilerplate\AccessControl\AccessControlManager;
 use ACROSSAI_MCP_MANAGER\Admin\Settings;
 use ACROSSAI_MCP_MANAGER\Database\CliAuthLogTable;
@@ -96,7 +95,7 @@ class Plugin {
 		// Custom filter tag so this plugin's providers don't collide with
 		// other plugins using the same wpb-access-control library.
 		$this->access_control = new AccessControlManager( 'acrossai_mcp_access_control_providers' );
-		AccessControlUI::bootstrap();
+		add_action( 'rest_api_init', array( $this, 'register_access_control_rest_api' ) );
 
 		// Enforce per-server access control on MCP REST requests.
 		add_filter( 'rest_pre_dispatch', array( $this, 'enforce_mcp_access_control' ), 10, 3 );
@@ -129,6 +128,17 @@ class Plugin {
 	 */
 	public function get_access_control_manager(): AccessControlManager {
 		return $this->access_control;
+	}
+
+	/**
+	 * Register access-control REST routes.
+	 *
+	 * @since 1.6.1
+	 *
+	 * @return void
+	 */
+	public function register_access_control_rest_api(): void {
+		$this->access_control->register_rest_api();
 	}
 
 	/**
