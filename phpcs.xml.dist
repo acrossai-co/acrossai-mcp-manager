@@ -1,0 +1,52 @@
+<?xml version="1.0"?>
+<ruleset name="AcrossAI MCP Manager Coding Standards">
+    <description>Coding standards for AcrossAI MCP Manager</description>
+
+    <!-- Check all PHP files in directory tree by default. -->
+    <arg name="extensions" value="php"/>
+    <file>.</file>
+
+    <!-- Show progress and sniff codes in all reports -->
+    <arg value="ps"/>
+
+    <!-- Exclude paths -->
+    <exclude-pattern>*/vendor/*</exclude-pattern>
+    <exclude-pattern>*/node_modules/*</exclude-pattern>
+    <exclude-pattern>*/build/*</exclude-pattern>
+
+    <!-- Include the WordPress-Extra standard. -->
+    <rule ref="WordPress-Extra">
+        <!-- We are ok with version in file headers -->
+        <exclude name="Squiz.Commenting.FileComment.MissingPackageTag"/>
+        <exclude name="Squiz.Commenting.FileComment.WrongStyle"/>
+        <exclude name="Squiz.Commenting.ClassComment.Missing"/>
+        <exclude name="Squiz.Commenting.FunctionComment.MissingParamComment"/>
+        <exclude name="Generic.Commenting.DocComment.MissingShort"/>
+
+        <!-- Allow short array syntax -->
+        <exclude name="Generic.Arrays.DisallowShortArraySyntax"/>
+    </rule>
+
+    <!-- Let's also check that everything is properly documented. -->
+    <rule ref="WordPress-Docs"/>
+
+    <!-- Add in some extra rules from other standards. -->
+    <rule ref="Generic.CodeAnalysis.UnusedFunctionParameter"/>
+    <rule ref="Generic.Commenting.Todo"/>
+
+    <!-- Check for PHP cross-version compatibility. -->
+    <rule ref="PHPCompatibility"/>
+
+    <!-- Set minimum supported PHP version -->
+    <config name="testVersion" value="7.4-"/>
+
+    <!-- Whitelist the WP Core admin actions to prevent false positives -->
+    <rule ref="WordPress.WP.GlobalVariablesOverride">
+        <exclude-pattern>*/admin/*</exclude-pattern>
+    </rule>
+
+    <!-- Allow plugin file header -->
+    <rule ref="Squiz.Commenting.FileComment">
+        <exclude-pattern>*/acrossai-mcp-manager.php</exclude-pattern>
+    </rule>
+</ruleset>

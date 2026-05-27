@@ -1,0 +1,99 @@
+{
+  "schemaVersion": 3,
+  "instructions": {
+    "path": "AGENTS.md"
+  },
+  "integrations": {
+    "enabled": [
+      "codex",
+      "claude",
+      "cursor",
+      "copilot_vscode",
+      "gemini"
+    ],
+    "options": {
+      "cursorAutoApprove": true,
+      "antigravityGlobalSync": true
+    }
+  },
+  "syncMode": "source-only",
+  "mcp": {
+    "servers": {
+      "deepwiki": {
+        "label": "DeepWiki",
+        "description": "GitHub repository documentation via DeepWiki",
+        "transport": "stdio",
+        "command": "npx",
+        "args": [
+          "-y",
+          "mcp-remote@latest",
+          "https://mcp.deepwiki.com/mcp"
+        ],
+        "targets": [
+          "codex",
+          "claude",
+          "gemini",
+          "copilot_vscode",
+          "cursor"
+        ],
+        "enabled": true
+      },
+      "wordpress-design-system": {
+        "label": "wordpress-design-system",
+        "description": "WordPress Design System",
+        "transport": "stdio",
+        "command": "npx",
+        "args": [
+          "-y",
+          "--ignore-scripts",
+          "--min-release-age=2",
+          "@wordpress/design-system-mcp@latest"
+        ],
+        "targets": [
+          "codex",
+          "claude",
+          "gemini",
+          "copilot_vscode",
+          "cursor"
+        ],
+        "enabled": true
+      },
+      "mcp-local-wp": {
+        "label": "Local WP",
+        "description": "WordPress database access via Local by Flywheel",
+        "transport": "stdio",
+        "command": "npx",
+        "args": [
+          "-y",
+          "@verygoodplugins/mcp-local-wp@latest"
+        ],
+        "targets": [
+          "codex",
+          "claude",
+          "gemini",
+          "copilot_vscode",
+          "cursor"
+        ],
+        "enabled": true
+      }
+    }
+  },
+  "workspace": {
+    "vscode": {
+      "hideGenerated": true,
+      "hiddenPaths": [
+        "**/.codex",
+        "**/.claude",
+        "**/.gemini",
+        "**/.cursor",
+        "**/.antigravity",
+        "**/.windsurf",
+        "**/.opencode",
+        "**/opencode.json",
+        "**/.agents/generated"
+      ]
+    }
+  },
+  "lastSync": "2026-05-22T19:45:46.625Z",
+  "lastSyncSourceHash": "1036e1b1f128d1bb6b39970c7347d61bd59829c3e3f63059a29faeaf82aff0be"
+}

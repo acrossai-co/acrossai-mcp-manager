@@ -1,0 +1,27 @@
+{
+	"permissions": {
+		"deny": [
+			"Read(.git/**)",
+			"Read(.github/skills/**)",
+			"Read(node_modules/**)",
+			"Read(build/**)",
+			"Read(vendor/wp-coding-standards/**)",
+			"Read(vendor/dealerdirect/**)",
+			"Read(vendor/phpunit/**)",
+			"Read(vendor/composer/**)",
+			"Read(vendor/bin/**)",
+			"Read(vendor/autoload_packages.php)",
+			"Read(vendor/autoload_packages.php)",
+			"Read(package-lock.json)",
+			"Read(composer.lock)",
+			"Read(languages/**)",
+			"Read(tests/_output/**)",
+			"Read(coverage/**)",
+			"Read(tmp/**)",
+			"Read(logs/**)",
+			"Read(**/*.log)",
+			"Read(.DS_Store)",
+			"Read(Thumbs.db)"
+		]
+	}
+}

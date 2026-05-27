@@ -1,0 +1,51 @@
+schema_version: "1.0"
+
+extension:
+  id: "memory-md"
+  name: "Spec Kit Memory MD"
+  version: "0.8.0"
+  description: "Spec Kit extension for repository-native Markdown memory that captures durable decisions, bugs, and project context."
+  author: "DyanGalih"
+  repository: "https://github.com/DyanGalih/spec-kit-memory-hub"
+  license: "MIT"
+
+requires:
+  speckit_version: ">=0.2.0"
+
+hooks:
+  before_plan:
+    command: "speckit.memory-md.plan-with-memory"
+    optional: true
+    prompt: "Would you like to synthesize project memory before planning?"
+  after_implement:
+    command: "speckit.memory-md.capture-from-diff"
+    optional: true
+    prompt: "Would you like to capture durable lessons from this implementation to project memory?"
+
+provides:
+  commands:
+    - name: "speckit.memory-md.bootstrap"
+      file: commands/speckit.memory-md.bootstrap.md
+      description: "Bootstrap layered memory, synthesis, and spec starter files in a target repo."
+    - name: "speckit.memory-md.plan-with-memory"
+      file: commands/speckit.memory-md.plan-with-memory.md
+      description: "Use index-first retrieval to synthesize constraints and gate planning on conflicts."
+    - name: "speckit.memory-md.capture"
+      file: commands/speckit.memory-md.capture.md
+      description: "Propose human-approved durable lessons and matching index updates from completed work."
+    - name: "speckit.memory-md.capture-from-diff"
+      file: commands/speckit.memory-md.capture-from-diff.md
+      description: "Review code diffs and propose human-approved durable lessons plus index updates."
+    - name: "speckit.memory-md.audit"
+      file: commands/speckit.memory-md.audit.md
+      description: "Audit memory quality, index integrity, freshness, and synthesis hygiene."
+    - name: "speckit.memory-md.log-finding"
+      file: commands/speckit.memory-md.log-finding.md
+      description: "Turn a high-signal audit finding into a tracker-ready follow-up for GitHub, GitLab, Jira, or another issue system."
+
+tags:
+  - "memory"
+  - "markdown"
+  - "ai-context"
+  - "spec-kit"
+  - "governance"

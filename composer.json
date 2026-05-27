@@ -1,0 +1,42 @@
+{
+	"name": "wpboilerplate/acrossai-mcp-manager",
+	"type": "wordpress-plugin",
+	"license": "GPL-2.0-or-later",
+	"description": "Composer to autoload the condition checking for which this add-on is made",
+	"homepage": "https://github.com/WPBoilerplate/",
+	"minimum-stability": "dev",
+	"require": {
+		"php": ">=7.4",
+		"automattic/jetpack-autoloader": "^3.0"
+	},
+	"keywords": [
+		"wordpress",
+		"plugin"
+	],
+	"support": {
+		"issues": "https://github.com/wpboilerplate/acrossai-mcp-manager/issues"
+	},
+	"authors": [
+		{
+			"name": "WPBoilerplate"
+		}
+	],
+	"autoload": {
+		"psr-4": {
+			"AcrossAI_MCP_Manager\\Includes\\": "includes/",
+			"AcrossAI_MCP_Manager\\Admin\\": "admin/",
+			"AcrossAI_MCP_Manager\\Public\\": "public/"
+		}
+	},
+	"require-dev": {
+		"wp-coding-standards/wpcs": "*",
+		"dealerdirect/phpcodesniffer-composer-installer": "^1.2",
+		"phpunit/phpunit": "^13.2@dev"
+	},
+	"config": {
+		"allow-plugins": {
+			"dealerdirect/phpcodesniffer-composer-installer": true,
+			"automattic/jetpack-autoloader": true
+		}
+	}
+}

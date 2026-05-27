@@ -1,0 +1,14 @@
+# Extension Catalogs Configuration
+# This file enables which extension catalogs are allowed for installation
+# Place this file at: .specify/extension-catalogs.yml
+
+catalogs:
+  - id: "official"
+    url: "https://github.com/github/spec-kit/raw/main/extensions/catalog.json"
+    install_allowed: true
+    description: "Official Spec Kit extensions maintained by GitHub"
+
+  - id: "community"
+    url: "https://github.com/github/spec-kit/raw/main/extensions/catalog.community.json"
+    install_allowed: true
+    description: "Community-contributed Spec Kit extensions"

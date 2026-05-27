@@ -1,0 +1,46 @@
+# ai-policy.yml — Single source of truth for AI/LLM access policy
+#
+# After editing this file, run:
+#   npm run sync:ai-policy
+#
+# This generates / updates:
+#   .aiignore                          (JetBrains AI Assistant)
+#   .claudeignore                      (Claude Code)
+#   .claude/settings.json              (Claude Code — permissions.deny)
+#   .vscode/settings.json              (VS Code + GitHub Copilot — files.exclude / search.exclude)
+#   .github/copilot-instructions.md    (GitHub Copilot — access policy block)
+#
+# SECTIONS:
+#   hard_ignore        — Never read. Binary, generated, dev-only tooling.
+#   requires_permission— Ask the user before reading.
+#                        "May I read <path> to help with this task?"
+#
+# Permission-gated paths come from runtime/production dependencies only:
+#   composer.json > "require"      → vendor/<package>/
+#   package.json  > "dependencies" → node_modules/<package>/
+
+hard_ignore:
+  - .git/                            # Git internals
+  - .github/skills/                  # Auto-generated agent skill bundles (npm run skills:install)
+  - node_modules/                    # All Node.js packages — too large, all tooling
+  - build/                           # Compiled JS/CSS output (generated from src/)
+  - vendor/wp-coding-standards/      # require-dev: wp-coding-standards/wpcs
+  - vendor/dealerdirect/             # require-dev: dealerdirect/phpcodesniffer-composer-installer
+  - vendor/phpunit/                  # require-dev: phpunit/phpunit
+  - vendor/composer/                 # Composer autoloader internals
+  - vendor/bin/                      # Composer binary stubs
+  - vendor/autoload_packages.php              # Generated autoloader entry
+  - vendor/autoload_packages.php     # Generated Jetpack autoloader entry
+  - package-lock.json                # Auto-generated lock file
+  - composer.lock                    # Auto-generated lock file
+  - languages/                       # Generated translation files
+  - tests/_output/                   # Test output artefacts
+  - coverage/                        # Test coverage reports
+  - tmp/                             # Temporary files
+  - logs/                            # Log directory
+  - "**/*.log"                       # All log files
+  - .DS_Store                        # macOS metadata
+  - Thumbs.db                        # Windows metadata
+
+requires_permission:
+  - vendor/automattic/               # jetpack-autoloader — composer.json > require

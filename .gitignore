@@ -1,0 +1,71 @@
+# Editors
+project.xml
+project.properties
+/nbproject/private/
+.buildpath
+.project
+.settings*
+.sublimelinterrc
+# Grunt
+none
+# Sass
+.sass-cache/
+# Compiled CSS
+/assets/css/*.css
+# Minified JS
+/assets/js/admin/*.min.js
+/assets/js/frontend/*.min.js
+# macOS/IDE
+.DS_Store
+Thumbs.db
+.idea
+*.sublime-project
+*.sublime-workspace
+# Log files
+*.log
+/logs
+/tests/logs
+# Temporary files
+/tmp
+# Composer
+contributors.md
+# Packages
+/packages/*
+!/packages/README.md
+/vendor/
+/node_modules/
+# Environment
+.env
+# Cache
+.phpunit.result.cache
+# Test output
+/tests/_output/*
+!/tests/_output/.gitkeep
+# Configs
+/phpcs.xml
+/phpunit.xml
+/phpstan.neon
+# WP ENV
+/.wp-env.override.json
+# Agent Skills (auto-generated – run `npm run skills:install` to refresh)
+/.github/skills/
+# Screenshots
+/screenshots/
+# Language files
+i18n/languages/woocommerce.pot
+# Tests & Coverage
+/coverage/
+.agents/local.json
+.agents/generated/
+CLAUDE.md
+.codex/
+.gemini/
+.vscode/mcp.json
+.claude/skills
+.cursor/
+.antigravity/
+.windsurf/
+.opencode/
+opencode.json
+.junie/mcp/
+.junie/skills

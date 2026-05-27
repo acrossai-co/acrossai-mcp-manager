@@ -1,0 +1,43 @@
+memory_root: docs/memory
+specs_root: specs
+use_project_copilot_instructions: true
+definition_of_done_includes_memory_review: true
+feature_memory_filename: memory.md
+memory_synthesis_filename: memory-synthesis.md
+require_memory_synthesis_before_plan: true
+require_memory_review_before_verify: true
+retrieval:
+  max_index_entries: 20
+  max_decisions: 5
+  max_architecture_constraints: 5
+  max_accepted_deviations: 3
+  max_security_constraints: 3
+  max_bug_patterns: 3
+  max_worklog_items: 2
+  max_synthesis_words: 900
+  full_memory_read_allowed: false
+optimizer:
+  enabled: false
+  engine: sqlite
+  db_path: .spec-kit-memory/memory.sqlite
+  auto_index_on_memory_change: true
+  auto_index_on_doc_change: false
+  auto_index_on_code_change: false
+  auto_generate_synthesis: false
+indexing:
+  include:
+    memory:
+      - docs/memory/**/*.md
+    docs:
+      - docs/**/*.md
+      - specs/**/*.md
+      - README.md
+    code:
+      - src/**/*.{ts,tsx,js,jsx}
+  exclude:
+    - node_modules/**
+    - dist/**
+    - build/**
+    - coverage/**
+    - .git/**
+    - .spec-kit-memory/**

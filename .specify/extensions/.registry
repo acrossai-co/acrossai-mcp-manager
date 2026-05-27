@@ -1,0 +1,84 @@
+{
+  "schema_version": "1.0",
+  "extensions": {
+    "git": {
+      "version": "1.0.0",
+      "source": "local",
+      "manifest_hash": "sha256:9731aa8143a72fbebfdb440f155038ab42642517c2b2bdbbf67c8fdbe076ed79",
+      "enabled": true,
+      "priority": 10,
+      "registered_commands": {
+        "copilot": [
+          "speckit.git.feature",
+          "speckit.git.validate",
+          "speckit.git.remote",
+          "speckit.git.initialize",
+          "speckit.git.commit"
+        ]
+      },
+      "registered_skills": [],
+      "installed_at": "2026-05-11T17:01:20.370225+00:00"
+    },
+    "architecture-guard": {
+      "version": "1.8.0",
+      "source": "local",
+      "manifest_hash": "sha256:2ebeac88a78e7483dd60660fd7f150ccf7e794f80b696442976e6663bb519c9f",
+      "enabled": true,
+      "priority": 10,
+      "registered_commands": {
+        "copilot": [
+          "speckit.architecture-guard.governed-plan",
+          "speckit.architecture-guard.governed-tasks",
+          "speckit.architecture-guard.governed-implement",
+          "speckit.architecture-guard.architecture-workflow",
+          "speckit.architecture-guard.architecture-review",
+          "speckit.architecture-guard.violation-detection",
+          "speckit.architecture-guard.refactor-generator",
+          "speckit.architecture-guard.architecture-apply",
+          "speckit.architecture-guard.init"
+        ]
+      },
+      "registered_skills": [],
+      "installed_at": "2026-05-11T17:01:46.087206+00:00"
+    },
+    "memory-md": {
+      "version": "0.8.0",
+      "source": "local",
+      "manifest_hash": "sha256:266d5c792117e7ee485a698b4e5396b83d1126afff83dcbf09a02c75ca62dff6",
+      "enabled": true,
+      "priority": 10,
+      "registered_commands": {
+        "copilot": [
+          "speckit.memory-md.bootstrap",
+          "speckit.memory-md.plan-with-memory",
+          "speckit.memory-md.capture",
+          "speckit.memory-md.capture-from-diff",
+          "speckit.memory-md.audit",
+          "speckit.memory-md.log-finding"
+        ]
+      },
+      "registered_skills": [],
+      "installed_at": "2026-05-11T17:01:54.548526+00:00"
+    },
+    "security-review": {
+      "version": "1.4.5",
+      "source": "local",
+      "manifest_hash": "sha256:f0c3a5faaada6628d9903d038c36ac6d39efe1c0d4499c4bec5357691c8e53c1",
+      "enabled": true,
+      "priority": 10,
+      "registered_commands": {
+        "copilot": [
+          "speckit.security-review.audit",
+          "speckit.security-review.staged",
+          "speckit.security-review.branch",
+          "speckit.security-review.plan",
+          "speckit.security-review.tasks",
+          "speckit.security-review.followup",
+          "speckit.security-review.apply"
+        ]
+      },
+      "registered_skills": [],
+      "installed_at": "2026-05-11T17:02:02.445328+00:00"
+    }
+  }
+}

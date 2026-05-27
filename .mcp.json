@@ -1,0 +1,19 @@
+{
+	"mcpServers": {
+		"deepwiki": {
+			"command": "npx",
+			"args": [
+				"-y",
+				"mcp-remote@latest",
+				"https://mcp.deepwiki.com/mcp"
+			]
+		},
+		"mcp-local-wp": {
+			"command": "npx",
+			"args": [
+				"-y",
+				"@verygoodplugins/mcp-local-wp@latest"
+			]
+		}
+	}
+}

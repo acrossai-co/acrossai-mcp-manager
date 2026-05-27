@@ -1,0 +1,6 @@
+[submodule ".ai/tools/in-memoria"]
+	path = .ai/tools/in-memoria
+	url = https://github.com/pi22by7/In-Memoria.git
+[submodule ".ai/tools/agentmemory"]
+	path = .ai/tools/agentmemory
+	url = https://github.com/rohitg00/agentmemory.git

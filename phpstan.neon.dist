@@ -1,0 +1,31 @@
+parameters:
+    level: 5
+    paths:
+        - includes/
+        - admin/
+        - public/
+        - acrossai-mcp-manager.php
+
+    excludePaths:
+        - vendor/
+        - node_modules/
+
+    bootstrapFiles:
+        - acrossai-mcp-manager.php
+
+    ignoreErrors:
+        # WordPress specific ignores
+        - '#Function apply_filters invoked with [0-9]+ parameters?, [0-9]+ required\.#'
+        - '#Function do_action invoked with [0-9]+ parameters?, [0-9]+ required\.#'
+        - '#Function add_filter invoked with [0-9]+ parameters?, [0-9]+ required\.#'
+        - '#Function add_action invoked with [0-9]+ parameters?, [0-9]+ required\.#'
+        - '#Function wp_enqueue_script invoked with [0-9]+ parameters?, [0-9]+ required\.#'
+        - '#Function wp_enqueue_style invoked with [0-9]+ parameters?, [0-9]+ required\.#'
+
+    # WordPress environment
+    scanDirectories:
+        - /tmp/wordpress/
+
+    # WordPress constants bootstrap
+    universalObjectCratesClasses:
+        - stdClass

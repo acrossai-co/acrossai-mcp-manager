@@ -1,0 +1,14 @@
+vendor
+node_modules
+build
+tests/_output
+package-lock.json
+composer.lock
+.distignore
+.gitattributes
+.gitignore
+.wordpress-org
+languages
+assets
+screenshots
+abilities-api.zip

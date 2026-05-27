@@ -1,0 +1,38 @@
+# .aiignore — JetBrains AI Assistant access policy
+# AUTO-GENERATED — edit ai-policy.yml and run: npm run sync:ai-policy
+#
+# [HARD IGNORE]         Never read. Binary, generated, dev-only tooling.
+# [REQUIRES PERMISSION] Ask before reading: "May I read <path>?"
+
+# ============================================================
+# [HARD IGNORE]
+# ============================================================
+
+.git/
+.github/skills/
+node_modules/
+build/
+vendor/wp-coding-standards/
+vendor/dealerdirect/
+vendor/phpunit/
+vendor/composer/
+vendor/bin/
+vendor/autoload_packages.php
+vendor/autoload_packages.php
+package-lock.json
+composer.lock
+languages/
+tests/_output/
+coverage/
+tmp/
+logs/
+**/*.log
+.DS_Store
+Thumbs.db
+
+# ============================================================
+# [REQUIRES PERMISSION]
+# Before reading, ask: "May I read <path> to help with this task?"
+# ============================================================
+
+# PERMISSION_REQUIRED: vendor/automattic/

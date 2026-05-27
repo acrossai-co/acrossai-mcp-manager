@@ -1,0 +1,76 @@
+schema_version: "1.0"
+
+extension:
+  id: "architecture-guard"
+  name: "Architecture Guard"
+  version: "1.8.0"
+  description: "Framework-agnostic architecture review extension for validating implementation against governance and architecture constitutions, detecting architectural drift, and generating non-blocking refactor tasks."
+  author: "DyanGalih"
+  repository: "https://github.com/DyanGalih/spec-kit-architecture-guard"
+  license: "MIT"
+  homepage: "https://github.com/DyanGalih/spec-kit-architecture-guard"
+
+requires:
+  speckit_version: ">=0.1.0"
+  commands:
+    - "speckit.plan"
+    - "speckit.tasks"
+    - "speckit.implement"
+
+recommends:
+  extensions:
+    - "memory-md"
+    - "security-review"
+
+hooks:
+  after_plan:
+    command: "speckit.architecture-guard.violation-detection"
+    optional: true
+    prompt: "Would you like to scan the technical plan for architectural drift and Constitution violations?"
+  after_tasks:
+    command: "speckit.architecture-guard.refactor-generator"
+    optional: true
+    prompt: "Would you like to generate architectural refactor tasks before implementation?"
+  after_implement:
+    command: "speckit.architecture-guard.architecture-review"
+    optional: true
+    prompt: "Would you like to run a post-implementation architecture review?"
+
+provides:
+  commands:
+    - name: "speckit.architecture-guard.governed-plan"
+      file: "commands/governed-plan.md"
+      description: "Orchestrate governed planning across Memory Hub, Security Review, and Architecture Guard."
+    - name: "speckit.architecture-guard.governed-tasks"
+      file: "commands/governed-tasks.md"
+      description: "Generate or validate implementation tasks with memory context, security constraints, and architecture awareness."
+    - name: "speckit.architecture-guard.governed-implement"
+      file: "commands/governed-implement.md"
+      description: "Run implementation with memory context, then review against security and architecture constraints."
+    - name: "speckit.architecture-guard.architecture-workflow"
+      file: "commands/architecture-workflow.md"
+      description: "Run a single architecture workflow with optional Memory Hub and Security Review context."
+    - name: "speckit.architecture-guard.architecture-review"
+      file: "commands/architecture-review.md"
+      description: "Review specs, plans, tasks, or implementation for architecture drift."
+    - name: "speckit.architecture-guard.violation-detection"
+      file: "commands/violation-detection.md"
+      description: "Detect architecture violations in plans, tasks, and implementation summaries."
+    - name: "speckit.architecture-guard.refactor-generator"
+      file: "commands/refactor-generator.md"
+      description: "Convert architecture violations into structured refactor tasks."
+    - name: "speckit.architecture-guard.architecture-apply"
+      file: "commands/architecture-apply.md"
+      description: "Apply approved architecture refactors to plan and task artifacts."
+    - name: "speckit.architecture-guard.init"
+      file: "commands/init.md"
+      description: "Initialize or update the Project Constitution for Architecture Guard."
+
+tags:
+  - "architecture"
+  - "spec-kit"
+  - "review"
+  - "refactor"
+  - "workflow"
+  - "governance"
+  - "guardrails"
