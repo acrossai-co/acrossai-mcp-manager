@@ -7,8 +7,8 @@ parameters:
         - acrossai-mcp-manager.php
 
     excludePaths:
-        - vendor/
-        - node_modules/
+        - vendor/ (?)
+        - node_modules/ (?)
 
     bootstrapFiles:
         - acrossai-mcp-manager.php
@@ -21,10 +21,6 @@ parameters:
         - '#Function add_action invoked with [0-9]+ parameters?, [0-9]+ required\.#'
         - '#Function wp_enqueue_script invoked with [0-9]+ parameters?, [0-9]+ required\.#'
         - '#Function wp_enqueue_style invoked with [0-9]+ parameters?, [0-9]+ required\.#'
-
-    # WordPress environment
-    scanDirectories:
-        - /tmp/wordpress/
 
     # WordPress constants bootstrap
     universalObjectCratesClasses:

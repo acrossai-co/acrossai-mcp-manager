@@ -77,13 +77,13 @@ $this->loader->add_action( 'admin_enqueue_scripts', $settings, 'enqueue_assets' 
 
 ## Spec-Kit Steps
 
-### Step 1: `/speckit.specify`
+### Step 1 — `/speckit.specify`
 
 ```
 /speckit.specify
 
 Feature: Admin UI — Settings, List Tables, and Asset Enqueue
-Feature number: 003
+Feature number: 002
 
 We are migrating all admin-facing PHP classes from src/Admin/ into admin/Partials/
 and wiring their hooks through the Loader in includes/Main.php.
@@ -130,7 +130,19 @@ Functional requirements:
 8. Namespace: AcrossAI_MCP_Manager\Admin\Partials for all classes in admin/Partials/
 ```
 
-### Step 2: `/speckit.plan`
+---
+
+### Step 2 — `/speckit.clarify` _(optional)_
+
+Run this only if the spec output is ambiguous or incomplete.
+
+```
+/speckit.clarify
+```
+
+---
+
+### Step 3 — `/speckit.plan`
 
 ```
 /speckit.plan
@@ -178,7 +190,89 @@ Access control integration: Settings::render_access_control_tab() receives the
   a dedicated setter called in define_admin_hooks()).
 ```
 
-### Step 3 + 4: `/speckit.tasks` then `/speckit.implement`
+### Step 4 — `/speckit.memory-md.index-project`
+
+```
+/speckit.memory-md.index-project
+```
+
+---
+
+### Step 5 — `/speckit.architecture-guard.governed-plan`
+
+```
+/speckit.architecture-guard.governed-plan
+```
+
+---
+
+### Step 6 — `/speckit.security-review.full`
+
+```
+/speckit.security-review.full
+```
+
+---
+
+### Step 7 — `/speckit.tasks`
+
+```
+/speckit.tasks
+```
+
+---
+
+### Step 8 — `/speckit.architecture-guard.governed-tasks`
+
+```
+/speckit.architecture-guard.governed-tasks
+```
+
+---
+
+### Step 9 — `/speckit.implement`
+
+```
+/speckit.implement
+```
+
+---
+
+### Step 10 — `/speckit.analyze`
+
+```
+/speckit.analyze
+```
+
+---
+
+### Step 11 — `/speckit.architecture-guard.drift-analysis`
+
+```
+/speckit.architecture-guard.drift-analysis
+```
+
+---
+
+### Step 12 — `/speckit.security-review.full`
+
+```
+/speckit.security-review.full
+```
+
+---
+
+### Step 13 — `/speckit.memory-md.merge-features`
+
+```
+/speckit.memory-md.merge-features
+```
+
+---
+
+### Step 14 — Git commit _(automatic)_
+
+Triggered automatically after `/speckit.analyze` completes.
 
 ---
 

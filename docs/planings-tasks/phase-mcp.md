@@ -61,13 +61,13 @@ $this->loader->add_action( 'rest_api_init', $mcp_controller, 'register_database_
 $this->loader->add_action( 'rest_api_init', $mcp_controller, 'register_default_server' );
 ```
 
-### Step 1: `/speckit.specify`
+### Step 1 — `/speckit.specify`
 
 ```
 /speckit.specify
 
 Feature: MCP Controller — Server Boot and Registration
-Feature number: 004
+Feature number: 003
 
 The MCP Controller reads enabled MCP server rows from the database and registers
 each as a REST API endpoint via the WordPress MCP Adapter package (\WP\MCP\Plugin).
@@ -93,7 +93,7 @@ Namespace: AcrossAI_MCP_Manager\Includes\MCP
 File: includes/MCP/Controller.php
 ```
 
-### Step 2: `/speckit.plan`
+### Step 2 — `/speckit.plan`
 
 ```
 /speckit.plan
@@ -143,13 +143,13 @@ These generate config snippets for each AI tool client. **They have no WordPress
 | `src/MCPClients/GitHubCopilotClient.php` | `includes/MCPClients/GitHubCopilotClient.php` |
 | `src/MCPClients/VSCodeClient.php` | `includes/MCPClients/VSCodeClient.php` |
 
-### Step 1: `/speckit.specify`
+### Step 1 — `/speckit.specify`
 
 ```
 /speckit.specify
 
 Feature: MCP Client Classes — Pure Service Layer
-Feature number: 005
+Feature number: 004
 
 Each client class generates the configuration snippet a user copies into their
 AI tool to connect it to the MCP server.
@@ -172,7 +172,7 @@ Namespace: AcrossAI_MCP_Manager\Includes\MCPClients
 Files: includes/MCPClients/*.php
 ```
 
-### Step 2: `/speckit.plan`
+### Step 2 — `/speckit.plan`
 
 ```
 /speckit.plan
@@ -192,10 +192,106 @@ No hook wiring — clients are injected into Settings:
 
 ---
 
-## Step 3 + 4: `/speckit.tasks` then `/speckit.implement`
+## Shared Workflow Steps (run once after both plans are approved)
 
-Run for Part A first (Controller), then Part B (Clients) since the Controller
-must exist before it can be wired in Main.php.
+### Step 3 — `/speckit.clarify` _(optional)_
+
+Run if either Part A or Part B spec needs clarification.
+
+```
+/speckit.clarify
+```
+
+---
+
+### Step 4 — `/speckit.memory-md.index-project`
+
+```
+/speckit.memory-md.index-project
+```
+
+---
+
+### Step 5 — `/speckit.architecture-guard.governed-plan`
+
+```
+/speckit.architecture-guard.governed-plan
+```
+
+---
+
+### Step 6 — `/speckit.security-review.full`
+
+```
+/speckit.security-review.full
+```
+
+---
+
+### Step 7 — `/speckit.tasks`
+
+Run for Part A (Controller) first, then Part B (Clients).
+
+```
+/speckit.tasks
+```
+
+---
+
+### Step 8 — `/speckit.architecture-guard.governed-tasks`
+
+```
+/speckit.architecture-guard.governed-tasks
+```
+
+---
+
+### Step 9 — `/speckit.implement`
+
+Implement Part A first (Controller must exist before it can be wired in Main.php),
+then Part B (Clients).
+
+```
+/speckit.implement
+```
+
+---
+
+### Step 10 — `/speckit.analyze`
+
+```
+/speckit.analyze
+```
+
+---
+
+### Step 11 — `/speckit.architecture-guard.drift-analysis`
+
+```
+/speckit.architecture-guard.drift-analysis
+```
+
+---
+
+### Step 12 — `/speckit.security-review.full`
+
+```
+/speckit.security-review.full
+```
+
+---
+
+### Step 13 — `/speckit.memory-md.merge-features`
+
+```
+/speckit.memory-md.merge-features
+```
+
+---
+
+### Step 14 — Git commit _(automatic)_
+
+Triggered automatically after `/speckit.analyze` completes.
 
 ---
 

@@ -76,3 +76,8 @@ Solo developer — Claude Code + spec-kit for AI-assisted development.
 - Task lists or sprint plans
 - Transient implementation notes
 - Changelog entries
+
+## Security Constraints
+
+- **S5** [Feature-001, 2026-05-29]: `admin_url()` MUST always be wrapped in `esc_url()` before use in HTML — it is filterable via the `admin_url` hook and its output can be XSS-exploitable if unescaped.
+- **S6** [Feature-001, 2026-05-29]: Singleton class `__construct()` MUST be `private`. A public constructor allows duplicate instantiation, causing all hooks registered in `Main.php` to fire twice. A `final` class modifier alone is not sufficient.

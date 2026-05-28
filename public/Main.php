@@ -27,6 +27,14 @@ defined( 'ABSPATH' ) || exit;
 class Main {
 
 	/**
+	 * The single instance of the class.
+	 *
+	 * @var Main
+	 * @since 0.0.1
+	 */
+	protected static $_instance = null;
+
+	/**
 	 * The ID of this plugin.
 	 *
 	 * @since    0.0.1
@@ -63,16 +71,28 @@ class Main {
 	private $css_asset_file;
 
 	/**
+	 * Main instance.
+	 *
+	 * @since  0.0.1
+	 * @static
+	 * @return self Single instance.
+	 */
+	public static function instance(): self {
+		if ( null === self::$_instance ) {
+			self::$_instance = new self();
+		}
+		return self::$_instance;
+	}
+
+	/**
 	 * Initialize the class and set its properties.
 	 *
 	 * @since    0.0.1
-	 * @param      string    $plugin_name       The name of the plugin.
-	 * @param      string    $version    The version of this plugin.
 	 */
-	public function __construct( $plugin_name, $version ) {
+	private function __construct() {
 
-		$this->plugin_name = $plugin_name;
-		$this->version     = $version;
+		$this->plugin_name = ACROSSAI_MCP_MANAGER_PLUGIN_NAME_SLUG;
+		$this->version     = ACROSSAI_MCP_MANAGER_VERSION;
 
 		$this->js_asset_file  = include \ACROSSAI_MCP_MANAGER_PLUGIN_PATH . 'build/js/frontend.asset.php';
 		$this->css_asset_file = include \ACROSSAI_MCP_MANAGER_PLUGIN_PATH . 'build/css/frontend.asset.php';

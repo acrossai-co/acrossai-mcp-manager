@@ -83,13 +83,13 @@ themselves, just ensure the class is autoloaded before `Activator::activate()` r
 
 ## Spec-Kit Steps
 
-### Step 1: `/speckit.specify`
+### Step 1 — `/speckit.specify`
 
 ```
 /speckit.specify
 
 Feature: OAuth / Claude Connectors Integration
-Feature number: 006
+Feature number: 005
 
 The plugin implements an OAuth 2.0 Authorization Code flow to allow Claude
 (via the "Claude Connectors" product) to authenticate against the WordPress site
@@ -137,7 +137,19 @@ Functional requirements:
    Files: includes/OAuth/*.php
 ```
 
-### Step 2: `/speckit.plan`
+---
+
+### Step 2 — `/speckit.clarify` _(optional)_
+
+Run this only if the spec output is ambiguous or incomplete.
+
+```
+/speckit.clarify
+```
+
+---
+
+### Step 3 — `/speckit.plan`
 
 ```
 /speckit.plan
@@ -183,7 +195,89 @@ Rewrite rules are registered in Activator::activate() using class constants:
   (These references remain correct — just class path changes.)
 ```
 
-### Step 3 + 4: `/speckit.tasks` then `/speckit.implement`
+### Step 4 — `/speckit.memory-md.index-project`
+
+```
+/speckit.memory-md.index-project
+```
+
+---
+
+### Step 5 — `/speckit.architecture-guard.governed-plan`
+
+```
+/speckit.architecture-guard.governed-plan
+```
+
+---
+
+### Step 6 — `/speckit.security-review.full`
+
+```
+/speckit.security-review.full
+```
+
+---
+
+### Step 7 — `/speckit.tasks`
+
+```
+/speckit.tasks
+```
+
+---
+
+### Step 8 — `/speckit.architecture-guard.governed-tasks`
+
+```
+/speckit.architecture-guard.governed-tasks
+```
+
+---
+
+### Step 9 — `/speckit.implement`
+
+```
+/speckit.implement
+```
+
+---
+
+### Step 10 — `/speckit.analyze`
+
+```
+/speckit.analyze
+```
+
+---
+
+### Step 11 — `/speckit.architecture-guard.drift-analysis`
+
+```
+/speckit.architecture-guard.drift-analysis
+```
+
+---
+
+### Step 12 — `/speckit.security-review.full`
+
+```
+/speckit.security-review.full
+```
+
+---
+
+### Step 13 — `/speckit.memory-md.merge-features`
+
+```
+/speckit.memory-md.merge-features
+```
+
+---
+
+### Step 14 — Git commit _(automatic)_
+
+Triggered automatically after `/speckit.analyze` completes.
 
 ---
 

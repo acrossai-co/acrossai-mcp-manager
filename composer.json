@@ -31,7 +31,9 @@
 	"require-dev": {
 		"wp-coding-standards/wpcs": "*",
 		"dealerdirect/phpcodesniffer-composer-installer": "^1.2",
-		"phpunit/phpunit": "^13.2@dev"
+		"phpunit/phpunit": "^13.2@dev",
+		"phpcompatibility/php-compatibility": "^10.0@alpha",
+		"phpstan/phpstan": "2.2.x-dev"
 	},
 	"config": {
 		"allow-plugins": {

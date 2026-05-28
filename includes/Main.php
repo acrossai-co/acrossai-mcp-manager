@@ -106,9 +106,10 @@ final class Main {
 	public function __construct() {
 
 		$this->define_constants();
+		$this->version = ACROSSAI_MCP_MANAGER_VERSION;
 
 		$this->plugin_name = 'acrossai-mcp-manager';
-		$this->plugin_dir = ACROSSAI_MCP_MANAGER_PLUGIN_PATH;
+		$this->plugin_dir  = ACROSSAI_MCP_MANAGER_PLUGIN_PATH;
 
 		$this->load_composer_dependencies();
 
@@ -144,14 +145,15 @@ final class Main {
 		$this->define( 'ACROSSAI_MCP_MANAGER_PLUGIN_BASENAME', plugin_basename( \ACROSSAI_MCP_MANAGER_PLUGIN_FILE ) );
 		$this->define( 'ACROSSAI_MCP_MANAGER_PLUGIN_PATH', plugin_dir_path( \ACROSSAI_MCP_MANAGER_PLUGIN_FILE ) );
 		$this->define( 'ACROSSAI_MCP_MANAGER_PLUGIN_URL', plugin_dir_url( \ACROSSAI_MCP_MANAGER_PLUGIN_FILE ) );
-		$this->define( 'ACROSSAI_MCP_MANAGER_PLUGIN_NAME_SLUG', $this->plugin_name );
+		$this->define( 'ACROSSAI_MCP_MANAGER_PLUGIN_NAME_SLUG', 'acrossai-mcp-manager' );
 		$this->define( 'ACROSSAI_MCP_MANAGER_PLUGIN_NAME', 'AcrossAI MCP Manager' );
 		$this->define( 'ACROSSAI_MCP_MANAGER_VERSION', '0.0.1' );
 	}
 
 	/**
 	 * Define constant if not already set
-	 * @param  string $name
+	 *
+	 * @param  string      $name
 	 * @param  string|bool $value
 	 */
 	private function define( $name, $value ) {
@@ -246,7 +248,7 @@ final class Main {
 	 */
 	private function define_admin_hooks() {
 
-		$plugin_admin = new \AcrossAI_MCP_Manager\Admin\Main( $this->get_plugin_name(), $this->get_version() );
+		$plugin_admin = \AcrossAI_MCP_Manager\Admin\Main::instance();
 
 		$this->loader->add_action( 'admin_enqueue_scripts', $plugin_admin, 'enqueue_styles' );
 
@@ -255,9 +257,42 @@ final class Main {
 		/**
 		 * Add the Plugin Main Menu
 		 */
-		$main_menu = new \AcrossAI_MCP_Manager\Admin\Partials\Menu( $this->get_plugin_name(), $this->get_version() );
+		$main_menu = \AcrossAI_MCP_Manager\Admin\Partials\Menu::instance();
 		$this->loader->add_action( 'admin_menu', $main_menu, 'main_menu' );
 		$this->loader->add_action( 'plugin_action_links', $main_menu, 'plugin_action_links', 1000, 2 );
+
+		// TODO (phase 3): wire Admin\Partials\Settings.
+		// $plugin_settings = \AcrossAI_MCP_Manager\Admin\Partials\Settings::instance();
+		// $this->loader->add_action( 'admin_init', $plugin_settings, 'handle_actions', 5 );
+		// $this->loader->add_action( 'admin_init', $plugin_settings, 'register_settings' );
+
+		// TODO (phase N): wire Admin\Partials\ApplicationPasswords.
+		// $app_passwords = \AcrossAI_MCP_Manager\Admin\Partials\ApplicationPasswords::instance();
+
+		// TODO (phase 4): wire Includes\MCP\Controller.
+		// $mcp_controller = \AcrossAI_MCP_Manager\Includes\MCP\Controller::instance();
+		// $this->loader->add_action( 'rest_api_init', $mcp_controller, 'initialize_adapter' );
+
+		// TODO (phase 5): wire REST\CliController.
+		// $cli_controller = \AcrossAI_MCP_Manager\Includes\REST\CliController::instance();
+		// $this->loader->add_action( 'rest_api_init', $cli_controller, 'register_routes' );
+
+		// TODO (phase 6): wire Includes\OAuth\ClaudeConnectors (10 hooks).
+		// $claude_connectors = \AcrossAI_MCP_Manager\Includes\OAuth\ClaudeConnectors::instance();
+		// $this->loader->add_action( 'init', $claude_connectors, 'register_rewrite_rules' );
+		// $this->loader->add_action( 'init', $claude_connectors, 'maybe_flush_rewrite_rules', 20 );
+		// $this->loader->add_filter( 'query_vars', $claude_connectors, 'add_query_vars' );
+		// $this->loader->add_filter( 'redirect_canonical', $claude_connectors, 'disable_canonical_redirects', 10, 2 );
+		// $this->loader->add_action( 'wp_enqueue_scripts', $claude_connectors, 'enqueue_assets' );
+		// $this->loader->add_action( 'template_redirect', $claude_connectors, 'handle_frontend_request' );
+		// $this->loader->add_action( 'rest_api_init', $claude_connectors, 'register_rest_routes' );
+		// $this->loader->add_filter( 'determine_current_user', $claude_connectors, 'determine_current_user_from_bearer', 20 );
+		// $this->loader->add_filter( 'rest_post_dispatch', $claude_connectors, 'decorate_mcp_response', 10, 3 );
+		// $this->loader->add_action( 'acrossai_mcp_access_denied', $claude_connectors, 'log_access_denied_event', 10, 4 );
+
+		// TODO (phase 7): wire rest_pre_dispatch access-control filter.
+		// $access_control = \WPBoilerplate\AccessControl\AccessControlManager::instance( 'acrossai_mcp_access_control_providers' );
+		// $this->loader->add_filter( 'rest_pre_dispatch', $access_control, 'enforce_access' );
 	}
 
 	/**
@@ -269,11 +304,19 @@ final class Main {
 	 */
 	private function define_public_hooks() {
 
-		$plugin_public = new \AcrossAI_MCP_Manager\Public\Main( $this->get_plugin_name(), $this->get_version() );
+		$plugin_public = \AcrossAI_MCP_Manager\Public\Main::instance();
 
 		$this->loader->add_action( 'wp_enqueue_scripts', $plugin_public, 'enqueue_styles' );
 
 		$this->loader->add_action( 'wp_enqueue_scripts', $plugin_public, 'enqueue_scripts' );
+
+		// TODO (phase 3): wire Public\Partials\FrontendAuth (5 hooks).
+		// $frontend_auth = \AcrossAI_MCP_Manager\Public\Partials\FrontendAuth::instance();
+		// $this->loader->add_action( 'init', $frontend_auth, 'register_rewrite_rule' );
+		// $this->loader->add_action( 'init', $frontend_auth, 'maybe_flush_rewrite_rules', 20 );
+		// $this->loader->add_filter( 'query_vars', $frontend_auth, 'add_query_var' );
+		// $this->loader->add_action( 'wp_enqueue_scripts', $frontend_auth, 'enqueue_assets' );
+		// $this->loader->add_action( 'template_redirect', $frontend_auth, 'handle_request' );
 	}
 
 	/**

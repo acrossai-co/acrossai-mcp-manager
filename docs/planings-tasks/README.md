@@ -109,7 +109,7 @@ Migrates `assets/*.css` / `assets/*.js` → `@wordpress/scripts` webpack pipelin
 /speckit.specify
 
 Feature: Asset Build Pipeline — CSS + JS via @wordpress/scripts
-Feature number: 009
+Feature number: 008
 
 1. webpack.config.js entry map:
    'js/backend':         './src/js/backend.js'

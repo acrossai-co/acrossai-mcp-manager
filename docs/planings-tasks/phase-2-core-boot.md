@@ -31,21 +31,12 @@ Extend (do NOT replace) these existing files:
 
 ## What this phase covers
 
-The old `src/Core/Plugin.php` is a manual singleton that:
-- Constructs all dependencies directly in `__construct()`
-- Calls `add_action()` directly inside the constructor
-- Mixes hook registration with object wiring
+The old `src/Core/Plugin.php` is a manual singleton that calls `add_action()` directly
+inside the constructor and mixes hook registration with object wiring.
 
 The new branch already has the correct `includes/Main.php` Loader singleton.
-This phase wires the existing boilerplate `Main.php` to boot all the modules
-that the old `Core\Plugin` used to instantiate, following the WPBoilerplate
-boot flow strictly.
-
-### Old code to retire
-
-- `src/Core/Plugin.php` — replaced by `includes/Main.php` + `define_admin_hooks()` / `define_public_hooks()`
-- `src/Core/Compat.php` — moves to `includes/Compat.php`
-- `src/Core/polyfills.php` — loaded inside `Main::load_composer_dependencies()`
+This phase wires the existing boilerplate `Main.php` to boot all modules,
+following the WPBoilerplate boot flow strictly.
 
 ### Boot flow changes
 
@@ -70,15 +61,15 @@ plugins_loaded                        acrossai_mcp_manager_run() [at file scope]
 
 ---
 
-## Spec-Kit Steps
+## Spec-Kit Workflow
 
-### Step 1: `/speckit.specify`
+### Step 1 — `/speckit.specify`
 
 ```
 /speckit.specify
 
 Feature: Core Boot Flow — WPBoilerplate Loader Migration
-Feature number: 002
+Feature number: 001
 
 We are completing the core boot setup for the migrated plugin. The existing
 includes/Main.php has the correct boilerplate structure. This spec covers what
@@ -119,14 +110,26 @@ Requirements:
    calls AcrossAI_MCP_Manager\acrossai_mcp_manager_activate() which requires
    includes/Activator.php and calls Activator::activate().
 
-7. includes/Compat.php moves here: a static helper class with methods for
-   WordPress version compatibility checks. Loaded in load_dependencies().
+7. includes/Compat.php: static helper class for WordPress version compatibility.
+   Loaded in load_dependencies().
 
-8. The apply_filters('acrossai_mcp_manager_load', true) kill switch in
-   load_hooks() must be preserved for third-party integrations.
+8. apply_filters('acrossai_mcp_manager_load', true) kill switch in load_hooks()
+   must be preserved for third-party integrations.
 ```
 
-### Step 2: `/speckit.plan`
+---
+
+### Step 2 — `/speckit.clarify` _(optional)_
+
+Run this only if the spec output is ambiguous or incomplete.
+
+```
+/speckit.clarify
+```
+
+---
+
+### Step 3 — `/speckit.plan`
 
 ```
 /speckit.plan
@@ -137,20 +140,19 @@ Technical approach for the core boot migration:
    - Add define_constants() with all 6 constants (already partially done)
    - In load_hooks(), ensure apply_filters('acrossai_mcp_manager_load', true) gate
    - In define_admin_hooks(): add stubs for each module's hooks as TODO comments
-     if the module has not been migrated yet (phases 3–8). Stubs use
+     if the module has not been migrated yet. Stubs use:
      // TODO: wire after phase N once that class exists.
    - In define_public_hooks(): add stub for FrontendAuth.
 
 2. includes/Compat.php — new file:
    - Move static helper methods from src/Core/Compat.php verbatim
-   - Update namespace from ACROSSAI_MCP_MANAGER\Core to AcrossAI_MCP_Manager\Includes
+   - Update namespace: ACROSSAI_MCP_MANAGER\Core → AcrossAI_MCP_Manager\Includes
 
 3. includes/Activator.php — extend existing file:
-   - Add calls to all DB Query::maybe_create_table() methods — MCPServer\Query and CliAuthLog\Query (created in this same phase)
-   - Add rewrite rule registration for FrontendAuth::PAGE_SLUG
-   - Add rewrite rule for ClaudeConnectors::AUTHORIZE_PATH
+   - Guard DB calls: if ( class_exists( MCPServer\Query::class ) ) — silently skip if absent
+   - Add rewrite rule registration for FrontendAuth::PAGE_SLUG (placeholder — 404 until handler exists)
+   - Add rewrite rule for ClaudeConnectors::AUTHORIZE_PATH (placeholder)
    - Add flush_rewrite_rules()
-   - Add MCPServer\Query::insert_default_server()
 
 4. Plugin root file (acrossai-mcp-manager.php) — update:
    - define('ACROSSAI_MCP_MANAGER_PLUGIN_FILE', __FILE__) at top
@@ -158,17 +160,117 @@ Technical approach for the core boot migration:
    - register_activation_hook and register_deactivation_hook (already there)
    - acrossai_mcp_manager_run() kicks off Main::instance() (already there)
 
-5. Remove src/Core/Plugin.php entirely once all modules have been moved to
-   their new locations in later phases. Do NOT delete it in this phase — it is
-   still the running code until all modules are migrated.
+5. Do NOT delete src/Core/Plugin.php in this phase — it is still running code
+   until all modules are migrated in later phases.
 
-Namespace note: Main.php uses AcrossAI_MCP_Manager\Includes namespace.
-Compat.php namespace: AcrossAI_MCP_Manager\Includes.
+Namespace: Main.php and Compat.php both use AcrossAI_MCP_Manager\Includes.
 ```
 
-### Step 3 + 4: `/speckit.tasks` then `/speckit.implement`
+---
 
-Run spec-kit tasks generation, then implement each task.
+### Step 4 — `/speckit.memory-md.index-project`
+
+Run after the plan is accepted to map module dependencies.
+
+```
+/speckit.memory-md.index-project
+```
+
+---
+
+### Step 5 — `/speckit.architecture-guard.governed-plan`
+
+Validate the plan against the constitution before writing any code.
+
+```
+/speckit.architecture-guard.governed-plan
+```
+
+---
+
+### Step 6 — `/speckit.security-review.full`
+
+Security audit of the plan — catch issues before implementation.
+
+```
+/speckit.security-review.full
+```
+
+---
+
+### Step 7 — `/speckit.tasks`
+
+Generate the ordered task list from the approved plan.
+
+```
+/speckit.tasks
+```
+
+---
+
+### Step 8 — `/speckit.architecture-guard.governed-tasks`
+
+Validate task sequence and dependencies before starting implementation.
+
+```
+/speckit.architecture-guard.governed-tasks
+```
+
+---
+
+### Step 9 — `/speckit.implement`
+
+Implement all tasks. Review generated code before moving on.
+
+```
+/speckit.implement
+```
+
+---
+
+### Step 10 — `/speckit.analyze`
+
+Check implementation against the spec and plan for completeness and drift.
+
+```
+/speckit.analyze
+```
+
+---
+
+### Step 11 — `/speckit.architecture-guard.drift-analysis`
+
+Detect any architectural drift introduced during implementation.
+
+```
+/speckit.architecture-guard.drift-analysis
+```
+
+---
+
+### Step 12 — `/speckit.security-review.full`
+
+Final security audit of the implemented code.
+
+```
+/speckit.security-review.full
+```
+
+---
+
+### Step 13 — `/speckit.memory-md.merge-features`
+
+Archive implementation decisions, learnings, and known issues into project memory.
+
+```
+/speckit.memory-md.merge-features
+```
+
+---
+
+### Step 14 — Git commit _(automatic)_
+
+Triggered automatically after `/speckit.analyze` completes.
 
 ---
 
@@ -178,6 +280,6 @@ Run spec-kit tasks generation, then implement each task.
 - [ ] `load_dependencies()` only creates the Loader — no boot/register calls
 - [ ] `load_hooks()` has the `acrossai_mcp_manager_load` filter gate
 - [ ] `includes/Compat.php` exists with updated namespace
-- [ ] `includes/Activator.php` calls DB table bootstrappers and rewrite rule setup
-- [ ] Plugin activates with WP_DEBUG=true — no fatal errors or notices
+- [ ] `includes/Activator.php` registers rewrite rules with `class_exists()` guard on DB calls
+- [ ] Plugin activates with `WP_DEBUG=true` — no fatal errors or notices
 - [ ] No `define()` calls outside `Main::define_constants()`

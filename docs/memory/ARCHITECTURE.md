@@ -1,6 +1,6 @@
 # Architecture — AcrossAI MCP Manager
 
-Last reviewed: 2026-05-29
+Last reviewed: 2026-05-29 (Feature 001 index-project)
 
 ## System Overview
 
@@ -92,6 +92,9 @@ Passing `FeatureClass::instance()` inline as the second argument to `add_action`
 | `includes/Utilities/` | `AcrossAI_MCP_Manager\Includes\Utilities` |
 | `admin/Partials/` | `AcrossAI_MCP_Manager\Admin\Partials` |
 | `public/Partials/` | `AcrossAI_MCP_Manager\Public\Partials` |
+| `includes/Database/MCPServer/` | `AcrossAI_MCP_Manager\Includes\Database\MCPServer` |
+| `includes/Database/CliAuthLog/` | `AcrossAI_MCP_Manager\Includes\Database\CliAuthLog` |
+| `includes/Database/ConnectorAuditLog/` | `AcrossAI_MCP_Manager\Includes\Database\ConnectorAuditLog` |
 
 Always derive namespace from the full directory path — never invent short namespaces.
 
@@ -141,3 +144,85 @@ Always derive namespace from the full directory path — never invent short name
 - Stale diagrams that no longer reflect actual boundaries
 
 Update the review date when boundaries, ownership, or integrations materially change.
+
+
+## Module Inventory (as of Feature 001)
+
+### Existing (boilerplate stubs — Phase 1)
+
+| Class FQN | File | Status | Notes |
+|---|---|---|---|
+| `AcrossAI_MCP_Manager\Includes\Main` | `includes/Main.php` | Exists | Singleton; all hook registration |
+| `AcrossAI_MCP_Manager\Includes\Loader` | `includes/Loader.php` | Exists | Singleton; collects add_action/add_filter calls |
+| `AcrossAI_MCP_Manager\Includes\I18n` | `includes/I18n.php` | Exists | Wired via Loader on `init` |
+| `AcrossAI_MCP_Manager\Includes\Activator` | `includes/Activator.php` | Exists | Static; called by activation hook |
+| `AcrossAI_MCP_Manager\Includes\Deactivator` | `includes/Deactivator.php` | Exists | Static; called by deactivation hook |
+| `AcrossAI_MCP_Manager\Admin\Main` | `admin/Main.php` | Exists | Enqueue admin assets |
+| `AcrossAI_MCP_Manager\Admin\Partials\Menu` | `admin/Partials/Menu.php` | Exists | Admin menu + plugin action links |
+| `AcrossAI_MCP_Manager\Public\Main` | `public/Main.php` | Exists | Enqueue public assets |
+
+### Created in Feature 001
+
+| Class FQN | File | Status |
+|---|---|---|
+| `AcrossAI_MCP_Manager\Includes\Compat` | `includes/Compat.php` | NEW — Phase 1 |
+
+### Planned (TODO stubs in Main.php)
+
+| Class FQN | Target File | Target Phase |
+|---|---|---|
+| `AcrossAI_MCP_Manager\Admin\Partials\Settings` | `admin/Partials/Settings.php` | Phase 3 |
+| `AcrossAI_MCP_Manager\Admin\Partials\ApplicationPasswords` | `admin/Partials/ApplicationPasswords.php` | Phase N |
+| `AcrossAI_MCP_Manager\Public\Partials\FrontendAuth` | `public/Partials/FrontendAuth.php` | Phase 3 |
+| `AcrossAI_MCP_Manager\Includes\MCP\Controller` | `includes/MCP/Controller.php` | Phase 4 |
+| `AcrossAI_MCP_Manager\Includes\Database\MCPServer\Query` | `includes/Database/MCPServer/Query.php` | Phase 4 |
+| `AcrossAI_MCP_Manager\Includes\Database\CliAuthLog\Query` | `includes/Database/CliAuthLog/Query.php` | Phase 4 |
+| `AcrossAI_MCP_Manager\Includes\Database\ConnectorAuditLog\Query` | `includes/Database/ConnectorAuditLog/Query.php` | Phase 4 |
+| `AcrossAI_MCP_Manager\Includes\REST\CliController` | `includes/REST/CliController.php` | Phase 5 |
+| `AcrossAI_MCP_Manager\Includes\OAuth\ClaudeConnectors` | `includes/OAuth/ClaudeConnectors.php` | Phase 6 |
+
+## Module Dependencies (Feature 001)
+
+```
+Main (includes/Main.php)
+  ├─ depends on: Loader::instance()
+  ├─ depends on: Admin\Main::instance()
+  ├─ depends on: Admin\Partials\Menu::instance()
+  ├─ depends on: Public\Main::instance()
+  └─ [TODO stubs]: Settings, AppPasswords, FrontendAuth, MCP\Controller,
+                   REST\CliController, OAuth\ClaudeConnectors, AccessControl
+
+Activator (includes/Activator.php)
+  ├─ optional: Database\MCPServer\Query (class_exists guard)
+  ├─ optional: Database\CliAuthLog\Query (class_exists guard)
+  └─ optional: Database\ConnectorAuditLog\Query (class_exists guard)
+
+Compat (includes/Compat.php) — no dependencies
+I18n (includes/I18n.php) — no dependencies
+Loader (includes/Loader.php) — no dependencies
+```
+
+## Critical Namespace Rule (A6)
+
+Any PHP file in namespace `AcrossAI_MCP_Manager\Includes` that references a
+class in a sub-namespace MUST use `use` imports or a fully-qualified name
+with a leading `\`. Example:
+
+```php
+// WRONG — resolves to AcrossAI_MCP_Manager\Includes\Includes\Database\...
+class_exists( Includes\Database\MCPServer\Query::class )
+
+// CORRECT
+use AcrossAI_MCP_Manager\Includes\Database\MCPServer\Query as MCPServerQuery;
+class_exists( MCPServerQuery::class )
+```
+
+See BUGS.md (B1) for the failure pattern this prevents.
+
+## Constants Rule (A7) [Feature-001, 2026-05-29]
+
+All 6 plugin constants (`PLUGIN_FILE`, `PLUGIN_DIR`, `PLUGIN_URL`, `PLUGIN_BASENAME`, `VERSION`, `PLUGIN_NAME_SLUG`) are defined exclusively inside `Main::define_constants()` via a private `define()` helper with an `if (!defined(…))` guard. Zero `define()` calls are permitted anywhere in `includes/`, `admin/`, or `public/`.
+
+## Vendor Package Integration (A8) [Feature-001, 2026-05-29]
+
+Access control wiring (Phase 7) MUST use `\WPBoilerplate\AccessControl\AccessControlManager` from `wpboilerplate/wpb-access-control ^1.0` Composer package — not an internal class.

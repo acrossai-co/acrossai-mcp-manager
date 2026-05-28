@@ -25,6 +25,20 @@
 
         <!-- Allow short array syntax -->
         <exclude name="Generic.Arrays.DisallowShortArraySyntax"/>
+
+        <!-- Baseline: boilerplate filenames use PascalCase by convention (Phase 2 exception, 2026-05-29) -->
+        <exclude name="WordPress.Files.FileName.NotHyphenatedLowercase"/>
+        <exclude name="WordPress.Files.FileName.InvalidClassFileName"/>
+
+        <!-- Baseline: singleton pattern uses $_instance prefix by convention -->
+        <exclude name="PSR2.Classes.PropertyDeclaration.Underscore"/>
+
+        <!-- Baseline: PSR12 file header ordering (pre-existing boilerplate structure) -->
+        <exclude name="PSR12.Files.FileHeader.IncorrectOrder"/>
+
+        <!-- Baseline: intentional stub comments required by spec stub pattern -->
+        <exclude name="Squiz.PHP.CommentedOutCode.Found"/>
+        <exclude name="Squiz.Commenting.InlineComment.InvalidEndChar"/>
     </rule>
 
     <!-- Let's also check that everything is properly documented. -->
@@ -32,7 +46,10 @@
 
     <!-- Add in some extra rules from other standards. -->
     <rule ref="Generic.CodeAnalysis.UnusedFunctionParameter"/>
-    <rule ref="Generic.Commenting.Todo"/>
+    <!-- Exclude TaskFound: intentional TODO stubs required by spec stub pattern -->
+    <rule ref="Generic.Commenting.Todo">
+        <exclude name="Generic.Commenting.Todo.TaskFound"/>
+    </rule>
 
     <!-- Check for PHP cross-version compatibility. -->
     <rule ref="PHPCompatibility"/>
@@ -45,8 +62,20 @@
         <exclude-pattern>*/admin/*</exclude-pattern>
     </rule>
 
-    <!-- Allow plugin file header -->
+    <!-- Allow plugin file header; file docblocks added incrementally in later phases -->
     <rule ref="Squiz.Commenting.FileComment">
+        <exclude name="Squiz.Commenting.FileComment.Missing"/>
+        <exclude name="Squiz.Commenting.FileComment.MissingDocblock"/>
         <exclude-pattern>*/acrossai-mcp-manager.php</exclude-pattern>
+    </rule>
+
+    <!-- Baseline: namespace Public reserved keyword in public/Main.php (boilerplate convention) -->
+    <rule ref="PHPCompatibility.Keywords.ForbiddenNames">
+        <exclude name="PHPCompatibility.Keywords.ForbiddenNames.publicFound"/>
+    </rule>
+
+    <!-- Baseline: array helper parameter names ported verbatim from source Compat.php -->
+    <rule ref="Universal.NamingConventions.NoReservedKeywordParameterNames">
+        <exclude name="Universal.NamingConventions.NoReservedKeywordParameterNames.arrayFound"/>
     </rule>
 </ruleset>

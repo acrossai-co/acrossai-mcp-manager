@@ -23,6 +23,14 @@ defined( 'ABSPATH' ) || exit;
 class Menu {
 
 	/**
+	 * The single instance of the class.
+	 *
+	 * @var Menu
+	 * @since 0.0.1
+	 */
+	protected static $_instance = null;
+
+	/**
 	 * The ID of this plugin.
 	 *
 	 * @since    0.0.1
@@ -41,16 +49,28 @@ class Menu {
 	private $version;
 
 	/**
+	 * Main instance.
+	 *
+	 * @since  0.0.1
+	 * @static
+	 * @return self Single instance.
+	 */
+	public static function instance(): self {
+		if ( null === self::$_instance ) {
+			self::$_instance = new self();
+		}
+		return self::$_instance;
+	}
+
+	/**
 	 * Initialize the class and set its properties.
 	 *
 	 * @since    0.0.1
-	 * @param      string    $plugin_name       The name of this plugin.
-	 * @param      string    $version    The version of this plugin.
 	 */
-	public function __construct( $plugin_name, $version ) {
+	private function __construct() {
 
-		$this->plugin_name = $plugin_name;
-		$this->version     = $version;
+		$this->plugin_name = ACROSSAI_MCP_MANAGER_PLUGIN_NAME_SLUG;
+		$this->version     = ACROSSAI_MCP_MANAGER_VERSION;
 	}
 
 	/**
@@ -101,7 +121,7 @@ class Menu {
 		return array_merge(
 			$links,
 			array(
-				'about' => sprintf( '<a href="%sadmin.php?page=%s">%s</a>', admin_url(), 'acrossai-mcp-manager', esc_html__( 'About', 'acrossai-mcp-manager' ) ),
+				'about' => sprintf( '<a href="%s">%s</a>', esc_url( admin_url( 'admin.php?page=acrossai-mcp-manager' ) ), esc_html__( 'About', 'acrossai-mcp-manager' ) ),
 			)
 		);
 	}

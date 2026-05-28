@@ -77,13 +77,13 @@ $cli_controller = REST\CliController::instance();
 $this->loader->add_action( 'rest_api_init', $cli_controller, 'register_routes' );
 ```
 
-### Step 1: `/speckit.specify`
+### Step 1 — `/speckit.specify`
 
 ```
 /speckit.specify
 
 Feature: REST API — CLI Authentication Controller
-Feature number: 008
+Feature number: 006
 
 REST namespace: acrossai-mcp-manager/v1
 
@@ -146,7 +146,7 @@ Namespace: AcrossAI_MCP_Manager\Includes\REST
 File: includes/REST/CliController.php
 ```
 
-### Step 2: `/speckit.plan`
+### Step 2 — `/speckit.plan`
 
 ```
 /speckit.plan
@@ -233,7 +233,7 @@ $this->loader->add_action( 'template_redirect',  $frontend_auth, 'maybe_render_p
 $this->loader->add_action( 'wp_enqueue_scripts', $frontend_auth, 'enqueue_assets' );
 ```
 
-### Step 1: `/speckit.specify`
+### Step 1 — `/speckit.specify`
 
 ```
 /speckit.specify
@@ -278,7 +278,7 @@ Namespace: AcrossAI_MCP_Manager\Public\Partials
 File: public/Partials/FrontendAuth.php
 ```
 
-### Step 2: `/speckit.plan`
+### Step 2 — `/speckit.plan`
 
 ```
 /speckit.plan
@@ -332,10 +332,106 @@ Wiring in Main::define_public_hooks():
 
 ---
 
-## Step 3 + 4: `/speckit.tasks` then `/speckit.implement`
+## Shared Workflow Steps (run once after both plans are approved)
 
-Run Part B (REST Controller) first, then Part A (FrontendAuth) so the static
-`approve_auth_code()` dependency is already available.
+### Step 3 — `/speckit.clarify` _(optional)_
+
+Run if either Part A or Part B spec needs clarification.
+
+```
+/speckit.clarify
+```
+
+---
+
+### Step 4 — `/speckit.memory-md.index-project`
+
+```
+/speckit.memory-md.index-project
+```
+
+---
+
+### Step 5 — `/speckit.architecture-guard.governed-plan`
+
+```
+/speckit.architecture-guard.governed-plan
+```
+
+---
+
+### Step 6 — `/speckit.security-review.full`
+
+```
+/speckit.security-review.full
+```
+
+---
+
+### Step 7 — `/speckit.tasks`
+
+Run for Part B (REST Controller) first, then Part A (FrontendAuth).
+
+```
+/speckit.tasks
+```
+
+---
+
+### Step 8 — `/speckit.architecture-guard.governed-tasks`
+
+```
+/speckit.architecture-guard.governed-tasks
+```
+
+---
+
+### Step 9 — `/speckit.implement`
+
+Implement Part B (REST Controller) first so `static approve_auth_code()` exists
+before FrontendAuth is implemented.
+
+```
+/speckit.implement
+```
+
+---
+
+### Step 10 — `/speckit.analyze`
+
+```
+/speckit.analyze
+```
+
+---
+
+### Step 11 — `/speckit.architecture-guard.drift-analysis`
+
+```
+/speckit.architecture-guard.drift-analysis
+```
+
+---
+
+### Step 12 — `/speckit.security-review.full`
+
+```
+/speckit.security-review.full
+```
+
+---
+
+### Step 13 — `/speckit.memory-md.merge-features`
+
+```
+/speckit.memory-md.merge-features
+```
+
+---
+
+### Step 14 — Git commit _(automatic)_
+
+Triggered automatically after `/speckit.analyze` completes.
 
 ---
 
