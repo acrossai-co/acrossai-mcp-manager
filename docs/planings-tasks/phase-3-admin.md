@@ -123,8 +123,9 @@ Functional requirements:
 6. All classes remove direct add_action() / add_filter() calls from constructors.
    Hooks are registered externally via Loader in Main::define_admin_hooks().
 
-7. DB calls go through the new BerlinDB Query classes (Phase 1) — not static
-   MCPServerTable:: calls.
+7. DB calls go through the new BerlinDB Query classes (created in Phase 2 — Core Boot)
+   — not static MCPServerTable:: calls.
+   MCPServer\Query and CliAuthLog\Query must already exist in includes/Database/ before this phase runs.
 
 8. Namespace: AcrossAI_MCP_Manager\Admin\Partials for all classes in admin/Partials/
 ```

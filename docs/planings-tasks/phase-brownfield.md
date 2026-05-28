@@ -1,12 +1,23 @@
 # Phase Brownfield — Auto-Discover Source Architecture
 
-> **Run this before Phase 0.**
+> **Normally run before Phase 0 — but Phase 0 is already complete.**
 > The Brownfield extension is installed at:
 > `.specify/extensions/brownfield/`
 >
 > It gives every subsequent `/speckit.specify` phase a pre-built picture of
 > what the source plugin actually does, so specs are written from real code
 > rather than memory.
+
+> **Status as of 2026-05-29:**
+> Phase 0 (constitution + memory bootstrap) is **already complete**.
+> - `.specify/memory/CONSTITUTION.md` v1.0.0 — ratified
+> - `docs/memory/` — PROJECT_CONTEXT, ARCHITECTURE, DECISIONS, INDEX all populated
+>
+> Steps 1–3 below (scan → bootstrap → validate) can still be run to auto-generate
+> draft `specs/` folders. Step 2 (`bootstrap`) will not overwrite the existing
+> constitution — it generates spec-kit config templates only.
+> Start directly at **Step 1** if you want the draft spec artifacts.
+> Skip to **Step 4** if you prefer to write specs from the phase files directly.
 
 ---
 
@@ -52,10 +63,13 @@ Run from the **target** repo. Point the scan at the source repo directory.
 ```
 
 **What to expect:** A Project Profile report covering:
-- Tech stack: PHP 8.0+, WordPress 6.9+, Jetpack autoloader, OAuth2 libraries
+- Tech stack: PHP 7.4+, WordPress 5.9+, Jetpack autoloader, `bshaffer/oauth2-server-php`, `wordpress/mcp-adapter 0.5.0`, `wpboilerplate/wpb-access-control`
 - Architecture pattern: WordPress plugin (singleton boot, direct add_action in constructors)
 - Module map: Core, Admin, Database, Frontend, MCP, MCPClients, OAuth, REST
-- Conventions: ACROSSAI_MCP_MANAGER namespace, src/ layout, flat assets/
+- Conventions: `ACROSSAI_MCP_MANAGER\` namespace, `src/` layout, flat `assets/`
+- REST namespace: `acrossai-mcp-manager/v1` with 5 endpoints
+- Auth: entirely transient-based (`acrossai_cli_auth_*`, `acrossai_session_*`), TTL 300 s / 600 s
+- No separate DB table for auth codes — transients only
 
 Save the output — you'll reference it in Step 2.
 
@@ -150,6 +164,24 @@ Expected output: `specs/006-frontend/`
 
 Expected output: `specs/007-rest-api/`
 
+### 4h — Database (context only — no target module)
+
+> The source plugin has two DB table classes (`MCPServerTable`, `CliAuthLogTable`)
+> in `src/Database/`. There is **no separate Database migration phase** — these classes
+> will be re-implemented fresh inside `includes/Database/` as part of the Core Boot
+> phase (Activator) and consumed by Admin and REST phases.
+>
+> Run this migrate step to capture what those classes do; mark all tasks `[x]`
+> since the behaviour is already documented in `docs/memory/` and `AGENTS.md`.
+
+```
+/speckit.brownfield.migrate src/Database — read-only scan of MCPServerTable and CliAuthLogTable from /Users/raftaar1191/local-sites/wordpress-7-0/app/public/wp-content/mcp-migration/acrossai-mcp-manager/
+```
+
+Expected output: `specs/008-database/` — mark all tasks `[x]` (informational only).
+Target files will be created in `includes/Database/MCPServer/` and `includes/Database/CliAuthLog/`
+as part of **Phase 2 (Core Boot)**, not as a standalone phase.
+
 ---
 
 ## What to do with the migrated specs
@@ -168,8 +200,9 @@ refining instructions.
 ## Success Criteria
 
 - [ ] `/speckit.brownfield.scan` produces a Project Profile for the source repo
-- [ ] `/speckit.brownfield.bootstrap` runs without errors
+- [ ] `/speckit.brownfield.bootstrap` runs without errors (constitution is NOT overwritten)
 - [ ] `/speckit.brownfield.validate` reports no mismatches
 - [ ] `specs/001-core-boot/` through `specs/007-rest-api/` all contain `spec.md`, `plan.md`, `tasks.md`
+- [ ] `specs/008-database/` exists with all tasks marked `[x]` (informational context only)
 - [ ] Each `tasks.md` has all tasks marked `[x]` (existing code) and lists any gaps found
 - [ ] No source files in `acrossai-mcp-manager/` were modified (scan and migrate are non-destructive)

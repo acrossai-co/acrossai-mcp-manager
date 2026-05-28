@@ -146,7 +146,7 @@ Technical approach for the core boot migration:
    - Update namespace from ACROSSAI_MCP_MANAGER\Core to AcrossAI_MCP_Manager\Includes
 
 3. includes/Activator.php — extend existing file:
-   - Add calls to all three DB Query::maybe_create_table() (after Phase 1)
+   - Add calls to all DB Query::maybe_create_table() methods — MCPServer\Query and CliAuthLog\Query (created in this same phase)
    - Add rewrite rule registration for FrontendAuth::PAGE_SLUG
    - Add rewrite rule for ClaudeConnectors::AUTHORIZE_PATH
    - Add flush_rewrite_rules()
