@@ -21,7 +21,7 @@ composer_version: "2.0"
 ```yaml
 naming_prefix: "acrossai_mcp_manager_"
 coding_standard: "wpcs-strict"
-multisite_support: true
+multisite_support: false
 ```
 
 ## Security Requirements
