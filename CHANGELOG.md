@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.0.5] - 2026-06-02
+
+### Changed
+
+- Access-control admin UI now loads assets from the vendor package's own compiled bundle (`vendor/wpboilerplate/wpb-access-control/assets`) instead of the plugin-bundled copies; the old `assets/access-control/` folder has been removed
+- Replace `AccessControlUI::bootstrap()` with `AccessControlManager::register_rest_api()` — access-control rules are now served and saved via dedicated REST endpoints registered on `rest_api_init`
+- Access-control tab renders a React component (`<div id="wpb-access-control"></div>`) hydrated by the vendor package's webpack bundle instead of legacy plain-JS markup
+- Add graceful degradation: if the vendor package's asset bundle is absent, the access-control tab shows an explanatory notice rather than a broken UI while enforcement remaining active
+
+### Dependencies
+
+- Update `wpboilerplate/wpb-access-control` to v1.0.0 (stable release baseline); ships compiled React/webpack UI bundle and new `RulesController` REST API
+- Update `automattic/jetpack-autoloader` to latest minor version
+
+### Maintenance
+
+- Add `/docs/` to `.gitattributes` `export-ignore` to exclude internal planning documents from SVN/release archives
+
 ## [0.0.4] - 2026-05-15
 
 ### Improved

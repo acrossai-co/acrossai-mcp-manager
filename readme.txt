@@ -4,7 +4,7 @@ Tags: mcp, ai, copilot, vscode, claude
 Requires at least: 6.9
 Requires PHP: 7.4
 Tested up to: 7.0
-Stable tag: 0.0.4
+Stable tag: 0.0.5
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -180,6 +180,13 @@ No additional software is needed on the WordPress side. Your MCP clients (VS Cod
 4. Per-provider configuration file locations and top-level keys
 
 == Changelog ==
+
+= 0.0.5 =
+* Changed: access-control admin UI now loads assets from the wpb-access-control vendor package's own compiled React bundle; removed plugin-bundled copies at assets/access-control/
+* Changed: replace AccessControlUI AJAX bootstrap with REST API registration via AccessControlManager::register_rest_api(); rules are now served and saved via dedicated REST endpoints
+* Changed: access-control tab renders a React component hydrated by the vendor webpack bundle instead of legacy plain-JS markup
+* Added: graceful degradation notice when vendor assets are unavailable — enforcement remains active
+* Updated: wpb-access-control to v1.0.0 (stable baseline); automattic/jetpack-autoloader to latest minor
 
 = 0.0.4 =
 * Improved: bundle access-control UI assets (CSS + JS) directly in the plugin at assets/access-control/ so the admin panel works regardless of whether the wpb-access-control vendor package ships them

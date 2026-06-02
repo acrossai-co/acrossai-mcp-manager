@@ -1,6 +1,8 @@
 /.wordpress-org export-ignore
 /.claude
 
+/docs/ export-ignore
+
 /.git export-ignore
 /.github export-ignore
 /.github/ export-ignore
