@@ -13,6 +13,8 @@ This is a compact routing map for durable memory. Keep it short. It points to so
 | D6 | Activator.php MUST use `use` imports (not bare/inline FQN) for all DB class references | Activation | namespace, fqn | Active | DECISIONS.md |
 | D7 | Activator does NOT call insert_default_server() — Phase 4 MCPServerQuery::maybe_create_table() internal | Activation | db, seeding | Active | DECISIONS.md |
 | D8 | AccessControl stub targets wpboilerplate/wpb-access-control ^1.0 vendor package FQN | Phase 7 prep | access-control, vendor | Active | DECISIONS.md |
+| D9 | BerlinDB-style Query interface (Schema/Table/Row/Query) hand-rolled — no berlindb/core vendor dep | Database layer | berlindb, query, vendor | Active | DECISIONS.md |
+| D10 | Minimal-port deferral pattern — partial port + reserved follow-up task when source class depends on un-ported siblings | Migration | port, deferral, scope | Active | DECISIONS.md |
 
 ## Architecture Constraints
 | ID | Constraint | Scope | Tags | Source |
@@ -25,6 +27,8 @@ This is a compact routing map for durable memory. Keep it short. It points to so
 | A6 | Any class in namespace `AcrossAI_MCP_Manager\\Includes` MUST use `use` imports or FQN with leading `\\` when referencing sub-namespace classes — bare relative names silently fail | Plugin-wide | namespace, fqn | ARCHITECTURE.md |
 | A7 | All 6 plugin constants defined exclusively in Main::define_constants() via private define() guard — zero define() calls elsewhere | Plugin-wide | constants, boot | ARCHITECTURE.md |
 | A8 | Access control wiring (Phase 7) MUST use \WPBoilerplate\AccessControl\AccessControlManager vendor package | Phase 7 | access-control, vendor | ARCHITECTURE.md |
+| A9 | Shared admin constants (read by ≥2 modules) live in includes/Utilities/ as a final class, NOT on sibling feature classes | Plugin-wide | constants, coupling, utilities | ARCHITECTURE.md |
+| A10 | WP_List_Table subclasses are exempted from the singleton-only rule — public ctor required by parent; instantiated per-render; never Loader-wired | Admin | list-table, singleton, exception | ARCHITECTURE.md |
 
 ## Bug Patterns
 | ID | Pattern | Affected Area | Tags | Source |
@@ -35,6 +39,8 @@ This is a compact routing map for durable memory. Keep it short. It points to so
 | B4 | Unescaped dot in add_rewrite_rule() PCRE pattern: '^.well-known/' matches any char; must be '^\.well-known/' | Activator | rewrite, regex | BUGS.md |
 | B5 | Public constructor on singleton allows duplicate instantiation → double hook registration | Any singleton class | singleton, hooks | BUGS.md |
 | B6 | admin_url() without esc_url() → filterable value injected into HTML href → XSS | Admin Partials | xss, escaping | BUGS.md |
+| B7 | Mass-assignment via forged POST keys to $wpdb->update/insert — Query writers MUST filter against Schema::columns() before persisting | Custom DB tables | mass-assignment, query | BUGS.md |
+| B8 | "// esc_url'd above" comments don't enforce escaping — re-escape at output point even if redundant (esc_* is idempotent) | Admin Partials renders | xss, escaping, defense-in-depth | BUGS.md |
 
 ## Accepted Deviations
 | ID | Deviation | Scope | Expiry/Review | Source |

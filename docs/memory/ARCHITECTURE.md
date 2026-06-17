@@ -226,3 +226,47 @@ All 6 plugin constants (`PLUGIN_FILE`, `PLUGIN_DIR`, `PLUGIN_URL`, `PLUGIN_BASEN
 ## Vendor Package Integration (A8) [Feature-001, 2026-05-29]
 
 Access control wiring (Phase 7) MUST use `\WPBoilerplate\AccessControl\AccessControlManager` from `wpboilerplate/wpb-access-control ^1.0` Composer package — not an internal class.
+
+## Shared Admin Constants Live in Includes\Utilities (A9) [Feature-002, 2026-06-17]
+
+**Status**: Active
+
+**Why durable**: When two or more feature classes need the same constant (page slug, option name, hook prefix, REST namespace), placing it on the most "obvious" owner class (e.g. `Menu::PAGE_SLUG`) immediately creates sibling-to-sibling coupling that violates Module Contract item 3 — and the violation propagates: every new consumer pulls in the sibling class header just to read a string.
+
+**Architecture Rule**: If a constant is read by ≥2 classes in different feature modules, it MUST live in a `final class` under `includes/Utilities/*.php`. Feature classes consume it via `use AcrossAI_MCP_Manager\Includes\Utilities\Foo` + `Foo::CONST` — never via `SiblingFeature::CONST`. The utility class:
+- Is `final`
+- Has only `const` declarations + optional `public static` helpers
+- Has a `private` constructor that is never invoked
+- Holds no instance state (skip the singleton ceremony — no instance to share)
+
+**Reference implementation**: `includes/Utilities/AdminPageSlugs.php` (Feature 002, RT-1).
+
+**Tradeoffs**:
+- Gained: zero sibling-to-sibling coupling; constants survive partial extractions and class renames cleanly; one consumer of the constant doesn't force-load the whole sibling class
+- Reconsider: a constant scoped to exactly one class with no expectation of external readers can stay private to that class. Promote to Utilities only when a second reader appears.
+
+## WP_List_Table Subclasses Are Exempted From the Singleton Rule (A10) [Feature-002, 2026-06-17]
+
+**Status**: Active
+
+**Why durable**: Constitution A2 says every feature class uses `protected static $_instance` + `private __construct`. WP_List_Table subclasses CAN'T — `\WP_List_Table::__construct()` is public and `parent::__construct(...)` must be called from a public child constructor. Without explicit exception documentation, future authors either (a) try to force singleton on a list table and break parent-constructor invariants, or (b) flag a constitutional violation when they see the public ctor.
+
+**Architecture Rule**: Classes extending `\WP_List_Table` are exempted from the singleton-only rule because:
+1. They MUST have a public constructor that calls `parent::__construct(...)` with table args
+2. They are instantiated **per-render inside their controlling partial**, never wired into hooks via the Loader — so the B5 double-hook risk does not apply
+3. They may legitimately take constructor parameters (e.g. `CliAuthLogListTable::__construct(int $server_id = 0)` for scope filtering)
+
+The exception MUST be documented in the class file's PHPDoc with a pointer to this entry. Example (from `admin/Partials/MCPServerListTable.php`):
+```php
+/**
+ * NOTE: List-table subclasses are excepted from the singleton-only rule
+ * because (a) they extend \WP_List_Table which requires its own public
+ * constructor + parent::__construct() call, (b) they are instantiated
+ * per-render inside Settings, never wired into hooks via the Loader.
+ * See docs/memory/ARCHITECTURE.md (A10).
+ */
+```
+
+**Tradeoffs**:
+- Gained: list tables work the WP-native way without contortions; admin pages render correctly with the canonical WP table UX
+- Reconsider: never. This is a structural WP-core constraint, not a preference

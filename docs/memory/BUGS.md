@@ -179,3 +179,57 @@ PHPCS WPCS escaping sniffs. Code review: search for `admin_url()` in HTML contex
 
 **Where to look next**
 `admin/Partials/Menu.php` and any new admin Partials class with `plugin_action_links`.
+
+---
+
+### 2026-06-17 — Mass-Assignment via Forged POST Keys to Custom-Table Writes [Feature-002]
+
+**Status**
+Active
+
+**Symptoms**
+A handler reads `$_POST` into a `$data` array and passes it to `$wpdb->update($table, $data, $where)` without filtering. A malicious admin (or a non-admin via a forged form that bypasses an upstream cap check) can include extra fields like `is_enabled=1`, `registered_from=plugin`, or future schema additions to write columns the form was never supposed to touch.
+
+**Root Cause**
+WP_DB `$wpdb->insert/update/delete` write every key in the `$data` array that corresponds to a column in the table — they do NOT filter against a schema whitelist. Trusting `$_POST` shape means trusting the attacker's shape.
+
+**Future mistake prevented**
+When writing to a custom DB table via a Query class, MUST iterate `Schema::columns()` (or an equivalent allow-list) and drop any unknown keys BEFORE the `$wpdb` call. Never pass raw `$data` from `$_POST` straight to `$wpdb->update/insert`.
+
+**Prevention / Detection**
+Canonical implementation pattern (see Feature 002):
+```php
+// In Query::update_item / add_item:
+foreach ( $data as $col => $value ) {
+    if ( ! $schema->has_column( (string) $col ) ) {
+        continue; // silent drop
+    }
+    $update[ $col ] = ...;
+}
+```
+Test: in a manual security test, submit a form with extra `<input name="is_enabled" value="1">` against the Claude Connector save handler. After submission, query the DB — the row's `is_enabled` MUST be unchanged.
+
+**Where to look next**
+`includes/Database/MCPServer/Query.php::add_item/update_item` for the canonical reference. Any future custom-table Query class MUST follow the same pattern.
+
+---
+
+### 2026-06-17 — "// esc_url'd above" Comment Pattern Is Fragile [Feature-002]
+
+**Status**
+Active
+
+**Symptoms**
+A form action attribute reads `<?php echo $post_url; // esc_url'd above ?>`. The escape was applied 10 lines earlier when `$post_url = esc_url( add_query_arg(...) )` was assigned. Currently safe, but a future refactor that renames `$post_url`, moves the assignment, swaps the assignment for an unescaped value, or copy-pastes the echo line into a new render method silently breaks the escape — XSS reintroduced with no audit trail. PHPCS WPCS escaping sniffs may or may not see across the variable assignment.
+
+**Root Cause**
+The comment is documentation, not enforcement. The reviewer / linter / future author has no signal at the **output point** that the value is pre-escaped. Defense in depth fails because there's only one defense.
+
+**Future mistake prevented**
+Even when a value was already escaped at assignment time, re-escape it at the output point. `esc_url()`, `esc_attr()`, `esc_html()` are all idempotent — calling them twice is cheap. The cost of being explicit is one function call; the cost of a silent regression is XSS.
+
+**Prevention / Detection**
+At output sites, always write `<?php echo esc_url( $post_url ); ?>` (or `esc_attr`, `esc_html`, etc.) — never bare `<?php echo $foo; ?>` with a "// already escaped" comment. PHPCS configurations should enable strict escaping rules at output sites regardless of upstream escaping. Pairs with B6 (admin_url XSS) for full coverage.
+
+**Where to look next**
+`admin/Partials/Settings.php` — every `<?php echo $post_url ?>` site has been hardened to `<?php echo esc_url( $post_url ); ?>` as of SEC-S2 (2026-06-17). Future render methods should follow that pattern.

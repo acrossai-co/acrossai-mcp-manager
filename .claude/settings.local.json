@@ -7,7 +7,34 @@
       "Bash(git -C /Users/raftaar1191/local-sites/wordpress-7-0/app/public/wp-content/plugins/acrossai-mcp-manager diff)",
       "Bash(git -C /Users/raftaar1191/local-sites/wordpress-7-0/app/public/wp-content/plugins/acrossai-mcp-manager add package.json)",
       "Bash(git -C /Users/raftaar1191/local-sites/wordpress-7-0/app/public/wp-content/plugins/acrossai-mcp-manager commit -m ' *)",
-      "Bash(git *)"
+      "Bash(git *)",
+      "Bash(.specify/extensions/git/scripts/bash/create-new-feature.sh *)",
+      "Bash(mkdir -p specs/002-admin-ui/checklists)",
+      "Bash(cp .specify/templates/spec-template.md specs/002-admin-ui/spec.md)",
+      "Bash(.specify/scripts/bash/check-prerequisites.sh *)",
+      "Bash(.specify/scripts/bash/setup-plan.sh *)",
+      "Bash(.specify/scripts/bash/setup-tasks.sh *)",
+      "Bash(grep -vE 'esc_url\\\\s*\\\\\\(\\\\s*admin_url|esc_url_raw\\\\s*\\\\\\(\\\\s*admin_url|wp_safe_redirect|\\\\$\\\\w+\\\\s*=\\\\s*add_query_arg')",
+      "Bash(grep -nB1 -A1 'admin_url\\(' admin/Partials/Settings.php admin/Partials/MCPServerListTable.php)",
+      "Bash(awk '{print \" \" $9}')",
+      "Bash(php -l admin/Partials/ApplicationPasswords.php)",
+      "Bash(php -l admin/Partials/CliAuthLogListTable.php)",
+      "Bash(php -l admin/Partials/SettingsRenderer.php)",
+      "Bash(php -l admin/Partials/Settings.php)",
+      "Bash(php -l includes/Main.php)",
+      "Bash(grep -cE '^\\\\s*\\\\$this->loader->\\(add_action|add_filter\\)' includes/Main.php)",
+      "Bash(grep -nE '\\\\$this->loader->\\(add_action|add_filter\\)' includes/Main.php)",
+      "Bash(node --check src/js/backend.js)",
+      "Bash(grep -vE 'esc_url|esc_attr|wp_safe_redirect|\\\\$\\\\w+\\\\s*=\\\\s*add_query_arg')",
+      "Bash(.specify/scripts/bash/detect-changed-files.sh --json)",
+      "Bash(grep -E '\\\\.\\(php|js\\)$')",
+      "Bash(grep -nB1 -A1 'permission_callback' admin/Partials/ApplicationPasswords.php)",
+      "Bash(grep *)",
+      "Bash(php -l includes/Database/MCPServer/Table.php)"
     ]
-  }
+  },
+  "enabledMcpjsonServers": [
+    "deepwiki",
+    "mcp-local-wp"
+  ]
 }
