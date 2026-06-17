@@ -255,16 +255,88 @@ final class Main {
 		$this->loader->add_action( 'admin_enqueue_scripts', $plugin_admin, 'enqueue_scripts' );
 
 		/**
-		 * Add the Plugin Main Menu
+		 * Add the Plugin Main Menu (US1 — Phase 2).
+		 *
+		 * Menu::register_menu() registers the top-level "MCP Manager" page
+		 * (slug `acrossai_mcp_manager`) + Servers / CLI Auth Log submenus +
+		 * the Access Control submenu (only when the vendor pkg is present).
+		 *
+		 * plugin_action_links_<basename> is the row-specific filter — fires
+		 * only for this plugin's row on the Plugins screen (FR-003).
 		 */
-		$main_menu = \AcrossAI_MCP_Manager\Admin\Partials\Menu::instance();
-		$this->loader->add_action( 'admin_menu', $main_menu, 'main_menu' );
-		$this->loader->add_action( 'plugin_action_links', $main_menu, 'plugin_action_links', 1000, 2 );
+		$menu = \AcrossAI_MCP_Manager\Admin\Partials\Menu::instance();
+		$this->loader->add_action( 'admin_menu', $menu, 'register_menu' );
+		$this->loader->add_filter(
+			'plugin_action_links_' . ACROSSAI_MCP_MANAGER_PLUGIN_BASENAME,
+			$menu,
+			'plugin_action_links',
+			10,
+			1
+		);
 
-		// TODO (phase 3): wire Admin\Partials\Settings.
-		// $plugin_settings = \AcrossAI_MCP_Manager\Admin\Partials\Settings::instance();
-		// $this->loader->add_action( 'admin_init', $plugin_settings, 'handle_actions', 5 );
-		// $this->loader->add_action( 'admin_init', $plugin_settings, 'register_settings' );
+		/**
+		 * Settings handler hooks (US2 — Phase 2).
+		 * - handle_actions runs at priority 5 on admin_init so it fires
+		 *   BEFORE other admin_init handlers; it dispatches toggle/delete/
+		 *   create/bulk via `?page=acrossai_mcp_manager&action=...`
+		 * - register_settings is a no-op stub until US3 T020 ports the
+		 *   Settings API registration
+		 * - render_action_result_notice consumes the `?notice=...` query var
+		 *   set by handle_actions redirects (FR-016)
+		 */
+		$settings = \AcrossAI_MCP_Manager\Admin\Partials\Settings::instance();
+		$this->loader->add_action( 'admin_init', $settings, 'handle_actions', 5 );
+		$this->loader->add_action( 'admin_init', $settings, 'register_settings' );
+
+		/**
+		 * Admin notices — extracted to Admin\Partials\Notices per RT-2.
+		 * - render_action_result_notice consumes the `?notice=...` query var set by
+		 *   Settings::handle_actions() redirects (FR-016)
+		 * - render_missing_adapter_notice + handle_adapter_notice_dismissal
+		 *   together implement the dismissible adapter-missing warning (FR-015 + Q3)
+		 */
+		$notices = \AcrossAI_MCP_Manager\Admin\Partials\Notices::instance();
+		$this->loader->add_action( 'admin_notices', $notices, 'render_action_result_notice' );
+
+		/**
+		 * ApplicationPasswords REST routes (US3 — Phase 2).
+		 * Registers POST /generate-app-password + GET /list-app-passwords
+		 * on the rest_api_init action. The Tokens tab JS calls these via
+		 * wp.apiFetch with the per-user `wp_rest` nonce.
+		 */
+		$application_passwords = \AcrossAI_MCP_Manager\Admin\Partials\ApplicationPasswords::instance();
+		$this->loader->add_action( 'rest_api_init', $application_passwords, 'register_rest_routes' );
+
+		/**
+		 * Access Control vendor wiring (US3 — Phase 2), guarded so the
+		 * plugin degrades gracefully when wpb-access-control isn't installed.
+		 * (Per D8 + the Phase 1 Activator's class_exists pattern.)
+		 *
+		 * NOTE: This block intentionally only mirrors the *render* contract —
+		 * the rest_pre_dispatch access-enforcement filter is owned by Phase 7
+		 * and remains a TODO below.
+		 */
+		if ( class_exists( '\WPBoilerplate\AccessControl\AccessControlManager' ) ) {
+			// The render method lives on the vendor singleton; Settings::
+			// render_access_control_tab() resolves it at use-site (no Loader
+			// wiring needed for tab rendering itself). This block exists for
+			// any future hooks the vendor pkg may require — currently empty.
+		}
+
+		/**
+		 * Adapter-missing notice (US4 — FR-015 + Q3). Lives on Notices per RT-2.
+		 * - render_missing_adapter_notice runs unconditionally on admin_notices;
+		 *   the renderer self-guards on class_exists('\WP\MCP\Plugin') AND on the
+		 *   per-user user_meta dismissal flag (sticky, never resets on upgrade).
+		 * - handle_adapter_notice_dismissal is the admin-ajax endpoint called
+		 *   when the user clicks the X button. Nonce + manage_options gated.
+		 */
+		$this->loader->add_action( 'admin_notices', $notices, 'render_missing_adapter_notice' );
+		$this->loader->add_action(
+			'wp_ajax_acrossai_mcp_dismiss_adapter_notice',
+			$notices,
+			'handle_adapter_notice_dismissal'
+		);
 
 		// TODO (phase N): wire Admin\Partials\ApplicationPasswords.
 		// $app_passwords = \AcrossAI_MCP_Manager\Admin\Partials\ApplicationPasswords::instance();

@@ -265,3 +265,58 @@ Feature 001 clarification Q2 (2026-05-29). Main.php stub line ~294.
 
 **Where to look next**
 `includes/Main.php::define_admin_hooks()`, `composer.json` (Phase 7 — add `wpb-access-control ^1.0`).
+
+---
+
+### 2026-06-17 — BerlinDB-style Query Interface Hand-Rolled Without the Vendor [Feature-002]
+
+**Status**
+Active
+
+**Why this is durable**
+Future custom-table needs in this plugin (and sister plugins in the same stack) should follow this minimal pattern rather than pulling `berlindb/core` into composer.
+
+**Decision**
+When a custom DB table needs a Query-style instance interface (`query()`, `add_item()`, `update_item()`, `delete_item()`), build it hand-rolled as four PHP classes per table — `Schema` (column metadata), `Table` (dbDelta lifecycle + `maybe_create_table()`), `Row` (typed value object with `to_array()`), `Query` (singleton-style static `maybe_create_table()` + per-call instance methods). All DB I/O uses `$wpdb->prepare()` internally. The contract is the **interface**, not the BerlinDB library. Spec/plan may refer to "BerlinDB Query classes" — read this as shorthand for the four-method interface.
+
+**Tradeoffs**
+- Pro: zero new composer deps; no vendor lock-in; ~200 lines per table is manageable
+- Con: must re-implement BerlinDB conveniences (caching, type coercion, query introspection) if needed later
+
+**Future mistake prevented**
+Do not add `berlindb/core` to `composer.json` just because the spec says "BerlinDB". Read the FR-022 interface clause as authoritative — the library name is shorthand.
+
+**Evidence**
+Feature 002 Q4 clarification (2026-06-17). Implementation: `includes/Database/{MCPServer,CliAuthLog}/{Schema,Table,Row,Query}.php`. Q4 entry in `specs/002-admin-ui/spec.md`.
+
+**Where to look next**
+`includes/Database/MCPServer/Query.php` for the canonical reference implementation. Future custom tables: copy that 4-file pattern.
+
+---
+
+### 2026-06-17 — Minimal-Port Deferral Pattern for Multi-Class Dependencies [Feature-002]
+
+**Status**
+Active
+
+**Why this is durable**
+When migrating a class whose source dependencies include other un-ported classes, a partial port with deferred work is preferable to either porting the entire dependency tree (scope creep) or stubbing the class (regression).
+
+**Decision**
+A "minimal port" ships the subset of the source class's API needed to satisfy the user-story FRs and stubs / omits the parts that depend on un-ported sibling classes. The pattern requires:
+1. The deferred functionality is **explicitly documented** in the new class's docblock (which dependencies are missing, which FRs they unlock)
+2. A **follow-up task ID is reserved** in tasks.md (or a follow-up phase identified)
+3. The current implementation does NOT silently fail or throw when the missing functionality is invoked from the UI — either the UI excludes the call site, or the method returns a graceful response
+
+**Tradeoffs**
+- Pro: unblocks user-story delivery; surfaces the deferred work in tracker
+- Con: future readers need to consult docblock to understand why the class is smaller than the source; carries risk of "minimal" becoming permanent
+
+**Future mistake prevented**
+Do not block a Phase N port on Phase N+1 deliverables. Do not stub a class as a placeholder either — partial port + explicit deferral is the third path.
+
+**Evidence**
+Feature 002 T025 (2026-06-17): `admin/Partials/ApplicationPasswords.php` ships 2 of 3 source REST endpoints, no `Includes\MCPClients\*` (7 classes) — the deferred MCPClient namespace is noted in the class docblock and tracked as RT-3 in `specs/002-admin-ui/governance-summary.md` follow-ups.
+
+**Where to look next**
+`admin/Partials/ApplicationPasswords.php` docblock for the canonical "what was deferred" note format.

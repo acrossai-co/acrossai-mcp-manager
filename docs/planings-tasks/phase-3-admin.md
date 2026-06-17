@@ -209,7 +209,7 @@ Access control integration: Settings::render_access_control_tab() receives the
 ### Step 6 — `/speckit.security-review.full`
 
 ```
-/speckit.security-review.full
+/speckit.security-review.plan
 ```
 
 ---
