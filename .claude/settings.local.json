@@ -30,7 +30,11 @@
       "Bash(grep -E '\\\\.\\(php|js\\)$')",
       "Bash(grep -nB1 -A1 'permission_callback' admin/Partials/ApplicationPasswords.php)",
       "Bash(grep *)",
-      "Bash(php -l includes/Database/MCPServer/Table.php)"
+      "Bash(php -l includes/Database/MCPServer/Table.php)",
+      "Bash(command -v gh)",
+      "Bash(gh auth *)",
+      "Bash(gh pr create --base feature/issue-3 --head 002-admin-ui --title 'feat\\(002\\): admin UI — Phase 2 implementation' --body ' *)",
+      "Bash(GIT_BRANCH_NAME=004-mcp-clients .specify/extensions/git/scripts/bash/create-new-feature.sh *)"
     ]
   },
   "enabledMcpjsonServers": [

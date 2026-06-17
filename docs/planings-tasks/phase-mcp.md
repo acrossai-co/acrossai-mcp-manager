@@ -174,6 +174,7 @@ Files: includes/MCPClients/*.php
 
 ### Step 2 — `/speckit.plan`
 
+
 ```
 /speckit.plan
 
