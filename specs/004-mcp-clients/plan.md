@@ -113,18 +113,20 @@ includes/
 │   └── VSCodeClient.php                 # NEW — array snippet
 
 tests/                                    # PREREQUISITE (Phase 2 RT-4 or this phase's T000)
+├── bootstrap.php                        # NEW — composer autoload only (NO WordPress; SC-003)
 └── phpunit/
     └── MCPClients/
-        ├── AbstractMCPClientTest.php    # NEW — helpers (build_server_url, derive_server_key, redact_token, get_all_clients)
-        ├── ClaudeCodeClientTest.php     # NEW — golden-fixture: with token + empty token
-        ├── ClaudeDesktopClientTest.php  # ...
-        └── …                            # one test class per concrete client
+        ├── AbstractMCPClientTest.php    # NEW — helpers (build_server_url, derive_server_key, safe_token, redact_token, get_all_clients)
+        ├── ConcreteClientsTest.php      # NEW — ONE parameterized class covering all 7 concrete clients via #[DataProvider]
+        │                                #       (chose this over 7 per-client classes — DRY across identical test bodies)
         └── fixtures/
-            ├── claude-code-with-token.txt
-            ├── claude-code-empty-token.txt
-            ├── claude-desktop-with-token.json
+            ├── claude-code-with-token.txt    # 14 golden-fixture files total:
+            ├── claude-code-empty-token.txt   #   - claude-code: .txt (string CLI command)
+            ├── claude-desktop-with-token.json#   - other 6 clients: .json (array envelope)
             ├── claude-desktop-empty-token.json
-            └── …
+            └── …                             # 2 fixtures per concrete client (with-token + empty-token)
+
+phpunit.xml.dist                          # NEW — testsuite "mcpclients"; no WP-PHPUnit; no test DB
 
 # DOWNSTREAM CONSUMER (NOT in this phase — Phase 2 RT-3 amendment):
 # admin/Partials/ApplicationPasswords.php::render_for_server()

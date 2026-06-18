@@ -42,9 +42,9 @@ extensibility · **US4**=architectural purity.
 
 **Purpose**: Pre-flight checks before any code change.
 
-- [ ] T001 Verify the feature directory is intact — `specs/004-mcp-clients/{spec,plan,research,quickstart,security-review-plan,security-constraints,governance-summary,memory-synthesis}.md` and `checklists/requirements.md` all present
-- [ ] T002 [P] Confirm `phpcs.xml.dist` Phase 1 baseline exclusions still apply (D5 — filename casing, `$_instance` prefix, file docblocks). MCPClient files will hit `$_instance`-related rules only if they violate FR-009; no new exclusions should be needed.
-- [ ] T003 [P] Confirm `composer.json` PSR-4 mapping (`"AcrossAI_MCP_Manager\\Includes\\": "includes/"`) is intact. The new `includes/MCPClients/*.php` files will autoload through that mapping without composer.json edits.
+- [x] T001 Verify the feature directory is intact — `specs/004-mcp-clients/{spec,plan,research,quickstart,security-review-plan,security-constraints,governance-summary,memory-synthesis}.md` and `checklists/requirements.md` all present
+- [x] T002 [P] Confirm `phpcs.xml.dist` Phase 1 baseline exclusions still apply (D5 — filename casing, `$_instance` prefix, file docblocks). MCPClient files will hit `$_instance`-related rules only if they violate FR-009; no new exclusions should be needed.
+- [x] T003 [P] Confirm `composer.json` PSR-4 mapping (`"AcrossAI_MCP_Manager\\Includes\\": "includes/"`) is intact. The new `includes/MCPClients/*.php` files will autoload through that mapping without composer.json edits.
 
 ---
 
@@ -54,10 +54,10 @@ extensibility · **US4**=architectural purity.
 
 **⚠️ CRITICAL**: No user story work may begin until **T004** passes.
 
-- [ ] T004 **P0 GATE — STOP if it fails**: Verify the PHPUnit harness exists. Required: `tests/phpunit/` directory, `phpunit.xml.dist` config, `vendor/bin/phpunit` binary, and a bootstrap that PSR-4-loads `AcrossAI_MCP_Manager\Includes\*` **without** loading WordPress (SC-003). If absent, escalate as the Phase 2 RT-4 follow-up dependency from the architecture review — do NOT bundle harness setup into this phase.
-- [ ] T005 Create directory `includes/MCPClients/` (no files yet)
-- [ ] T006 [P] Create directory `tests/phpunit/MCPClients/` and `tests/phpunit/MCPClients/fixtures/`
-- [ ] T007 [P] After T005, run `composer dump-autoload` to refresh the classmap so the empty `includes/MCPClients/` directory is autoloader-discoverable (or confirm PSR-4 reflection handles it automatically — `automattic/jetpack-autoloader` does)
+- [x] T004 **P0 GATE — STOP if it fails**: Verify the PHPUnit harness exists. Required: `tests/phpunit/` directory, `phpunit.xml.dist` config, `vendor/bin/phpunit` binary, and a bootstrap that PSR-4-loads `AcrossAI_MCP_Manager\Includes\*` **without** loading WordPress (SC-003). If absent, escalate as the Phase 2 RT-4 follow-up dependency from the architecture review — do NOT bundle harness setup into this phase.
+- [x] T005 Create directory `includes/MCPClients/` (no files yet)
+- [x] T006 [P] Create directory `tests/phpunit/MCPClients/` and `tests/phpunit/MCPClients/fixtures/`
+- [x] T007 [P] After T005, run `composer dump-autoload` to refresh the classmap so the empty `includes/MCPClients/` directory is autoloader-discoverable (or confirm PSR-4 reflection handles it automatically — `automattic/jetpack-autoloader` does)
 
 **Checkpoint**: Foundation ready — directories exist, harness verified, no code written yet. User stories can begin.
 
@@ -77,7 +77,7 @@ when no concrete classes exist yet (verified separately in Phase 4).
 
 ### Implementation for User Story 2 (base class)
 
-- [ ] T008 [US2] Implement `includes/MCPClients/AbstractMCPClient.php` per spec FR-001/FR-002/FR-003 + plan §Method signatures + research.md R2/R3/R4:
+- [x] T008 [US2] Implement `includes/MCPClients/AbstractMCPClient.php` per spec FR-001/FR-002/FR-003 + plan §Method signatures + research.md R2/R3/R4:
   1. Namespace `AcrossAI_MCP_Manager\Includes\MCPClients`
   2. `defined( 'ABSPATH' ) || exit;` guard (kept so the file is safe inside WP; tests bypass via composer autoload)
   3. Three abstract methods: `get_client_slug(): string`, `get_client_name(): string`, `get_config_snippet(string $server_url, string $auth_token): string|array`
@@ -89,7 +89,7 @@ when no concrete classes exist yet (verified separately in Phase 4).
 
 ### Tests for User Story 2 (base class)
 
-- [ ] T009 [US2] Implement `tests/phpunit/MCPClients/AbstractMCPClientTest.php` covering all helpers (one test file = sequential edits within the file, so NOT marked [P]):
+- [x] T009 [US2] Implement `tests/phpunit/MCPClients/AbstractMCPClientTest.php` covering all helpers (one test file = sequential edits within the file, so NOT marked [P]):
   - `testDeriveServerKeyMatrix` — assert all 7 input/output pairs from research.md R2 table
   - `testSafeTokenReturnsPlaceholderOnEmpty` — `assertSame('(paste generated password here)', $sut->safe_token(''))`
   - `testSafeTokenReturnsRawOnNonEmpty` — `assertSame('xyz', $sut->safe_token('xyz'))`
@@ -124,21 +124,22 @@ verbatim.
 
 ### Implementation for User Story 2 (concrete clients)
 
-For each task below, the deliverable is **3-4 new files**:
+For each task below, the deliverable is **3 new files** per client:
 1. `includes/MCPClients/<Name>Client.php` — concrete subclass with `get_client_slug()`, `get_client_name()`, `get_config_snippet()`
-2. `tests/phpunit/MCPClients/<Name>ClientTest.php` — slug + name + snippet-with-token + snippet-empty-token assertions
-3. `tests/phpunit/MCPClients/fixtures/<slug>-with-token.{json,txt}` — golden fixture for non-empty token
-4. `tests/phpunit/MCPClients/fixtures/<slug>-empty-token.{json,txt}` — golden fixture for empty token (verifies safe_token() placeholder substitution)
+2. `tests/phpunit/MCPClients/fixtures/<slug>-with-token.{json,txt}` — golden fixture for non-empty token
+3. `tests/phpunit/MCPClients/fixtures/<slug>-empty-token.{json,txt}` — golden fixture for empty token (verifies safe_token() placeholder substitution)
 
 The fixture file extension follows the return type: `.json` for array-returning clients (most), `.txt` for string-returning clients (Claude Code only).
 
-- [ ] T010 [P] [US2] **ClaudeCodeClient** (string return — CLI install command) — implement `includes/MCPClients/ClaudeCodeClient.php` (slug `claude-code`, name `"Claude Code"`); snippet shape: `claude mcp add <derive_server_key($url)> -- npx -y @automattic/mcp-wordpress-remote@latest` with shell-escaped env vars for `WP_API_URL` and `WP_API_PASSWORD`. Add `tests/phpunit/MCPClients/ClaudeCodeClientTest.php` + `fixtures/claude-code-with-token.txt` + `fixtures/claude-code-empty-token.txt`.
-- [ ] T011 [P] [US2] **ClaudeDesktopClient** (array, `mcpServers` envelope) — implement `includes/MCPClients/ClaudeDesktopClient.php` (slug `claude-desktop`, name `"Claude Desktop"`); snippet shape per research.md R1 with top-level key `mcpServers`. Add `ClaudeDesktopClientTest.php` + `fixtures/claude-desktop-with-token.json` + `fixtures/claude-desktop-empty-token.json`.
-- [ ] T012 [P] [US2] **CodexClient** (array, `mcpServers` envelope) — implement `includes/MCPClients/CodexClient.php` (slug `codex`, name `"Codex"`); target `~/.codex/config.json`. Add `CodexClientTest.php` + 2 fixtures.
-- [ ] T013 [P] [US2] **CursorClient** (array, `mcpServers` envelope) — implement `includes/MCPClients/CursorClient.php` (slug `cursor`, name `"Cursor"`); target `~/.cursor/mcp.json`. Add `CursorClientTest.php` + 2 fixtures.
-- [ ] T014 [P] [US2] **CustomClient** (array, `mcpServers` envelope, generic template) — implement `includes/MCPClients/CustomClient.php` (slug `custom`, name `"Custom Client"`); snippet includes a comment explaining the user should adapt the envelope to their MCP-compatible tool. Add `CustomClientTest.php` + 2 fixtures.
-- [ ] T015 [P] [US2] **GitHubCopilotClient** (array, `mcp.servers` namespaced envelope) — implement `includes/MCPClients/GitHubCopilotClient.php` (slug `github-copilot`, name `"GitHub Copilot"`); snippet shape: `[ 'mcp' => [ 'servers' => [ $key => $inner ] ] ]` per Copilot preview spec. Add `GitHubCopilotClientTest.php` + 2 fixtures.
-- [ ] T016 [P] [US2] **VSCodeClient** (array, `mcp.servers` envelope) — implement `includes/MCPClients/VSCodeClient.php` (slug `vscode`, name `"VS Code"`); target `.vscode/mcp.json`. Add `VSCodeClientTest.php` + 2 fixtures.
+**Test class** (one shared file, not per-client): `tests/phpunit/MCPClients/ConcreteClientsTest.php` covers all 7 clients via PHPUnit's `#[DataProvider]` attribute. This consolidation (chosen during implementation 2026-06-17) keeps the 7 identical test bodies DRY while still asserting per-client slug/name/snippet correctness. The tasks below name "ClientTest.php" historically — read those as "add the client's data-provider row to ConcreteClientsTest.php".
+
+- [x] T010 [P] [US2] **ClaudeCodeClient** (string return — CLI install command) — implement `includes/MCPClients/ClaudeCodeClient.php` (slug `claude-code`, name `"Claude Code"`); snippet shape: `claude mcp add <derive_server_key($url)> -- npx -y @automattic/mcp-wordpress-remote@latest` with shell-escaped env vars for `WP_API_URL` and `WP_API_PASSWORD`. Add `tests/phpunit/MCPClients/ClaudeCodeClientTest.php` + `fixtures/claude-code-with-token.txt` + `fixtures/claude-code-empty-token.txt`.
+- [x] T011 [P] [US2] **ClaudeDesktopClient** (array, `mcpServers` envelope) — implement `includes/MCPClients/ClaudeDesktopClient.php` (slug `claude-desktop`, name `"Claude Desktop"`); snippet shape per research.md R1 with top-level key `mcpServers`. Add `ClaudeDesktopClientTest.php` + `fixtures/claude-desktop-with-token.json` + `fixtures/claude-desktop-empty-token.json`.
+- [x] T012 [P] [US2] **CodexClient** (array, `mcpServers` envelope) — implement `includes/MCPClients/CodexClient.php` (slug `codex`, name `"Codex"`); target `~/.codex/config.json`. Add `CodexClientTest.php` + 2 fixtures.
+- [x] T013 [P] [US2] **CursorClient** (array, `mcpServers` envelope) — implement `includes/MCPClients/CursorClient.php` (slug `cursor`, name `"Cursor"`); target `~/.cursor/mcp.json`. Add `CursorClientTest.php` + 2 fixtures.
+- [x] T014 [P] [US2] **CustomClient** (array, `mcpServers` envelope, generic template) — implement `includes/MCPClients/CustomClient.php` (slug `custom`, name `"Custom Client"`); snippet includes a comment explaining the user should adapt the envelope to their MCP-compatible tool. Add `CustomClientTest.php` + 2 fixtures.
+- [x] T015 [P] [US2] **GitHubCopilotClient** (array, `mcp.servers` namespaced envelope) — implement `includes/MCPClients/GitHubCopilotClient.php` (slug `github-copilot`, name `"GitHub Copilot"`); snippet shape: `[ 'mcp' => [ 'servers' => [ $key => $inner ] ] ]` per Copilot preview spec. Add `GitHubCopilotClientTest.php` + 2 fixtures.
+- [x] T016 [P] [US2] **VSCodeClient** (array, `mcp.servers` envelope) — implement `includes/MCPClients/VSCodeClient.php` (slug `vscode`, name `"VS Code"`); target `.vscode/mcp.json`. Add `VSCodeClientTest.php` + 2 fixtures.
 
 **Checkpoint**: All 7 concrete clients implemented with tests and
 fixtures. Phase 3's `testGetAllClientsReturnsEmptyWhenNoConcreteClasses`
@@ -157,8 +158,8 @@ the envelope shape matches the AI tool's expectations.
 `vendor/autoload.php`, instantiates `ClaudeDesktopClient`, calls
 `get_config_snippet()`, and asserts the output structure.
 
-- [ ] T017 [US1] Update `AbstractMCPClientTest::testGetAllClientsReturnsEmptyWhenNoConcreteClasses` from Phase 3 to `testGetAllClientsReturnsExactlySevenClients`; add `testGetAllClientsReturnsSortedSlugs` (asserts alphabetical order by slug). Re-run the full test suite.
-- [ ] T018 [US1] Run quickstart.md §6 smoke (without WP bootstrap):
+- [x] T017 [US1] Update `AbstractMCPClientTest::testGetAllClientsReturnsEmptyWhenNoConcreteClasses` from Phase 3 to `testGetAllClientsReturnsExactlySevenClients`; add `testGetAllClientsReturnsSortedSlugs` (asserts alphabetical order by slug). Re-run the full test suite.
+- [x] T018 [US1] Run quickstart.md §6 smoke (without WP bootstrap):
    ```bash
    php -r 'require_once "vendor/autoload.php"; $c = new \AcrossAI_MCP_Manager\Includes\MCPClients\ClaudeDesktopClient(); var_dump($c->get_config_snippet("https://example.com/wp-json/mcp/test-server", "secret123"));'
    ```
@@ -180,7 +181,7 @@ without code changes elsewhere.
 `includes/MCPClients/`, re-run `get_all_clients()`, assert count is 8;
 remove the stub, assert count is 7.
 
-- [ ] T019 [US3] Create a temporary stub file `includes/MCPClients/_TestExtensibilityStubClient.php` (note the underscore prefix to distinguish from real clients — implementer may use any name); make it extend `AbstractMCPClient` and implement the 3 required methods with trivial returns. Run `php -r 'require_once "vendor/autoload.php"; var_dump( count( \AcrossAI_MCP_Manager\Includes\MCPClients\AbstractMCPClient::get_all_clients() ) );'` — expect 8. Delete the stub file. Re-run — expect 7. **Result MUST be auto-discovery worked without any other file edit.** Document the result in a one-line comment in `tests/phpunit/MCPClients/fixtures/_extensibility-check.md` (or equivalent).
+- [x] T019 [US3] Create a temporary stub file `includes/MCPClients/_TestExtensibilityStubClient.php` (note the underscore prefix to distinguish from real clients — implementer may use any name); make it extend `AbstractMCPClient` and implement the 3 required methods with trivial returns. Run `php -r 'require_once "vendor/autoload.php"; var_dump( count( \AcrossAI_MCP_Manager\Includes\MCPClients\AbstractMCPClient::get_all_clients() ) );'` — expect 8. Delete the stub file. Re-run — expect 7. **Result MUST be auto-discovery worked without any other file edit.** Document the result in a one-line comment in `tests/phpunit/MCPClients/fixtures/_extensibility-check.md` (or equivalent).
 
 **Checkpoint**: SC-002 verified. No spec change needed; behavior
 matches FR-010.
@@ -195,9 +196,9 @@ singleton.
 
 **Independent Test**: Three greps. All MUST return empty.
 
-- [ ] T020 [US4] FR-008 grep gate: `grep -rnE 'add_action|add_filter|\$wpdb|wp_remote_(get|post)|setcookie|^[^*/]*\b(echo|print)\b' includes/MCPClients/` MUST return empty. If any match found, the implementation regressed — fix before merging.
-- [ ] T021 [US4] FR-009 grep gate: `grep -rn 'public static function instance' includes/MCPClients/` MUST return empty (no singleton ceremony). Then `grep -rn 'public static function get_all_clients' includes/MCPClients/` MUST return exactly 1 match (the AbstractMCPClient static factory).
-- [ ] T022 [US4] SC-003 verification: `vendor/bin/phpunit tests/phpunit/MCPClients/` MUST run to completion WITHOUT `wp-config.php` or `wp-load.php` being in the include path or having been required. Inspect the test bootstrap to confirm.
+- [x] T020 [US4] FR-008 grep gate: `grep -rnE 'add_action|add_filter|\$wpdb|wp_remote_(get|post)|setcookie|^[^*/]*\b(echo|print)\b' includes/MCPClients/` MUST return empty. If any match found, the implementation regressed — fix before merging.
+- [x] T021 [US4] FR-009 grep gate: `grep -rn 'public static function instance' includes/MCPClients/` MUST return empty (no singleton ceremony). Then `grep -rn 'public static function get_all_clients' includes/MCPClients/` MUST return exactly 1 match (the AbstractMCPClient static factory).
+- [x] T022 [US4] SC-003 verification: `vendor/bin/phpunit tests/phpunit/MCPClients/` MUST run to completion WITHOUT `wp-config.php` or `wp-load.php` being in the include path or having been required. Inspect the test bootstrap to confirm.
 
 **Checkpoint**: All three purity invariants verified by grep + test
 run. Architectural contract holds.
@@ -211,14 +212,14 @@ parallelizable static-analysis or doc updates.
 
 ### Required verification gates
 
-- [ ] T023 [P] FR-007 slug uniqueness check: run the inline PHP one-liner from quickstart.md §5 — `array_unique()` of all `get_client_slug()` returns MUST equal the original array length (7).
-- [ ] T024 [P] Run `vendor/bin/phpcs includes/MCPClients/` — expected **0 errors, 0 warnings**. Phase 1 baseline exclusions in `phpcs.xml.dist` remain authoritative.
-- [ ] T025 [P] Run `vendor/bin/phpstan analyse includes/MCPClients/ --level=8` — expected **0 errors**.
-- [ ] T026 [P] Run `vendor/bin/phpunit tests/phpunit/MCPClients/` — expected **all green** (8 test classes: AbstractMCPClientTest + 7 concrete).
-- [ ] T027 [P] Run `npm run validate-packages` — expected **pass** (Constitution §VI DoD gate; no new npm packages introduced by this phase).
-- [ ] T028 Execute the full quickstart.md walk (§1–§7) end-to-end and confirm each step's expected output.
-- [ ] T029 Mark spec.md §Success Criteria → Definition of Done Gates checkboxes complete; mark plan.md Status as "Ready for review" — Phase 4 ships.
-- [ ] T030 Hand off to Phase 2 RT-3 amendment: the consumer (`Admin\Partials\ApplicationPasswords::render_for_server`) can now call `AbstractMCPClient::get_all_clients()` and iterate. Add a follow-up note in `data-model.md` (Phase 2's, not this phase's) pointing at this phase's `security-review-plan.md` SEC-INFO-002 for the consumer-escape grep gate.
+- [x] T023 [P] FR-007 slug uniqueness check: run the inline PHP one-liner from quickstart.md §5 — `array_unique()` of all `get_client_slug()` returns MUST equal the original array length (7).
+- [x] T024 [P] Run `vendor/bin/phpcs includes/MCPClients/` — expected **0 errors, 0 warnings**. Phase 1 baseline exclusions in `phpcs.xml.dist` remain authoritative.
+- [x] T025 [P] Run `vendor/bin/phpstan analyse includes/MCPClients/ --level=8` — expected **0 errors**.
+- [x] T026 [P] Run `vendor/bin/phpunit tests/phpunit/MCPClients/` — expected **all green** (8 test classes: AbstractMCPClientTest + 7 concrete).
+- [x] T027 [P] Run `npm run validate-packages` — expected **pass** (Constitution §VI DoD gate; no new npm packages introduced by this phase).
+- [x] T028 Execute the full quickstart.md walk (§1–§7) end-to-end and confirm each step's expected output.
+- [x] T029 Mark spec.md §Success Criteria → Definition of Done Gates checkboxes complete; mark plan.md Status as "Ready for review" — Phase 4 ships.
+- [x] T030 Hand off to Phase 2 RT-3 amendment: the consumer (`Admin\Partials\ApplicationPasswords::render_for_server`) can now call `AbstractMCPClient::get_all_clients()` and iterate. Add a follow-up note in `data-model.md` (Phase 2's, not this phase's) pointing at this phase's `security-review-plan.md` SEC-INFO-002 for the consumer-escape grep gate.
 
 ---
 

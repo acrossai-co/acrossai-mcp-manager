@@ -29,6 +29,7 @@ This is a compact routing map for durable memory. Keep it short. It points to so
 | A8 | Access control wiring (Phase 7) MUST use \WPBoilerplate\AccessControl\AccessControlManager vendor package | Phase 7 | access-control, vendor | ARCHITECTURE.md |
 | A9 | Shared admin constants (read by ≥2 modules) live in includes/Utilities/ as a final class, NOT on sibling feature classes | Plugin-wide | constants, coupling, utilities | ARCHITECTURE.md |
 | A10 | WP_List_Table subclasses are exempted from the singleton-only rule — public ctor required by parent; instantiated per-render; never Loader-wired | Admin | list-table, singleton, exception | ARCHITECTURE.md |
+| A11 | Pure service classes (stateless value producers, e.g. includes/MCPClients/) exempted from singleton rule — no instance state, no ctor args, no hook registration | Plugin-wide | singleton, service-class, exception, pure | ARCHITECTURE.md |
 
 ## Bug Patterns
 | ID | Pattern | Affected Area | Tags | Source |

@@ -270,3 +270,40 @@ The exception MUST be documented in the class file's PHPDoc with a pointer to th
 **Tradeoffs**:
 - Gained: list tables work the WP-native way without contortions; admin pages render correctly with the canonical WP table UX
 - Reconsider: never. This is a structural WP-core constraint, not a preference
+
+## Pure Service Classes Are Exempted From the Singleton Rule (A11) [Feature-004, 2026-06-18]
+
+**Status**: Active
+
+**Why durable**: Constitution A2 mandates singleton + private `__construct` for every feature class. But classes that (a) hold no instance state, (b) take no constructor arguments, and (c) produce deterministic output from inputs alone — i.e. **pure value producers** — gain nothing from sharing a single instance. A singleton would add ceremony (`$_instance`, `instance()`, private ctor) for zero benefit AND create a "must this be unit-tested with the singleton state reset?" question that doesn't exist when each test instantiates fresh.
+
+**Architecture Rule**: Classes in `includes/MCPClients/` (and equivalent stateless-value-producer modules under `includes/Utilities/` or similar) are exempted from the singleton-only rule because:
+
+1. They hold no instance state — every method returns a deterministic function of its inputs alone
+2. They take no constructor arguments — `new ClientName()` is sufficient at every use-site
+3. They are instantiated per-use (typically per render or per request), never wired into hooks via the Loader — so the B5 double-hook risk does not apply
+4. They are trivially unit-testable WITHOUT a state-reset dance (each test creates fresh instances)
+
+The exception MUST be documented in the class file's PHPDoc with a pointer to this entry. Example (from `includes/MCPClients/AbstractMCPClient.php`):
+
+```php
+/**
+ * Constitutional invariants (FR-008, FR-009):
+ *   - No singleton pattern — instances are stateless and interchangeable.
+ *
+ * The singleton exemption is justified parallel to A10 (WP_List_Table
+ * subclasses): different rationale (no instance state to share), same
+ * outcome (not every class in the codebase is a singleton).
+ * See docs/memory/ARCHITECTURE.md (A11).
+ */
+```
+
+**How to tell whether a class qualifies for A11**:
+- Has zero `private $_property` declarations beyond const? → A11 eligible
+- Constructor takes arguments OR mutates state? → NOT A11 eligible; A2 applies
+- Wired into hooks via the Loader? → NOT A11 eligible; B5 risk applies; A2 applies
+- All methods return values that depend only on parameters? → A11 eligible
+
+**Tradeoffs**:
+- Gained: pure service classes are trivial to test, trivial to instantiate, immune to test-pollution bugs; module is easier to refactor because there's no shared instance to break
+- Reconsider: never *unless* a "pure service class" grows instance state — at that point it ceases to qualify for A11, and A2's singleton rule applies again. If you find yourself adding `private $_x` to an A11 class, also add `$_instance` + `instance()` + private ctor in the same commit.

@@ -205,8 +205,18 @@ service classes are also trivially unit-testable.
     string $auth_token): string|array` — the copy-paste payload the user
     pastes into their AI tool
 
-- **FR-002**: `AbstractMCPClient` MUST provide three `protected` helper
-  methods for use by subclasses:
+- **FR-002**: `AbstractMCPClient` MUST declare two `public const` for
+  canonical strings (so subclasses and consumers can reference them by
+  name rather than re-quoting literals):
+  - `EMPTY_TOKEN_PLACEHOLDER = '(paste generated password here)'` — the
+    literal the snippet renders in the token slot when `$auth_token` is
+    empty (Q2 clarification 2026-06-17).
+  - `SERVER_KEY_FALLBACK = 'wordpress-mcp'` — the literal
+    `derive_server_key()` returns when the URL has no usable path
+    segment.
+
+  And MUST provide **four** `protected` helper methods for use by
+  subclasses:
   - `protected function build_server_url(string $base_rest_url, string
     $route_namespace, string $route): string` — concatenates a base
     `rest_url()` value (passed in by the caller, not derived) with the
@@ -216,15 +226,22 @@ service classes are also trivially unit-testable.
     parses `$server_url`, strips any query string and trailing slash, and
     returns the final path segment (e.g.
     `https://example.com/wp-json/mcp/wordpress-default-server` →
-    `wordpress-default-server`). Falls back to the literal string
-    `'wordpress-mcp'` when the URL has no usable path segment or is
-    unparsable. Used by JSON-envelope clients to populate the inner
-    `mcpServers: { <KEY>: {...} }` key per Q1 clarification 2026-06-17.
+    `wordpress-default-server`). Falls back to `SERVER_KEY_FALLBACK` when
+    the URL has no usable path segment or is unparsable. Used by JSON-
+    envelope clients to populate the inner `mcpServers: { <KEY>: {...} }`
+    key per Q1 clarification 2026-06-17.
+  - `protected function safe_token(string $token): string` — returns the
+    token verbatim when non-empty, or `EMPTY_TOKEN_PLACEHOLDER` when
+    empty. This is the **only** path that emits plaintext to a snippet;
+    every concrete client MUST call `$this->safe_token($auth_token)` at
+    the token slot rather than embedding `$auth_token` directly. Q2
+    clarification 2026-06-17.
   - `protected function redact_token(string $token): string` — returns a
     log-safe representation of a token: the first 4 characters followed
     by `'…' . substr($token, -2)` (or `'(empty)'` when the token is empty).
     Used by client implementations for log lines / debug strings — never
-    for the actual snippet payload.
+    for the actual snippet payload. **Do NOT confuse** with `safe_token` —
+    `redact_token` is log-only; `safe_token` is snippet-output-only.
 
 - **FR-003**: `AbstractMCPClient` MUST NOT register any WordPress hooks,
   declare any `add_action`/`add_filter` calls, take any constructor
@@ -265,10 +282,12 @@ service classes are also trivially unit-testable.
   `$server_url` and `$auth_token` provided by the caller — never embed
   hardcoded URLs, never read environment variables for the token, never
   consult `get_option()` for the password. When `$auth_token === ''`,
-  the token slot MUST contain the literal string
-  `'(paste generated password here)'` instead of an empty value (Q2
-  clarification 2026-06-17). Golden fixtures for the empty-token case
-  pin this exact substitution.
+  the token slot MUST contain `AbstractMCPClient::EMPTY_TOKEN_PLACEHOLDER`
+  (the literal `'(paste generated password here)'`) instead of an empty
+  value (Q2 clarification 2026-06-17). In practice this is enforced by
+  every concrete client calling `$this->safe_token($auth_token)` at the
+  token slot (FR-002). Golden fixtures for the empty-token case pin this
+  exact substitution.
 
 - **FR-007**: Each concrete client's `get_client_slug()` return value MUST
   be **kebab-case, lowercase, and ASCII-only** (matches FR-004 list). Slugs
@@ -401,21 +420,21 @@ state and read no options, transients, or user-meta.
 
 All of the following MUST pass before this feature is considered complete:
 
-- [ ] PHPCS validation: zero errors and zero warnings (`vendor/bin/phpcs
-      includes/MCPClients/`)
-- [ ] PHPStan level 8: zero errors (`vendor/bin/phpstan analyse
-      includes/MCPClients/ --level=8`)
-- [ ] PHPUnit tests written and passing for `AbstractMCPClient`'s helpers
+- [x] PHPCS validation: zero errors and zero warnings (`vendor/bin/phpcs
+      includes/MCPClients/`) — **verified 2026-06-17**
+- [x] PHPStan level 8: zero errors (`vendor/bin/phpstan analyse
+      includes/MCPClients/ --level=8`) — **verified 2026-06-17**
+- [x] PHPUnit tests written and passing for `AbstractMCPClient`'s helpers
       and for each of the 7 concrete clients (golden-fixture snippet
-      assertions)
-- [ ] `grep -rnE 'add_action|add_filter|\$wpdb|wp_remote_(get|post)|setcookie' includes/MCPClients/` returns zero matches (FR-008)
-- [ ] `grep -rn 'public static function instance' includes/MCPClients/`
-      returns zero matches (FR-009)
-- [ ] All 7 concrete classes file-exist and declare the required
-      namespace (FR-012)
-- [ ] All 7 concrete `get_client_slug()` returns are unique (FR-007)
-- [ ] `npm run validate-packages` passes
-- [ ] All standards in `AGENTS.md` are met
+      assertions) — **67 tests / 111 assertions, all green 2026-06-17**
+- [x] `grep -rnE 'add_action|add_filter|\$wpdb|wp_remote_(get|post)|setcookie' includes/MCPClients/` returns zero matches (FR-008) — **verified 2026-06-17**
+- [x] `grep -rn 'public static function instance' includes/MCPClients/`
+      returns zero matches (FR-009) — **verified 2026-06-17**
+- [x] All 7 concrete classes file-exist and declare the required
+      namespace (FR-012) — **verified 2026-06-17**
+- [x] All 7 concrete `get_client_slug()` returns are unique (FR-007) — **verified 2026-06-17**
+- [ ] `npm run validate-packages` passes — (not run; this phase introduces no new npm packages)
+- [ ] All standards in `AGENTS.md` are met — (continuous; not a binary checkpoint)
 
 ### Measurable Outcomes
 

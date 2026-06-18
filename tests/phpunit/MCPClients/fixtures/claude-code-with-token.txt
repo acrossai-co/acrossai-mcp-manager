@@ -1,0 +1,1 @@
+claude mcp add 'test-server' --env WP_API_URL='https://example.com/wp-json/mcp/test-server' --env WP_API_PASSWORD='abcd EFGH ijkl MNOP' -- npx -y '@automattic/mcp-wordpress-remote@latest'

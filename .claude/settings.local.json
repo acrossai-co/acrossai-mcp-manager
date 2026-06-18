@@ -34,7 +34,22 @@
       "Bash(command -v gh)",
       "Bash(gh auth *)",
       "Bash(gh pr create --base feature/issue-3 --head 002-admin-ui --title 'feat\\(002\\): admin UI — Phase 2 implementation' --body ' *)",
-      "Bash(GIT_BRANCH_NAME=004-mcp-clients .specify/extensions/git/scripts/bash/create-new-feature.sh *)"
+      "Bash(GIT_BRANCH_NAME=004-mcp-clients .specify/extensions/git/scripts/bash/create-new-feature.sh *)",
+      "Bash(vendor/bin/phpunit --version)",
+      "Bash(vendor/bin/phpunit --list-tests)",
+      "Bash(vendor/bin/phpunit tests/phpunit/MCPClients/AbstractMCPClientTest.php)",
+      "Bash(php -r ' *)",
+      "Bash(php -r 'require_once \"vendor/autoload.php\"; echo \"autoload ok\\\\n\"; $c = class_exists\\(\"AcrossAI_MCP_Manager\\\\\\\\Includes\\\\\\\\MCPClients\\\\\\\\ClaudeDesktopClient\"\\); echo \"exists: \" . \\($c ? \"yes\" : \"no\"\\) . \"\\\\n\";')",
+      "Bash(echo \"exit: $?\")",
+      "Bash(php tests/_generate_fixtures.php)",
+      "Bash(vendor/bin/phpunit)",
+      "Bash(php -r 'require_once \"vendor/autoload.php\"; if \\(!defined\\(\"ABSPATH\"\\)\\) define\\(\"ABSPATH\", __DIR__\\); $slugs = array_map\\(fn\\($c\\) => $c->get_client_slug\\(\\), \\\\AcrossAI_MCP_Manager\\\\Includes\\\\MCPClients\\\\AbstractMCPClient::get_all_clients\\(\\)\\); echo \"slugs: \" . implode\\(\", \", $slugs\\) . \"\\\\n\"; echo \"unique: \" . \\(count\\($slugs\\) === count\\(array_unique\\($slugs\\)\\) ? \"YES\" : \"NO\"\\) . \"\\\\n\";')",
+      "Bash(php -r 'require_once \"vendor/autoload.php\"; if \\(!defined\\(\"ABSPATH\"\\)\\) define\\(\"ABSPATH\", __DIR__\\); $c = new \\\\AcrossAI_MCP_Manager\\\\Includes\\\\MCPClients\\\\ClaudeDesktopClient\\(\\); $out = $c->get_config_snippet\\(\"https://example.com/wp-json/mcp/test-server\", \"secret123\"\\); echo \"Top-level key: \" . array_key_first\\($out\\) . \"\\\\n\"; echo \"Inner key: \" . array_key_first\\($out[\"mcpServers\"]\\) . \"\\\\n\"; echo \"URL: \" . $out[\"mcpServers\"][\"test-server\"][\"env\"][\"WP_API_URL\"] . \"\\\\n\"; echo \"Token: \" . $out[\"mcpServers\"][\"test-server\"][\"env\"][\"WP_API_PASSWORD\"] . \"\\\\n\";')",
+      "Bash(vendor/bin/phpcs includes/MCPClients/)",
+      "Bash(vendor/bin/phpstan analyse *)",
+      "Bash(vendor/bin/phpcs includes/MCPClients/AbstractMCPClient.php)",
+      "Bash(vendor/bin/phpcbf includes/MCPClients/)",
+      "Bash(perl -i -pe 's/^- \\\\[ \\\\] \\(T0\\\\d\\\\d\\)/- [x] $1/' specs/004-mcp-clients/tasks.md)"
     ]
   },
   "enabledMcpjsonServers": [
