@@ -307,3 +307,23 @@ The exception MUST be documented in the class file's PHPDoc with a pointer to th
 **Tradeoffs**:
 - Gained: pure service classes are trivial to test, trivial to instantiate, immune to test-pollution bugs; module is easier to refactor because there's no shared instance to break
 - Reconsider: never *unless* a "pure service class" grows instance state — at that point it ceases to qualify for A11, and A2's singleton rule applies again. If you find yourself adding `private $_x` to an A11 class, also add `$_instance` + `instance()` + private ctor in the same commit.
+
+## Pure-PHP Modules MUST Have a WP-Free Test Bootstrap (A12) [Feature-004, 2026-06-18]
+
+**Status**: Active
+
+**Why durable**: When a module claims architectural purity (zero WordPress dependencies — no `$wpdb`, no `add_action`, no `get_option`, no `wp_*` calls), the test harness is the only thing that ACTUALLY proves the claim. A docstring asserting "this module is WP-free" is unverifiable; a test suite that loads ONLY the composer autoloader (no `wp-load.php`, no `wp-phpunit`) and successfully runs every test proves the module's claim mechanically.
+
+**Architecture Rule**: Modules under `includes/` that make "pure PHP / WP-independent" architectural claims MUST:
+
+1. Provide a `tests/bootstrap.php` that requires ONLY `vendor/autoload.php` (composer autoload). It MAY define `ABSPATH` as a constant so production files with `defined('ABSPATH') || exit;` guards still load — but that constant is the ONLY WordPress-y thing in the bootstrap.
+
+2. Configure their PHPUnit testsuite in `phpunit.xml.dist` to use this WP-free bootstrap. Future test suites for WP-dependent modules (e.g. `Database/`, `Admin/Partials/`) will need a separate `tests/bootstrap-wp.php` that loads `wp-phpunit` — that's fine; the pure modules keep their own bootstrap.
+
+3. Run their full test suite in the WP-free environment as a DoD gate (e.g. SC-003 in Feature 004). A test that needs `$wpdb` or any `wp_*` function will fail-fast; the failure IS the architectural-purity violation surfacing.
+
+**Reference implementation**: Phase 4 (`tests/bootstrap.php`, `phpunit.xml.dist` testsuite "mcpclients") proves `includes/MCPClients/` is WP-free with 67 tests / 111 assertions all green.
+
+**Tradeoffs**:
+- Gained: architectural-purity claims become testable and self-enforcing; CI can mechanically catch regressions
+- Reconsider: a module that grows a single legitimate WP dependency must either lose its purity claim (move to a separate testsuite with WP bootstrap) or refactor the dependency out. **DO NOT** add WP loading to the pure bootstrap to make one test green — that defeats the whole point of A12.

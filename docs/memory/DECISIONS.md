@@ -320,3 +320,40 @@ Feature 002 T025 (2026-06-17): `admin/Partials/ApplicationPasswords.php` ships 2
 
 **Where to look next**
 `admin/Partials/ApplicationPasswords.php` docblock for the canonical "what was deferred" note format.
+
+---
+
+### 2026-06-18 — Phase X.0 Absorption Pattern for Missing Prerequisites [Feature-004]
+
+**Status**
+Active
+
+**Why this is durable**
+This pattern has been used twice in two phases (Phase 2.0 absorbed the BerlinDB Query layer prereq; Phase 4.0 absorbed the PHPUnit harness prereq). Without naming the pattern, future phases will rediscover it ad-hoc — or worse, block waiting for "someone else" to ship the prereq.
+
+**Decision**
+When a Spec-Kit phase's P0 gate (T004 or equivalent) fails because a prerequisite shared-infrastructure piece (DB layer, test harness, build pipeline, etc.) doesn't yet exist, the implementing phase MUST absorb the prerequisite setup as a sub-phase called **"Phase X.0"** — not stop and wait for a separate phase to ship it.
+
+The sub-phase:
+- Is documented inline in the implementing phase's tasks.md (typically renaming T005-T007 to become the harness setup)
+- Is committed in the same PR as the consuming phase's implementation
+- MUST stay minimal — set up what's needed for THIS phase's work, no more
+- MUST NOT bundle scope creep ("while we're setting up the test harness, let me also add a JS test runner")
+- SHOULD note in the commit message that the sub-phase work UNBLOCKS sibling deferred tasks in other phases when applicable
+
+**Examples**:
+- **Phase 2.0** (2026-06-17): set up BerlinDB-style Query layer for `MCPServer` + `CliAuthLog` tables because the Admin UI in Phase 2 needed them. 8 files, ~828 lines. Unblocked Phase 2 itself.
+- **Phase 4.0** (2026-06-17): set up PHPUnit harness (`phpunit.xml.dist`, `tests/bootstrap.php`, `.phpunit.cache/` gitignore entry) because the MCPClients tests required it. ~60 lines. Unblocked Phase 4 AND Phase 2's 14 previously-deferred test tasks.
+
+**Tradeoffs**
+Gained: phases ship in finite time without coordination-deadlocked dependencies; sub-phase work surfaces as scope in the commit log.
+Reconsider: if the prereq is bigger than the consuming phase (e.g., setting up a full CI/CD pipeline to land one test), it's no longer a "Phase X.0" candidate — it deserves its own dedicated phase number.
+
+**Future mistake prevented**
+Don't write "TODO: shared infrastructure must exist before this phase begins" and stall the phase. Absorb it as X.0 and move forward.
+
+**Evidence**
+Feature 002 commit `cc536f7` (Phase 2.0 Query layer); Feature 004 commit `d979391` (Phase 4.0 PHPUnit harness).
+
+**Where to look next**
+`specs/002-admin-ui/spec.md` Clarifications section (Q4) for the Phase 2.0 sub-phase precedent; `specs/004-mcp-clients/governed-implementation-summary.md` for the Phase 4.0 "side benefit" framing of unblocking sibling phases.
