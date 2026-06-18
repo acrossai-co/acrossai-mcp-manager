@@ -270,3 +270,60 @@ The exception MUST be documented in the class file's PHPDoc with a pointer to th
 **Tradeoffs**:
 - Gained: list tables work the WP-native way without contortions; admin pages render correctly with the canonical WP table UX
 - Reconsider: never. This is a structural WP-core constraint, not a preference
+
+## Pure Service Classes Are Exempted From the Singleton Rule (A11) [Feature-004, 2026-06-18]
+
+**Status**: Active
+
+**Why durable**: Constitution A2 mandates singleton + private `__construct` for every feature class. But classes that (a) hold no instance state, (b) take no constructor arguments, and (c) produce deterministic output from inputs alone — i.e. **pure value producers** — gain nothing from sharing a single instance. A singleton would add ceremony (`$_instance`, `instance()`, private ctor) for zero benefit AND create a "must this be unit-tested with the singleton state reset?" question that doesn't exist when each test instantiates fresh.
+
+**Architecture Rule**: Classes in `includes/MCPClients/` (and equivalent stateless-value-producer modules under `includes/Utilities/` or similar) are exempted from the singleton-only rule because:
+
+1. They hold no instance state — every method returns a deterministic function of its inputs alone
+2. They take no constructor arguments — `new ClientName()` is sufficient at every use-site
+3. They are instantiated per-use (typically per render or per request), never wired into hooks via the Loader — so the B5 double-hook risk does not apply
+4. They are trivially unit-testable WITHOUT a state-reset dance (each test creates fresh instances)
+
+The exception MUST be documented in the class file's PHPDoc with a pointer to this entry. Example (from `includes/MCPClients/AbstractMCPClient.php`):
+
+```php
+/**
+ * Constitutional invariants (FR-008, FR-009):
+ *   - No singleton pattern — instances are stateless and interchangeable.
+ *
+ * The singleton exemption is justified parallel to A10 (WP_List_Table
+ * subclasses): different rationale (no instance state to share), same
+ * outcome (not every class in the codebase is a singleton).
+ * See docs/memory/ARCHITECTURE.md (A11).
+ */
+```
+
+**How to tell whether a class qualifies for A11**:
+- Has zero `private $_property` declarations beyond const? → A11 eligible
+- Constructor takes arguments OR mutates state? → NOT A11 eligible; A2 applies
+- Wired into hooks via the Loader? → NOT A11 eligible; B5 risk applies; A2 applies
+- All methods return values that depend only on parameters? → A11 eligible
+
+**Tradeoffs**:
+- Gained: pure service classes are trivial to test, trivial to instantiate, immune to test-pollution bugs; module is easier to refactor because there's no shared instance to break
+- Reconsider: never *unless* a "pure service class" grows instance state — at that point it ceases to qualify for A11, and A2's singleton rule applies again. If you find yourself adding `private $_x` to an A11 class, also add `$_instance` + `instance()` + private ctor in the same commit.
+
+## Pure-PHP Modules MUST Have a WP-Free Test Bootstrap (A12) [Feature-004, 2026-06-18]
+
+**Status**: Active
+
+**Why durable**: When a module claims architectural purity (zero WordPress dependencies — no `$wpdb`, no `add_action`, no `get_option`, no `wp_*` calls), the test harness is the only thing that ACTUALLY proves the claim. A docstring asserting "this module is WP-free" is unverifiable; a test suite that loads ONLY the composer autoloader (no `wp-load.php`, no `wp-phpunit`) and successfully runs every test proves the module's claim mechanically.
+
+**Architecture Rule**: Modules under `includes/` that make "pure PHP / WP-independent" architectural claims MUST:
+
+1. Provide a `tests/bootstrap.php` that requires ONLY `vendor/autoload.php` (composer autoload). It MAY define `ABSPATH` as a constant so production files with `defined('ABSPATH') || exit;` guards still load — but that constant is the ONLY WordPress-y thing in the bootstrap.
+
+2. Configure their PHPUnit testsuite in `phpunit.xml.dist` to use this WP-free bootstrap. Future test suites for WP-dependent modules (e.g. `Database/`, `Admin/Partials/`) will need a separate `tests/bootstrap-wp.php` that loads `wp-phpunit` — that's fine; the pure modules keep their own bootstrap.
+
+3. Run their full test suite in the WP-free environment as a DoD gate (e.g. SC-003 in Feature 004). A test that needs `$wpdb` or any `wp_*` function will fail-fast; the failure IS the architectural-purity violation surfacing.
+
+**Reference implementation**: Phase 4 (`tests/bootstrap.php`, `phpunit.xml.dist` testsuite "mcpclients") proves `includes/MCPClients/` is WP-free with 67 tests / 111 assertions all green.
+
+**Tradeoffs**:
+- Gained: architectural-purity claims become testable and self-enforcing; CI can mechanically catch regressions
+- Reconsider: a module that grows a single legitimate WP dependency must either lose its purity claim (move to a separate testsuite with WP bootstrap) or refactor the dependency out. **DO NOT** add WP loading to the pure bootstrap to make one test green — that defeats the whole point of A12.

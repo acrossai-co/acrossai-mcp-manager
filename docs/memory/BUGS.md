@@ -233,3 +233,40 @@ At output sites, always write `<?php echo esc_url( $post_url ); ?>` (or `esc_att
 
 **Where to look next**
 `admin/Partials/Settings.php` — every `<?php echo $post_url ?>` site has been hardened to `<?php echo esc_url( $post_url ); ?>` as of SEC-S2 (2026-06-17). Future render methods should follow that pattern.
+
+---
+
+### 2026-06-18 — PHPUnit 13+ `@dataProvider` Annotation Silently Fails [Feature-004]
+
+**Status**
+Active
+
+**Symptoms**
+A test method using `@dataProvider providerMethod` annotation throws `ArgumentCountError: Too few arguments to function ... 0 passed ... and exactly N expected` at runtime. The annotation is silently ignored by PHPUnit 10+ (and definitively in PHPUnit 13); the test runs once with no arguments instead of N times with provider data.
+
+**Root Cause**
+PHPUnit 10 deprecated annotation-style metadata in favor of native PHP attributes; PHPUnit 13 removed annotation support entirely (still parses the docblock but doesn't bind the provider). The migration is silent — no deprecation warning at test-load time.
+
+**Future mistake prevented**
+When writing PHPUnit tests in this repo (currently 13.2-dev per `composer.json`), use PHP attributes, NOT docblock annotations:
+
+```php
+// WRONG (PHPUnit 13 silently ignores)
+/**
+ * @dataProvider providerMethod
+ */
+public function testFoo( string $a, string $b ): void { ... }
+
+// CORRECT
+use PHPUnit\Framework\Attributes\DataProvider;
+#[DataProvider('providerMethod')]
+public function testFoo( string $a, string $b ): void { ... }
+```
+
+The same applies to `@depends`, `@group`, `@test`, etc. — every annotation has an attribute equivalent in `PHPUnit\Framework\Attributes\*`.
+
+**Prevention / Detection**
+PHPUnit's `--display-warnings` flag DOES surface this if enabled; otherwise the test silently fails with `ArgumentCountError`. Code review: search for `@dataProvider` (or any `@` test annotation) in new test files.
+
+**Where to look next**
+`tests/phpunit/MCPClients/AbstractMCPClientTest.php` for the canonical `#[DataProvider]` pattern + the `use PHPUnit\Framework\Attributes\DataProvider;` import.

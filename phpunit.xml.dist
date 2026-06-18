@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="vendor/phpunit/phpunit/phpunit.xsd"
+         bootstrap="tests/bootstrap.php"
+         colors="true"
+         beStrictAboutOutputDuringTests="true"
+         beStrictAboutTestsThatDoNotTestAnything="true"
+         failOnRisky="true"
+         failOnWarning="true"
+         cacheDirectory=".phpunit.cache">
+
+    <testsuites>
+        <!--
+            MCPClients: pure service classes — tests MUST run without WP
+            bootstrap (SC-003). This suite is the canonical proof of
+            FR-008 architectural purity.
+        -->
+        <testsuite name="mcpclients">
+            <directory>tests/phpunit/MCPClients</directory>
+        </testsuite>
+
+        <!--
+            Future modules add their own <testsuite> entries here.
+            Avoid wildcarded "all" suites that overlap with module suites
+            — PHPUnit warns about duplicate file inclusion.
+        -->
+    </testsuites>
+
+    <source>
+        <include>
+            <directory>includes</directory>
+        </include>
+        <exclude>
+            <directory>includes/Database</directory><!-- WP-dependent; not in 004 scope -->
+        </exclude>
+    </source>
+</phpunit>

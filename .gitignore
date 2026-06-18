@@ -21,6 +21,8 @@ Thumbs.db
 .idea
 *.sublime-project
 *.sublime-workspace
+# PHPUnit (per-developer test cache; declared in phpunit.xml.dist)
+.phpunit.cache/
 # Log files
 *.log
 /logs
