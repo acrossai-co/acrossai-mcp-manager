@@ -36,6 +36,11 @@ class Schema {
 			'failure_code'      => array( 'type' => 'string', 'default' => '',   'format' => '%s' ),
 			'auth_code_hash'    => array( 'type' => 'string', 'default' => '',   'format' => '%s' ),
 			'app_password_uuid' => array( 'type' => 'string', 'default' => '',   'format' => '%s' ),
+			// Phase 5 OAuth columns (added at DB_VERSION 0.0.2).
+			'redirect_uri'           => array( 'type' => 'string', 'default' => '', 'format' => '%s' ),
+			'code_challenge'         => array( 'type' => 'string', 'default' => '', 'format' => '%s' ),
+			'code_challenge_method'  => array( 'type' => 'string', 'default' => '', 'format' => '%s' ),
+			'scope'                  => array( 'type' => 'string', 'default' => '', 'format' => '%s' ),
 			'approved_at'       => array( 'type' => 'string', 'default' => null, 'format' => '%s' ),
 			'completed_at'      => array( 'type' => 'string', 'default' => null, 'format' => '%s' ),
 			'created_at'        => array( 'type' => 'string', 'default' => null, 'format' => '%s' ),

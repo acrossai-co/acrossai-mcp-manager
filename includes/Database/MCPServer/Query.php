@@ -56,7 +56,7 @@ class Query {
 		$where_clause = array();
 		$where_values = array();
 
-		foreach ( array( 'id', 'server_slug', 'is_enabled', 'registered_from' ) as $col ) {
+		foreach ( array( 'id', 'server_slug', 'is_enabled', 'registered_from', 'claude_connector_client_id', 'server_route' ) as $col ) {
 			if ( ! isset( $args[ $col ] ) ) {
 				continue;
 			}

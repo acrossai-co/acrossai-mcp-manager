@@ -13,7 +13,7 @@ defined( 'ABSPATH' ) || exit;
 class Table {
 
 	const TABLE_NAME        = 'acrossai_mcp_cli_auth_logs';
-	const DB_VERSION        = '0.0.1';
+	const DB_VERSION        = '0.0.2';
 	const DB_VERSION_OPTION = 'acrossai_mcp_cli_auth_log_db_version';
 
 	const CACHE_GROUP = 'acrossai_mcp';
@@ -58,6 +58,10 @@ class Table {
 			failure_code VARCHAR(100) NOT NULL DEFAULT '',
 			auth_code_hash CHAR(64) NOT NULL DEFAULT '',
 			app_password_uuid VARCHAR(64) NOT NULL DEFAULT '',
+			redirect_uri VARCHAR(500) NOT NULL DEFAULT '',
+			code_challenge CHAR(43) NOT NULL DEFAULT '',
+			code_challenge_method VARCHAR(16) NOT NULL DEFAULT '',
+			scope VARCHAR(64) NOT NULL DEFAULT '',
 			approved_at DATETIME NULL DEFAULT NULL,
 			completed_at DATETIME NULL DEFAULT NULL,
 			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,

@@ -1,0 +1,5 @@
+{
+    "resource": "{RESOURCE}",
+    "authorization_servers": ["{ISSUER}"],
+    "bearer_methods_supported": ["header"]
+}

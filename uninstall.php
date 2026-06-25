@@ -29,3 +29,25 @@
 if ( ! defined( 'WP_UNINSTALL_PLUGIN' ) ) {
 	exit;
 }
+
+global $wpdb;
+
+// Drop Phase 5 OAuth tables — uninstall is destructive by nature
+// (spec.md Edge Cases: outstanding tokens become invalid silently).
+$oauth_tables = array(
+	$wpdb->prefix . 'acrossai_mcp_oauth_tokens',
+	$wpdb->prefix . 'acrossai_mcp_oauth_audit',
+);
+foreach ( $oauth_tables as $table ) {
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.PreparedSQL.NotPrepared
+	$wpdb->query( "DROP TABLE IF EXISTS {$table}" );
+}
+
+// Clean up OAuth-related options + scheduled events.
+delete_option( 'acrossai_mcp_oauth_tokens_db_version' );
+delete_option( 'acrossai_mcp_oauth_audit_db_version' );
+wp_clear_scheduled_hook( 'acrossai_mcp_oauth_cleanup' );
+
+// NOTE: We deliberately do NOT drop `acrossai_mcp_cli_auth_logs` or
+// `acrossai_mcp_servers` — both predate Phase 5 and are owned by Phase 1/2.
+// Their teardown belongs to their respective uninstall paths.

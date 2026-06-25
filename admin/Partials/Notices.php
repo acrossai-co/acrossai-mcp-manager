@@ -130,4 +130,47 @@ class Notices {
 
 		wp_send_json_success();
 	}
+
+	/**
+	 * Render a warning when the site is not running HTTPS, per spec
+	 * §Assumptions ("warning-not-block") and Edge Case for
+	 * `client_secret` interception. Wired on `admin_notices`.
+	 *
+	 * Soft-warn only — the token endpoint still issues tokens on plain
+	 * HTTP so local-dev keeps working. Production deployments MUST
+	 * configure HTTPS.
+	 */
+	public function render_oauth_https_notice(): void {
+		if ( is_ssl() || ( defined( 'FORCE_SSL_ADMIN' ) && \FORCE_SSL_ADMIN ) ) {
+			return;
+		}
+		if ( ! current_user_can( 'manage_options' ) ) {
+			return;
+		}
+		printf(
+			'<div class="notice notice-warning"><p><strong>%s</strong> %s</p></div>',
+			esc_html__( 'AcrossAI MCP Manager:', 'acrossai-mcp-manager' ),
+			esc_html__( 'HTTPS is not configured. OAuth tokens will be issued over plaintext HTTP — passive network attackers can intercept them. Configure SSL / FORCE_SSL_ADMIN before exposing the OAuth endpoints to production traffic.', 'acrossai-mcp-manager' )
+		);
+	}
+
+	/**
+	 * Render a warning when DISABLE_WP_CRON=true so operators know the
+	 * daily OAuth cleanup will NOT run automatically. Suggests the
+	 * WP-CLI fallback `wp acrossai-mcp oauth cleanup`. Wired on
+	 * `admin_notices` (Phase 5 FR-019b follow-up).
+	 */
+	public function render_disable_wp_cron_notice(): void {
+		if ( ! ( defined( 'DISABLE_WP_CRON' ) && true === \DISABLE_WP_CRON ) ) {
+			return;
+		}
+		if ( ! current_user_can( 'manage_options' ) ) {
+			return;
+		}
+		printf(
+			'<div class="notice notice-warning"><p><strong>%s</strong> %s</p></div>',
+			esc_html__( 'AcrossAI MCP Manager:', 'acrossai-mcp-manager' ),
+			esc_html__( 'WP-Cron is disabled (DISABLE_WP_CRON=true). The daily OAuth cleanup will not run automatically. Schedule the WP-CLI command instead: wp acrossai-mcp oauth cleanup.', 'acrossai-mcp-manager' )
+		);
+	}
 }

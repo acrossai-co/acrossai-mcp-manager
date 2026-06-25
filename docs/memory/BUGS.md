@@ -270,3 +270,39 @@ PHPUnit's `--display-warnings` flag DOES surface this if enabled; otherwise the 
 
 **Where to look next**
 `tests/phpunit/MCPClients/AbstractMCPClientTest.php` for the canonical `#[DataProvider]` pattern + the `use PHPUnit\Framework\Attributes\DataProvider;` import.
+
+---
+
+### 2026-06-25 — Check-Then-Act on One-Shot Credentials MUST Use Atomic CAS [Feature-005]
+
+**Status**
+Active
+
+**Symptoms**
+Two concurrent token-redemption requests with the same auth code both succeed: both issue access tokens, defeating the anti-replay guarantee. The "code already redeemed" check from the second request reads stale data because the first request hasn't yet flipped the `completed_at` flag.
+
+**Root Cause**
+The original FR-013 wrote `SELECT … WHERE redeemed_at IS NULL` followed by `UPDATE … SET redeemed_at = NOW()`. Under concurrent requests both SELECTs return NULL at T0 (predicate evaluates BEFORE either UPDATE), then both UPDATEs flip the flag at T1 — both pass their internal "not redeemed yet" check, both issue tokens. The same SELECT-then-UPDATE race exists in ANY DB-backed one-shot credential (auth codes, magic links, password-reset tokens, single-use coupons) and is silently exploitable under concurrent load.
+
+**Fix Pattern (B10)**
+The redemption step MUST be a single SQL statement of the form:
+
+```sql
+UPDATE <table>
+SET completed_at = NOW()
+WHERE id = :id AND completed_at IS NULL
+```
+
+Then inspect `$wpdb->rows_affected`:
+- `1` → THIS request won the CAS, proceed with the privileged side effect
+- `0` → another request already redeemed; fall through to the REPLAY branch (revoke any tokens issued by the sibling winner; return error; audit the replay attempt)
+
+A `SELECT … WHERE completed_at IS NULL; if (! null) { UPDATE … }` pattern is NEVER acceptable for one-shot credentials, regardless of how short the window between SELECT and UPDATE is.
+
+**Prevention / Detection**
+- Code review gate: every new one-shot-credential redemption MUST include a concurrent-redeem PHPUnit test that runs the redemption N times against the SAME credential and asserts exactly ONE returns success (Phase 5 T054 `ConcurrentRedeemRaceTest` is the canonical shape).
+- Audit gate: ANY token issued by the winner of an inverted CAS (the rare case where the loser's request issues a duplicate via a subsequent step) MUST be revoked in the replay branch.
+- Grep gate: search for `SELECT.*WHERE.*completed_at IS NULL` followed by `UPDATE` — that's the regression pattern.
+
+**Where to look next**
+`includes/Database/CliAuthLog/Query.php::redeem_atomic` — the canonical CAS implementation. `includes/OAuth/Storage.php::redeem_authorization_code_cas` + `revoke_all_tokens_for_code` — the orchestration. `tests/phpunit/OAuth/ConcurrentRedeemRaceTest.php` — the load-bearing race test. `specs/005-oauth-connectors/spec.md` Q4 (SEC-001 amendment 2026-06-21) for the threat model.

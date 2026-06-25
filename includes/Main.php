@@ -220,6 +220,12 @@ final class Main {
 	private function load_dependencies() {
 
 		$this->loader = Loader::instance();
+
+		// Phase 5 — WP-CLI command for the OAuth cleanup sweep. Only
+		// registered when running under WP-CLI; guarded inside the helper.
+		if ( defined( 'WP_CLI' ) && \WP_CLI ) {
+			\AcrossAI_MCP_Manager\Includes\OAuth\CliCommand::register();
+		}
 	}
 
 	/**
@@ -332,6 +338,8 @@ final class Main {
 		 *   when the user clicks the X button. Nonce + manage_options gated.
 		 */
 		$this->loader->add_action( 'admin_notices', $notices, 'render_missing_adapter_notice' );
+		$this->loader->add_action( 'admin_notices', $notices, 'render_oauth_https_notice' );
+		$this->loader->add_action( 'admin_notices', $notices, 'render_disable_wp_cron_notice' );
 		$this->loader->add_action(
 			'wp_ajax_acrossai_mcp_dismiss_adapter_notice',
 			$notices,
@@ -382,13 +390,23 @@ final class Main {
 
 		$this->loader->add_action( 'wp_enqueue_scripts', $plugin_public, 'enqueue_scripts' );
 
-		// TODO (phase 3): wire Public\Partials\FrontendAuth (5 hooks).
-		// $frontend_auth = \AcrossAI_MCP_Manager\Public\Partials\FrontendAuth::instance();
-		// $this->loader->add_action( 'init', $frontend_auth, 'register_rewrite_rule' );
-		// $this->loader->add_action( 'init', $frontend_auth, 'maybe_flush_rewrite_rules', 20 );
-		// $this->loader->add_filter( 'query_vars', $frontend_auth, 'add_query_var' );
-		// $this->loader->add_action( 'wp_enqueue_scripts', $frontend_auth, 'enqueue_assets' );
-		// $this->loader->add_action( 'template_redirect', $frontend_auth, 'handle_request' );
+		/**
+		 * Phase 5 — OAuth / Claude Connectors wiring (FR-021 / A1).
+		 *
+		 * Every OAuth hook trace MUST be in this method — feature classes
+		 * never call add_action / add_filter themselves.
+		 */
+		$claude_connectors = \AcrossAI_MCP_Manager\Includes\OAuth\ClaudeConnectors::instance();
+		$this->loader->add_action( 'init', $claude_connectors, 'register_rewrite_rules' );
+		$this->loader->add_filter( 'query_vars', $claude_connectors, 'add_query_var' );
+		$this->loader->add_action( 'template_redirect', $claude_connectors, 'serve_discovery_or_authorize', 9 );
+		$this->loader->add_action( 'acrossai_mcp_oauth_cleanup', $claude_connectors, 'handle_cleanup_event' );
+
+		$token_controller = \AcrossAI_MCP_Manager\Includes\OAuth\TokenController::instance();
+		$this->loader->add_action( 'rest_api_init', $token_controller, 'register_routes' );
+
+		$bearer_auth = \AcrossAI_MCP_Manager\Includes\OAuth\BearerAuth::instance();
+		$this->loader->add_filter( 'determine_current_user', $bearer_auth, 'resolve_bearer_token', 20 );
 	}
 
 	/**

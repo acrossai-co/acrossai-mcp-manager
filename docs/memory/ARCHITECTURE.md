@@ -327,3 +327,71 @@ The exception MUST be documented in the class file's PHPDoc with a pointer to th
 **Tradeoffs**:
 - Gained: architectural-purity claims become testable and self-enforcing; CI can mechanically catch regressions
 - Reconsider: a module that grows a single legitimate WP dependency must either lose its purity claim (move to a separate testsuite with WP bootstrap) or refactor the dependency out. **DO NOT** add WP loading to the pure bootstrap to make one test green — that defeats the whole point of A12.
+
+---
+
+### 2026-06-25 — RFC-Prescribed Forms Exempted from DataForm/DataViews [Feature-005]
+
+**Status**
+Active
+
+**Why this is durable**
+A4 mandates DataForm for new admin forms. Phase 5 introduced the OAuth consent page — a plain `<form>` per RFC 6749 §4.1.1. The shape is RFC-prescribed (2 buttons, hidden inputs mirroring the authorize request), and DataForm doesn't model it cleanly. Without this carve-out, every future RFC-driven form (OpenID Connect logout, WebAuthn enrollment, etc.) would rediscover the same exemption argument.
+
+**Architecture Constraint (A13)**
+Forms whose shape is prescribed by an external RFC or W3C spec (not by project UX choice) are exempted from A4. The exemption applies when ALL three conditions hold:
+1. The page is NOT a registered admin menu page (no DataViews routing applies)
+2. The form shape is normatively specified by an external standard with a citation in the spec
+3. The standard-prescribed shape would be diluted by wrapping it in DataForm
+
+Each invocation MUST cite the standard section verbatim (e.g., "RFC 6749 §4.1.1") in the rendering class's docblock.
+
+**Tradeoffs**
+Gained: standards-conformance without UI-framework ceremony; OAuth/WebAuthn flows match what users see on every other site.
+Reconsider: if WP core ever ships a `DataForm` variant explicitly designed for OAuth/RFC-style consent pages, retire the carve-out.
+
+**Future mistake prevented**
+Don't wrap RFC-prescribed forms in DataForm "for consistency" — it breaks the canonical shape OAuth/OIDC clients expect, and review will reject the wrapping anyway.
+
+**Evidence**
+- `includes/OAuth/ClaudeConnectors.php::render_consent_form` (Phase 5)
+- `specs/005-oauth-connectors/spec.md` §Admin UI Requirements (3 rationales)
+- `specs/005-oauth-connectors/contracts/authorize-page.md` cites RFC 6749 §4.1.1
+
+**Where to look next**
+`docs/memory/ARCHITECTURE.md` A4 + A10 + A11 carve-out family; `contracts/authorize-page.md` for the canonical rendering contract.
+
+---
+
+### 2026-06-25 — WP-CLI Dispatch Classes Are A11-Style Exempt from Singleton Rule [Feature-005]
+
+**Status**
+Active
+
+**Why this is durable**
+A2 mandates singleton + private ctor for feature classes. Phase 5's `includes/OAuth/CliCommand.php` is a WP-CLI command dispatcher: stateless, registers no hooks, and is instantiated by `\WP_CLI::add_command( 'acrossai-mcp oauth', new self() )` per WP-CLI's documented pattern. Forcing it through the singleton ceremony adds zero value (WP-CLI calls each subcommand method directly) and introduces friction. This is the second stateless-utility exemption (after PKCE in the same phase), so the pattern deserves a named carve-out.
+
+**Architecture Constraint (A14)**
+A class is A14-exempt when ALL of these hold:
+1. The class exists solely to surface methods to `\WP_CLI::add_command(...)`
+2. The instance has no state (no instance properties; methods may call other singletons via `::instance()`)
+3. The class registers no WordPress hooks (no `add_action`, no `add_filter`, no Loader wiring)
+4. The class is instantiated exactly once, in a static `register()` method, via `new self()`
+5. The `register()` method is itself gated by `defined( 'WP_CLI' ) && \WP_CLI`
+
+Such classes MAY use a plain `public function` constructor (no `private` enforcement needed because they're never instantiated elsewhere). They MUST NOT be wired through `Main::define_admin_hooks()` / `define_public_hooks()`.
+
+**Tradeoffs**
+Gained: WP-CLI integration follows the framework's canonical pattern; no singleton ceremony to read past.
+Reconsider: if WP-CLI ever exposes a singleton-friendly registration API, retire the carve-out.
+
+**Future mistake prevented**
+Don't wrap WP-CLI command classes in the singleton pattern "for consistency" — it adds friction and reviewers will reject the wrapping anyway.
+
+**Evidence**
+- `includes/OAuth/CliCommand.php` — the canonical implementation (T071 in tasks.md)
+- `includes/Main.php::load_dependencies` (the WP-CLI-gated `register()` call)
+- Pattern parallel: `includes/OAuth/PKCE.php` (A11 exemption — same shape, different motivation)
+
+**Where to look next**
+`docs/memory/INDEX.md` A11 (pure service classes) — the precedent carve-out from Feature-004; the two together form a named exemption family.
