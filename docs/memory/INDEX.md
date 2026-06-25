@@ -35,6 +35,7 @@ This is a compact routing map for durable memory. Keep it short. It points to so
 | A12 | Pure-PHP modules claiming WP-independence MUST have a tests/bootstrap.php that loads ONLY composer autoload — the test harness is the proof of the architectural claim | Plugin-wide | test-harness, purity, bootstrap, wp-free | ARCHITECTURE.md |
 | A13 | RFC-prescribed forms (e.g. OAuth consent) are exempted from A4 DataForm mandate — cite the RFC section in the rendering class docblock | Admin UI | data-form, rfc, oauth, exception | ARCHITECTURE.md |
 | A14 | WP-CLI dispatch classes follow A11-style exemption — stateless, no singleton, instantiated via `new self()` inside `\WP_CLI::add_command()` | Plugin-wide | wp-cli, singleton, exception, pure | ARCHITECTURE.md |
+| A15 | Database-namespace audit-recorder static helpers (e.g. `<Module>\Recorder`) follow A11/A14 family — stateless static methods wrap `Query::add_item` for audit writes inside `try/catch` | Database, audit | recorder, audit, singleton, exception, pure | ARCHITECTURE.md |
 
 ## Bug Patterns
 | ID | Pattern | Affected Area | Tags | Source |
@@ -49,6 +50,7 @@ This is a compact routing map for durable memory. Keep it short. It points to so
 | B8 | "// esc_url'd above" comments don't enforce escaping — re-escape at output point even if redundant (esc_* is idempotent) | Admin Partials renders | xss, escaping, defense-in-depth | BUGS.md |
 | B9 | PHPUnit 13+ silently ignores `@dataProvider` annotations — use `#[DataProvider]` PHP attribute instead. Same for `@depends`, `@group`, `@test` | PHPUnit tests | testing, phpunit, attributes | BUGS.md |
 | B10 | Check-then-act on one-shot credentials under concurrency → use atomic single-statement CAS (`UPDATE ... WHERE id = :id AND completed_at IS NULL`), not `SELECT` + `UPDATE` | OAuth, custom DB writes | concurrency, race, atomic-cas, one-shot | BUGS.md |
+| B11 | Transient-stored associative arrays MUST be defensively validated with `is_array() + isset() + is_numeric()` triple-check on read — defends against partial writes, type drift, transient corruption | Transient readers, OAuth, CLI auth | transient, defensive, validation, partial-write | BUGS.md |
 
 ## Accepted Deviations
 | ID | Deviation | Scope | Expiry/Review | Source |
@@ -66,3 +68,4 @@ This is a compact routing map for durable memory. Keep it short. It points to so
 | S5 | admin_url() MUST be wrapped with esc_url() before use in HTML — it is filterable via the admin_url hook | Admin UI | xss, escaping | PROJECT_CONTEXT.md |
 | S6 | Singleton __construct() MUST be private — public constructor allows duplicate instantiation and double hook firing | Plugin-wide | singleton, security | PROJECT_CONTEXT.md |
 | S7 | OAuth token endpoint is the documented exception to S2 — `__return_true` is allowed because RFC 6749 §2.3.1 specifies auth via POST body; exactly one match permitted across `includes/OAuth/` | REST API, OAuth | permission_callback, rfc-6749, exception | PROJECT_CONTEXT.md |
+| S8 | Body-authenticated mutating REST routes broader than S7 — `__return_true` permitted on CLI device-code-grant flows when Content-Type allow-list rejects missing/unknown headers BEFORE field validation AND downstream credential is bound to consented resource scope | REST API, CLI auth | permission_callback, content-type, server-binding, exception | PROJECT_CONTEXT.md |

@@ -395,3 +395,39 @@ Don't wrap WP-CLI command classes in the singleton pattern "for consistency" —
 
 **Where to look next**
 `docs/memory/INDEX.md` A11 (pure service classes) — the precedent carve-out from Feature-004; the two together form a named exemption family.
+
+---
+
+### 2026-06-25 — Database-Namespace Audit-Recorder Static Helpers Are A11-Style Exempt [Feature-006]
+
+**Status**
+Active
+
+**Why this is durable**
+A2 mandates singleton + private ctor for feature classes. Phase 6 introduced `Includes\Database\CliAuthLog\Recorder` — a stateless helper class with two static methods (`record_approved`, `record_success`) that wrap Phase 2's BerlinDB `Query::add_item()` for audit-row writes. The class has no instance state, no hooks, and is called only from feature classes that want a stable audit-write boundary. Forcing it through the singleton ceremony adds zero value. This is the THIRD A11/A14-family member (PKCE — Phase 5 pure math utility; CliCommand — Phase 5 WP-CLI dispatch; Recorder — Phase 6 audit helper), so the pattern deserves a named carve-out.
+
+**Architecture Constraint (A15)**
+A class is A15-exempt when ALL of these hold:
+1. The class lives in `Includes\Database\<Module>\` (sibling to the BerlinDB Schema/Table/Row/Query files for the same `<Module>`).
+2. The class exposes ONLY static methods (no public/private `__construct`, no `instance()`, no instance state).
+3. Each static method wraps a single `( new Query() )->add_item([...])` call inside `try/catch (\Throwable)`.
+4. Audit failures route to `error_log()` and the static method returns void — best-effort semantics, never throws or returns failure.
+5. Feature classes (REST controllers, admin partials, hook callbacks) call these static methods INSTEAD of touching `Query::add_item` directly — `Query` is reserved for BerlinDB CRUD; `Recorder` is the audit-write boundary.
+
+The class MAY be `final`. It MUST NOT be wired through `Main::define_*_hooks()`.
+
+**Tradeoffs**
+Gained: a stable audit-write boundary between feature classes and the BerlinDB Query layer; feature classes never accidentally bypass `try/catch` defensive shielding; future audit semantics (severity tagging, observability hooks) can land in `Recorder` without touching every call site.
+Reconsider: if audit logic grows complex enough to need instance state (e.g. batching, in-memory buffer), promote to a singleton with `instance()` and revisit A15.
+
+**Future mistake prevented**
+Don't call `Query::add_item([...])` directly from a feature class for audit writes — it bypasses the `try/catch` defensive shielding and forces every caller to handle the silent-failure semantics. Use a `<Module>\Recorder` helper instead.
+
+**Evidence**
+- `includes/Database/CliAuthLog/Recorder.php` — the canonical implementation (T025 in Feature-006 tasks.md)
+- 2 call sites: `includes/REST/CliController.php::approve_auth_code` (record_approved) + `handle_auth_exchange` step 8.7 (record_success)
+- `tests/phpunit/RestCli/RecorderTest.php` — 3 test methods verifying both static methods + the unknown-server-slug graceful-degrade path
+- Pattern parallel: `includes/OAuth/PKCE.php` (A11) and `includes/OAuth/CliCommand.php` (A14) — Recorder is the third member of the same family
+
+**Where to look next**
+`docs/memory/INDEX.md` A11 + A14 carve-out family; `specs/006-rest-cli-auth/spec.md` §Q1 Clarification for the boundary rationale.

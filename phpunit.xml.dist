@@ -29,6 +29,17 @@
         <testsuite name="oauth">
             <directory>tests/phpunit/OAuth</directory>
         </testsuite>
+
+        <!--
+            CLI REST (Phase 6): tests need WP for transients, nonces,
+            wp_set_current_user, register_rest_route, WP_Application_Passwords.
+            Reuses Phase 5.0 bootstrap-wp.php (no new harness work). Covers
+            includes/REST/ + public/Partials/ + includes/Database/CliAuthLog/Recorder.
+        -->
+        <testsuite name="cli-rest">
+            <directory>tests/phpunit/RestCli</directory>
+            <directory>tests/phpunit/FrontendAuth</directory>
+        </testsuite>
     </testsuites>
 
     <source>
