@@ -306,3 +306,46 @@ A `SELECT … WHERE completed_at IS NULL; if (! null) { UPDATE … }` pattern is
 
 **Where to look next**
 `includes/Database/CliAuthLog/Query.php::redeem_atomic` — the canonical CAS implementation. `includes/OAuth/Storage.php::redeem_authorization_code_cas` + `revoke_all_tokens_for_code` — the orchestration. `tests/phpunit/OAuth/ConcurrentRedeemRaceTest.php` — the load-bearing race test. `specs/005-oauth-connectors/spec.md` Q4 (SEC-001 amendment 2026-06-21) for the threat model.
+
+---
+
+### 2026-06-25 — Transient-Stored Associative Arrays Need Defensive Triple-Check on Read [Feature-006]
+
+**Status**
+Active
+
+**Symptoms**
+A read of a WordPress transient that's expected to hold an associative array (e.g. `array{user_id: int, server_id: string}`) returns the wrong shape and the calling code silently misbehaves — most often by reading `null` from a missing key, then comparing it to a real value with `===` (which returns false silently). Common failure modes:
+
+- Object cache eviction during a partial write leaves the key set to `false` or to a different value-type than expected.
+- A bug elsewhere in the code writes a bare `int` to the same key (e.g., during a refactor that changed the payload shape — this WAS the bug Q4 fixed).
+- A transient TTL expires between two reads in the same request lifecycle.
+
+**Root Cause**
+PHP's `get_transient()` returns `false` on miss but ALSO returns `false` if the stored value is literally `false`. Combined with `isset()`'s lax "is the key set?" semantics (which returns `true` for an empty string `''`), naive single-line checks like `if ( false === $payload || ! is_numeric( $payload ) )` silently accept malformed data.
+
+**Bug Pattern (B11)**
+When reading a transient whose value is expected to be an associative array, use this triple-check pattern verbatim:
+
+```php
+$payload = get_transient( self::SOME_PREFIX . $key );
+if ( ! is_array( $payload )                                            // catches false, scalars, objects
+     || ! isset( $payload['expected_key_a'], $payload['expected_key_b'] )  // both keys present
+     || ! is_numeric( $payload['expected_key_a'] )                     // value-type check for known-typed fields
+) {
+    return new \WP_Error( 'rest_unauthorized', '...', array( 'status' => 401 ) );
+    // OR: return false from a static helper; OR: 404 from a polling endpoint
+}
+```
+
+For transients with `array{key: int}` shape, use `is_numeric()` on the int field (catches strings that LOOK like ints AND real ints — WP transient storage strips int type on the wp_options fallback path). For `array{key: string}` fields, no additional check needed beyond `isset()`.
+
+**Prevention**
+- Code review gate: every `get_transient()` call that's expected to return an array MUST be followed by the triple-check.
+- Static analysis: PHPStan L8 catches some shape mismatches but NOT runtime transient corruption — the triple-check is the runtime guard.
+- Phase 5's `BearerAuth::resolve_bearer_token` (`includes/OAuth/BearerAuth.php`) reads a bare int value and uses a 2-line guard (`false === $user_id || ! is_numeric($user_id)`) — that's CORRECT for the bare-int shape. Phase 6's `verify_session_token` reads an array and uses the triple-check — that's the array-shape equivalent.
+
+**Where to look next**
+- Canonical implementation: `includes/REST/CliController.php::verify_session_token` (Phase 6) and `::handle_auth_status`.
+- Counter-example (correct for the bare-int shape): `includes/OAuth/BearerAuth.php::resolve_bearer_token`.
+- The Phase 6 Q4 clarification (`specs/006-rest-cli-auth/spec.md` §Clarifications) drove the array-shape adoption; prior-art bare-int reads in Phase 5 are fine because their payloads are bare ints, not arrays.

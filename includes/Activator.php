@@ -6,6 +6,7 @@ use AcrossAI_MCP_Manager\Includes\Database\CliAuthLog\Query as CliAuthLogQuery;
 use AcrossAI_MCP_Manager\Includes\Database\OAuthToken\Query as OAuthTokenQuery;
 use AcrossAI_MCP_Manager\Includes\Database\OAuthAudit\Query as OAuthAuditQuery;
 use AcrossAI_MCP_Manager\Includes\OAuth\ClaudeConnectors;
+use AcrossAI_MCP_Manager\Public\Partials\FrontendAuth;
 
 // Exit if accessed directly.
 defined( 'ABSPATH' ) || exit;
@@ -48,8 +49,12 @@ class Activator {
 			OAuthAuditQuery::maybe_create_table();
 		}
 
-		// FrontendAuth (Phase 3 placeholder) rewrite rule.
-		add_rewrite_rule( '^acrossai-mcp-manager/?$', 'index.php?mcp_frontend_auth=1', 'top' );
+		// FrontendAuth — Phase 6.0 absorbs the full class. Activator delegates
+		// rewrite-rule registration so the pattern definition lives in
+		// exactly one place (loader contract).
+		if ( class_exists( FrontendAuth::class ) ) {
+			FrontendAuth::instance()->register_rewrite_rule();
+		}
 
 		// OAuth rewrite rules — Phase 5 delegates to ClaudeConnectors so the
 		// pattern definitions live in exactly one place (loader contract).

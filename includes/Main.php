@@ -407,6 +407,21 @@ final class Main {
 
 		$bearer_auth = \AcrossAI_MCP_Manager\Includes\OAuth\BearerAuth::instance();
 		$this->loader->add_filter( 'determine_current_user', $bearer_auth, 'resolve_bearer_token', 20 );
+
+		/**
+		 * Phase 6 — REST CLI Authentication Controller + Phase 6.0 FrontendAuth.
+		 *
+		 * Every CLI-flow hook trace MUST be in this method — feature classes
+		 * never call add_action / add_filter themselves (A1 / FR-021).
+		 */
+		$frontend_auth = \AcrossAI_MCP_Manager\Public\Partials\FrontendAuth::instance();
+		$this->loader->add_action( 'init', $frontend_auth, 'register_rewrite_rule' );
+		$this->loader->add_filter( 'query_vars', $frontend_auth, 'add_query_var' );
+		$this->loader->add_action( 'template_redirect', $frontend_auth, 'maybe_render_page', 10 );
+		$this->loader->add_action( 'wp_enqueue_scripts', $frontend_auth, 'enqueue_assets' );
+
+		$cli_controller = \AcrossAI_MCP_Manager\Includes\REST\CliController::instance();
+		$this->loader->add_action( 'rest_api_init', $cli_controller, 'register_routes' );
 	}
 
 	/**
