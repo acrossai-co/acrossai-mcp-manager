@@ -50,7 +50,7 @@ class Query {
 		$where_clause = array();
 		$where_values = array();
 
-		foreach ( array( 'id', 'server_id', 'server_slug', 'user_id', 'status' ) as $col ) {
+		foreach ( array( 'id', 'server_id', 'server_slug', 'user_id', 'status', 'auth_code_hash' ) as $col ) {
 			if ( ! isset( $args[ $col ] ) ) {
 				continue;
 			}
@@ -176,5 +176,47 @@ class Query {
 		$result = $wpdb->delete( $table, array( 'id' => $id ), array( '%d' ) );
 
 		return false !== $result;
+	}
+
+	/**
+	 * SEC-001 atomic redeem — sets completed_at to the given timestamp only
+	 * if it is currently NULL. Single UPDATE for race-free check-and-set.
+	 *
+	 * @return bool true if THIS request won the race (rows_affected === 1).
+	 */
+	public function redeem_atomic( int $id, string $now ): bool {
+		global $wpdb;
+		$id = absint( $id );
+		if ( $id <= 0 ) {
+			return false;
+		}
+		$table = Table::instance()->get_table_name();
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.PreparedSQL.NotPrepared
+		$wpdb->query(
+			$wpdb->prepare(
+				"UPDATE {$table} SET completed_at = %s WHERE id = %d AND completed_at IS NULL",
+				$now,
+				$id
+			)
+		);
+		return 1 === (int) $wpdb->rows_affected;
+	}
+
+	/**
+	 * Bulk-delete OAuth code rows beyond the retention window.
+	 *
+	 * @return int rows deleted.
+	 */
+	public function delete_expired_oauth_codes( string $cutoff ): int {
+		global $wpdb;
+		$table = Table::instance()->get_table_name();
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.PreparedSQL.NotPrepared
+		$result = $wpdb->query(
+			$wpdb->prepare(
+				"DELETE FROM {$table} WHERE status = 'oauth_code_issued' AND created_at < %s",
+				$cutoff
+			)
+		);
+		return (int) ( false === $result ? 0 : $result );
 	}
 }

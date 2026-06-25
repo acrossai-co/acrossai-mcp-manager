@@ -23,6 +23,11 @@ class Row {
 	public string $failure_code = '';
 	public string $auth_code_hash    = '';
 	public string $app_password_uuid = '';
+	// Phase 5 OAuth columns (DB_VERSION 0.0.2).
+	public string $redirect_uri          = '';
+	public string $code_challenge        = '';
+	public string $code_challenge_method = '';
+	public string $scope                 = '';
 	public ?string $approved_at  = null;
 	public ?string $completed_at = null;
 	public string $created_at    = '';
@@ -47,17 +52,21 @@ class Row {
 	 */
 	public function to_array(): array {
 		return array(
-			'id'                => $this->id,
-			'server_id'         => $this->server_id,
-			'server_slug'       => $this->server_slug,
-			'user_id'           => $this->user_id,
-			'status'            => $this->status,
-			'failure_code'      => $this->failure_code,
-			'auth_code_hash'    => $this->auth_code_hash,
-			'app_password_uuid' => $this->app_password_uuid,
-			'approved_at'       => $this->approved_at,
-			'completed_at'      => $this->completed_at,
-			'created_at'        => $this->created_at,
+			'id'                    => $this->id,
+			'server_id'             => $this->server_id,
+			'server_slug'           => $this->server_slug,
+			'user_id'               => $this->user_id,
+			'status'                => $this->status,
+			'failure_code'          => $this->failure_code,
+			'auth_code_hash'        => $this->auth_code_hash,
+			'app_password_uuid'     => $this->app_password_uuid,
+			'redirect_uri'          => $this->redirect_uri,
+			'code_challenge'        => $this->code_challenge,
+			'code_challenge_method' => $this->code_challenge_method,
+			'scope'                 => $this->scope,
+			'approved_at'           => $this->approved_at,
+			'completed_at'          => $this->completed_at,
+			'created_at'            => $this->created_at,
 		);
 	}
 }

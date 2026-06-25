@@ -16,6 +16,7 @@ This is a compact routing map for durable memory. Keep it short. It points to so
 | D9 | BerlinDB-style Query interface (Schema/Table/Row/Query) hand-rolled — no berlindb/core vendor dep | Database layer | berlindb, query, vendor | Active | DECISIONS.md |
 | D10 | Minimal-port deferral pattern — partial port + reserved follow-up task when source class depends on un-ported siblings | Migration | port, deferral, scope | Active | DECISIONS.md |
 | D11 | Phase X.0 absorption — when a phase's P0 prereq doesn't yet exist, absorb its setup as a sub-phase in the consuming phase, not a separate dedicated phase | Process | phase, prereq, p0-gate | Active | DECISIONS.md |
+| D12 | Bulk task-status updates MUST be followed by a re-audit of environment-dependent gates | Process | tasks, completion, ci-gates | Active | DECISIONS.md |
 
 ## Architecture Constraints
 | ID | Constraint | Scope | Tags | Source |
@@ -32,6 +33,8 @@ This is a compact routing map for durable memory. Keep it short. It points to so
 | A10 | WP_List_Table subclasses are exempted from the singleton-only rule — public ctor required by parent; instantiated per-render; never Loader-wired | Admin | list-table, singleton, exception | ARCHITECTURE.md |
 | A11 | Pure service classes (stateless value producers, e.g. includes/MCPClients/) exempted from singleton rule — no instance state, no ctor args, no hook registration | Plugin-wide | singleton, service-class, exception, pure | ARCHITECTURE.md |
 | A12 | Pure-PHP modules claiming WP-independence MUST have a tests/bootstrap.php that loads ONLY composer autoload — the test harness is the proof of the architectural claim | Plugin-wide | test-harness, purity, bootstrap, wp-free | ARCHITECTURE.md |
+| A13 | RFC-prescribed forms (e.g. OAuth consent) are exempted from A4 DataForm mandate — cite the RFC section in the rendering class docblock | Admin UI | data-form, rfc, oauth, exception | ARCHITECTURE.md |
+| A14 | WP-CLI dispatch classes follow A11-style exemption — stateless, no singleton, instantiated via `new self()` inside `\WP_CLI::add_command()` | Plugin-wide | wp-cli, singleton, exception, pure | ARCHITECTURE.md |
 
 ## Bug Patterns
 | ID | Pattern | Affected Area | Tags | Source |
@@ -45,6 +48,7 @@ This is a compact routing map for durable memory. Keep it short. It points to so
 | B7 | Mass-assignment via forged POST keys to $wpdb->update/insert — Query writers MUST filter against Schema::columns() before persisting | Custom DB tables | mass-assignment, query | BUGS.md |
 | B8 | "// esc_url'd above" comments don't enforce escaping — re-escape at output point even if redundant (esc_* is idempotent) | Admin Partials renders | xss, escaping, defense-in-depth | BUGS.md |
 | B9 | PHPUnit 13+ silently ignores `@dataProvider` annotations — use `#[DataProvider]` PHP attribute instead. Same for `@depends`, `@group`, `@test` | PHPUnit tests | testing, phpunit, attributes | BUGS.md |
+| B10 | Check-then-act on one-shot credentials under concurrency → use atomic single-statement CAS (`UPDATE ... WHERE id = :id AND completed_at IS NULL`), not `SELECT` + `UPDATE` | OAuth, custom DB writes | concurrency, race, atomic-cas, one-shot | BUGS.md |
 
 ## Accepted Deviations
 | ID | Deviation | Scope | Expiry/Review | Source |
@@ -61,3 +65,4 @@ This is a compact routing map for durable memory. Keep it short. It points to so
 | S4 | All DB queries MUST use `$wpdb->prepare()` | Database | sql-injection | CONSTITUTION.md §III |
 | S5 | admin_url() MUST be wrapped with esc_url() before use in HTML — it is filterable via the admin_url hook | Admin UI | xss, escaping | PROJECT_CONTEXT.md |
 | S6 | Singleton __construct() MUST be private — public constructor allows duplicate instantiation and double hook firing | Plugin-wide | singleton, security | PROJECT_CONTEXT.md |
+| S7 | OAuth token endpoint is the documented exception to S2 — `__return_true` is allowed because RFC 6749 §2.3.1 specifies auth via POST body; exactly one match permitted across `includes/OAuth/` | REST API, OAuth | permission_callback, rfc-6749, exception | PROJECT_CONTEXT.md |

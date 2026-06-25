@@ -34,5 +34,7 @@ class Deactivator {
 	 * @since    0.0.1
 	 */
 	public static function deactivate() {
+		// FR-019c: clear the daily OAuth cleanup cron event.
+		wp_clear_scheduled_hook( 'acrossai_mcp_oauth_cleanup' );
 	}
 }

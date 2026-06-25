@@ -20,10 +20,15 @@
         </testsuite>
 
         <!--
-            Future modules add their own <testsuite> entries here.
-            Avoid wildcarded "all" suites that overlap with module suites
-            — PHPUnit warns about duplicate file inclusion.
+            OAuth (Phase 5.0 per D11): tests need WordPress for nonces,
+            sessions, wp_set_current_user, register_rest_route, etc.
+            Bootstrap is tests/bootstrap-wp.php (loads WP-PHPUnit). Run with
+            the oauth testsuite name and override the bootstrap path via
+            phpunit CLI flags when running the suite in isolation.
         -->
+        <testsuite name="oauth">
+            <directory>tests/phpunit/OAuth</directory>
+        </testsuite>
     </testsuites>
 
     <source>
