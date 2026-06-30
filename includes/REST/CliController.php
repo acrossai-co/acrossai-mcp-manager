@@ -525,6 +525,46 @@ final class CliController {
 	}
 
 	/**
+	 * Read-only peek at the pending auth-code transient — returns the bound
+	 * server_id ONLY when the transient exists, is well-formed, and has
+	 * status === 'pending'. Returns null in every other case.
+	 *
+	 * Added 2026-06-30 to fix SEC-001 / S9 (consent-surface displayed-state
+	 * MUST come from the authoritative store, not the URL). Consumed by
+	 * FrontendAuth::handle_cli_auth() to source the displayed server slug.
+	 *
+	 * Pure stateless read — no transient writes, no audit-log writes, no
+	 * error_log, no exceptions. Idempotent: calling N times returns identical
+	 * values and changes no state. Applies B11 transient-defensive
+	 * triple-check (generalized).
+	 *
+	 * See contracts/cli-controller-peek-pending-server.md (Phase 7 spec) +
+	 * docs/memory/PROJECT_CONTEXT.md §S9 + docs/memory/BUGS.md §B11.
+	 *
+	 * @param string $auth_code Raw authorization code from the CLI's URL.
+	 * @return string|null Bound server_id for pending codes; null otherwise.
+	 */
+	public static function peek_pending_server( string $auth_code ): ?string {
+		if ( '' === $auth_code ) {
+			return null;
+		}
+		$payload = get_transient( self::AUTH_TRANSIENT_PREFIX . $auth_code );
+		if ( ! is_array( $payload ) ) {
+			return null;
+		}
+		if ( ! isset( $payload['status'], $payload['server_id'] ) ) {
+			return null;
+		}
+		if ( 'pending' !== $payload['status'] ) {
+			return null;
+		}
+		if ( ! is_string( $payload['server_id'] ) || '' === $payload['server_id'] ) {
+			return null;
+		}
+		return $payload['server_id'];
+	}
+
+	/**
 	 * Compose an `invalid_*` JSON error envelope.
 	 *
 	 * @param string $code   Error code (e.g. `invalid_code`).

@@ -390,3 +390,28 @@ Don't claim "all 90 tasks complete" when 5 of them required environments you don
 
 **Where to look next**
 `specs/005-oauth-connectors/tasks.md` lines 310-321 for the deferral-note format pattern.
+
+### 2026-06-30 — Constitution-level Formalization vs. Accepted Deviation Registration [Feature-007]
+
+**Status**
+Active
+
+**Why this is durable**
+Feature-007 (FrontendAuth) needed to broaden authorization from `manage_options` to "any logged-in user" because the user consents on their own behalf to issue a credential scoped to themselves. The deviation was documented in plan §Complexity Tracking + spec §Assumptions + security-constraints.md, but the constitution itself was unchanged. The 2026-06-30 architecture review flagged this as a CRITICAL violation by strict reading. Resolution: amend Constitution §III to add a formal "Consent-surface exception" with 5 binding conditions, citing Feature-007 as the canonical instance. The same pattern applies to OAuth consent (Feature-005, retroactively) and any future device-grant flow. Future authors get a constitutional reference instead of re-deriving the spec/plan paperwork per feature.
+
+**Decision**
+When a feature-local deviation describes a GENERALIZABLE pattern (applies to ≥2 existing features OR has a forward-looking surface that the spec-kit team can name), formalize the exception in `.specify/memory/constitution.md` rather than registering it as an Accepted Deviation in `docs/memory/INDEX.md`. Accepted Deviations are for ONE-OFF carve-outs (e.g. DEV2 boot-time `Compat.php` placement, DEV3 bidirectional Phase 6 ↔ Phase 7 coupling pending T044). Constitution amendments are for reusable patterns. The constitution paragraph MUST include binding conditions (not bare permissive language) so the exception cannot collapse into a generic loophole — at minimum, conditions covering (a) precondition gate, (b) scope binding, (c) operator opt-in, (d) citation requirement, (e) data-source authoritativeness.
+
+**Tradeoffs**
+- Gained: future audits find the exception at the canonical source; class docblocks have a single citation target; cross-feature reuse is encouraged; ad-hoc per-feature exception paperwork is replaced with a constitutional reference.
+- Made harder: constitution edits are higher-ceremony than INDEX.md row adds — must include binding conditions to prevent the exception from becoming a generic loophole; requires `/speckit-constitution` flow (or equivalent direct amendment) rather than a one-line INDEX.md add.
+- Reconsider: if the exception's conditions ever expand to include "any logged-in user is consenting" without the 5 binding constraints, the exception has become a loophole and the constitution should be re-tightened. Also reconsider if a future feature's deviation matches an existing constitution exception but with different conditions — that's a signal to split the exception, not stretch it.
+
+**Evidence**
+- 2026-06-30 architecture-review V1 finding (CRITICAL): `docs/security-reviews/2026-06-30-007-frontend-cli-auth-plan.md` and the architecture-review report this turn
+- 2026-06-30 constitution amendment: `.specify/memory/constitution.md` §III "Consent-surface exception" paragraph
+- 2026-06-30 DEV3 registration (counter-example for one-off coupling acceptance): `docs/memory/INDEX.md` Accepted Deviations table
+- Feature-007 sites that now cite the exception: `public/Partials/FrontendAuth.php` class docblock, `specs/007-frontend-cli-auth/spec.md` FR-007.4
+
+**Where to look next**
+`.specify/memory/constitution.md` §III for the canonical exception text and the 5 binding conditions. Compare against `docs/memory/INDEX.md` DEV1/DEV2/DEV3 to see what shape qualifies as one-off vs. generalizable.

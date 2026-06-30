@@ -1,11 +1,34 @@
 <?php
 /**
- * Browser-mediated CLI authentication approval page (Phase 6.0).
+ * Browser-mediated CLI authentication approval page (Phase 7).
  *
- * Singleton + private ctor (A2). Zero hooks in the constructor (A1) —
- * Main::define_public_hooks wires every callback via the Loader. The
- * static `get_base_url()` helper is the one piece other modules
- * (CliController, Activator) couple to.
+ * Replaces the prior Phase 6.0 absorbed module. Four intentional changes:
+ *   1. QUERY_VAR renamed acrossai_mcp_frontend_auth → acrossai_mcp_auth.
+ *   2. Authorization broadened from manage_options → ANY logged-in user
+ *      (user consents on own behalf; App Password is scoped to user's caps).
+ *      Per FR-007.4 + Constitution §III "Consent-surface exception"
+ *      (added 2026-06-30, .specify/memory/constitution.md). This class is
+ *      the canonical first instance of that exception. Satisfies all five
+ *      conditions: (a) is_user_logged_in() check at maybe_render_page step 3;
+ *      (b) approve_auth_code binds credential to get_current_user_id();
+ *      (c) operator-gated via acrossai_mcp_npm_login_enabled default-OFF;
+ *      (d) this docblock cites the exception with FR identifier;
+ *      (e) displayed server slug sourced from transient via S9 below.
+ *   3. Inline <style> replaced with externally-enqueued build/css/frontend.css
+ *      (versioned via build/css/frontend.asset.php; RTL via wp_style_add_data).
+ *   4. Nonce action is PER-CODE — 'cli_auth_approve_' . $code — so a nonce
+ *      minted for code A cannot be replayed against code B (SEC-002 / CWE-352).
+ *
+ * Security hardening baked in (2026-06-30 plan-level security review):
+ *   - SEC-001 / S9 (CWE-451/CWE-441): displayed server slug sourced from
+ *     CliController::peek_pending_server($code), NOT $_GET['server'].
+ *   - SEC-002 (CWE-352): per-code nonce as above.
+ *   - SEC-005 (CWE-1004): 503 disabled notice carries Retry-After + noindex.
+ *
+ * Singleton + private ctor (A2 / S6). Zero hooks in the constructor (A1) —
+ * Main::define_public_hooks wires every callback via the Loader. The static
+ * get_base_url() helper is the one piece other modules (CliController,
+ * Activator) couple to (pending A9 promotion via DEV3 / tasks.md T044).
  *
  * @package AcrossAI_MCP_Manager\Public\Partials
  */
@@ -19,7 +42,7 @@ defined( 'ABSPATH' ) || exit;
 final class FrontendAuth {
 
 	const PAGE_SLUG = 'acrossai-mcp-manager';
-	const QUERY_VAR = 'acrossai_mcp_frontend_auth';
+	const QUERY_VAR = 'acrossai_mcp_auth';
 
 	/**
 	 * Singleton instance.
@@ -39,7 +62,7 @@ final class FrontendAuth {
 	}
 
 	/**
-	 * Private — use ::instance() instead.
+	 * Private — use ::instance() instead. Prevents B5 double-registration.
 	 */
 	private function __construct() {}
 
@@ -47,7 +70,8 @@ final class FrontendAuth {
 	 * Base URL of the approval page — `https://{site}/acrossai-mcp-manager/`.
 	 *
 	 * Static so callers (CliController::handle_auth_start, Activator) can
-	 * reach it without holding a singleton reference.
+	 * reach it without holding a singleton reference. MUST NOT be changed to
+	 * admin_url(...) — the page resolves on the front-end (FR-006).
 	 */
 	public static function get_base_url(): string {
 		return home_url( '/' . self::PAGE_SLUG . '/' );
@@ -78,19 +102,49 @@ final class FrontendAuth {
 	}
 
 	/**
-	 * Asset enqueue stub. Wired on `wp_enqueue_scripts` via Loader.
+	 * Enqueue the consent-page CSS — ONLY on the consent page. Wired on
+	 * `wp_enqueue_scripts` via Loader (FR-013).
 	 *
-	 * No JS this phase; CSS is inline in `render_page_shell` so themes
-	 * cannot collide with our consent flow.
+	 * Reads the version from build/css/frontend.asset.php (emitted by the
+	 * `wordpress/scripts` build pipeline). Falls back to the plugin version
+	 * constant if the manifest is missing — no error_log per research §R2
+	 * (silent fallback; deploy-time gate in T037 catches the misconfiguration).
 	 */
 	public function enqueue_assets(): void {
-		// Intentionally empty.
+		if ( ! get_query_var( self::QUERY_VAR ) ) {
+			return;
+		}
+
+		$plugin_dir  = dirname( \ACROSSAI_MCP_MANAGER_PLUGIN_FILE );
+		$plugin_file = \ACROSSAI_MCP_MANAGER_PLUGIN_FILE;
+		$asset_path  = $plugin_dir . '/build/css/frontend.asset.php';
+		$version     = \ACROSSAI_MCP_MANAGER_VERSION;
+
+		if ( is_readable( $asset_path ) ) {
+			$asset = require $asset_path;
+			if ( is_array( $asset ) && isset( $asset['version'] ) && is_string( $asset['version'] ) && '' !== $asset['version'] ) {
+				$version = $asset['version'];
+			}
+		}
+
+		wp_enqueue_style(
+			'acrossai-mcp-frontend',
+			plugins_url( 'build/css/frontend.css', $plugin_file ),
+			array(),
+			$version
+		);
+		// RTL variant per FR-013 clarification — WP auto-substitutes
+		// build/css/frontend-rtl.css when is_rtl() returns true.
+		wp_style_add_data( 'acrossai-mcp-frontend', 'rtl', 'replace' );
 	}
 
 	/**
 	 * Dispatch on `template_redirect` — branches by `?action=…`.
 	 *
-	 * Wired via Loader on `template_redirect` priority 10.
+	 * Wired via Loader on `template_redirect` priority 10. Implements FR-007
+	 * steps 1–7 in exact order. Note: `?server=` is NOT parsed here per the
+	 * 2026-06-30 SEC-001 amendment — handle_cli_auth derives the slug from
+	 * the transient via CliController::peek_pending_server.
 	 */
 	public function maybe_render_page(): void {
 		if ( ! get_query_var( self::QUERY_VAR ) ) {
@@ -99,57 +153,57 @@ final class FrontendAuth {
 		nocache_headers();
 
 		if ( ! is_user_logged_in() ) {
+			// Base URL only — sidesteps URL-encoding round-trip and future
+			// wp_safe_redirect injection vector. Research §R3.
 			wp_safe_redirect( wp_login_url( self::get_base_url() ) );
 			exit;
 		}
 
-		if ( ! current_user_can( 'manage_options' ) ) {
-			wp_die(
-				esc_html__( 'You do not have permission to access this page.', 'acrossai-mcp-manager' ),
-				403
-			);
-		}
+		// FR-007.4 — NO current_user_can() check. Any logged-in user may
+		// consent on their own behalf. Threat-model rationale in spec §Assumptions.
 
-		// phpcs:disable WordPress.Security.NonceVerification.Recommended -- read-only render of GET params; the state-mutating cli_auth_approve branch verifies nonce explicitly via check_admin_referer.
-		$action  = isset( $_GET['action'] ) ? sanitize_text_field( wp_unslash( $_GET['action'] ) ) : '';
+		// phpcs:disable WordPress.Security.NonceVerification.Recommended -- read-only render of GET params; the state-mutating cli_auth_approve branch verifies its per-code nonce explicitly inside handle_approve().
+		$action = isset( $_GET['action'] ) ? sanitize_text_field( wp_unslash( $_GET['action'] ) ) : '';
+		$code   = isset( $_GET['code'] ) ? sanitize_text_field( wp_unslash( $_GET['code'] ) ) : '';
+		// phpcs:enable WordPress.Security.NonceVerification.Recommended
+
 		$enabled = (bool) get_option( 'acrossai_mcp_npm_login_enabled', false );
-
 		if ( ! $enabled ) {
 			$this->render_disabled_notice();
 			exit;
 		}
 
 		switch ( $action ) {
-			case 'cli_auth':
-				$code   = isset( $_GET['code'] ) ? sanitize_text_field( wp_unslash( $_GET['code'] ) ) : '';
-				$server = isset( $_GET['server'] ) ? sanitize_text_field( wp_unslash( $_GET['server'] ) ) : '';
-				$this->handle_cli_auth( $code, $server );
-				break;
 			case 'cli_auth_approve':
-				$code   = isset( $_GET['code'] ) ? sanitize_text_field( wp_unslash( $_GET['code'] ) ) : '';
-				$server = isset( $_GET['server'] ) ? sanitize_text_field( wp_unslash( $_GET['server'] ) ) : '';
-				check_admin_referer( 'cli_auth_approve_' . $code );
-				$this->handle_approve( $code, $server );
+				$this->handle_approve();
 				break;
 			case 'cli_auth_approved':
 				$this->handle_approved();
 				break;
+			case 'cli_auth':
 			default:
-				$this->handle_cli_auth( '', '' );
+				$this->handle_cli_auth( $code );
 		}
-		// phpcs:enable WordPress.Security.NonceVerification.Recommended
 		exit;
 	}
 
 	/**
 	 * Render the consent form for `?action=cli_auth`.
 	 *
-	 * @param string $code   Authorization code from CLI's `/auth/start`.
-	 * @param string $server Server slug from CLI's `/auth/start`.
+	 * 2026-06-30 SEC-001 fix: the displayed server slug is sourced from
+	 * CliController::peek_pending_server($code) — the transient's authoritative
+	 * server_id — NOT from $_GET['server']. Rendering URL-supplied context
+	 * would be a confused-deputy / UI-misrepresentation attack (CWE-451 /
+	 * CWE-441 / S9).
+	 *
+	 * @param string $code Authorization code from CLI's `/auth/start`.
 	 */
-	private function handle_cli_auth( string $code, string $server ): void {
-		if ( '' === $code || '' === $server ) {
+	private function handle_cli_auth( string $code ): void {
+		$bound_server = ( '' !== $code ) ? CliController::peek_pending_server( $code ) : null;
+
+		if ( '' === $code || null === $bound_server ) {
 			$this->render_page_shell(
+				esc_html__( 'AcrossAI MCP Manager', 'acrossai-mcp-manager' ),
 				'<h1>' . esc_html__( 'Missing Authentication Parameters', 'acrossai-mcp-manager' ) . '</h1>'
 				. '<p>' . esc_html__( 'This page must be opened via a link from your CLI tool.', 'acrossai-mcp-manager' ) . '</p>'
 			);
@@ -160,45 +214,54 @@ final class FrontendAuth {
 			array(
 				'action'   => 'cli_auth_approve',
 				'code'     => $code,
-				'server'   => $server,
 				'_wpnonce' => wp_create_nonce( 'cli_auth_approve_' . $code ),
 			),
 			self::get_base_url()
 		);
 
 		$html  = '<h1>' . esc_html__( 'Authorize CLI Access', 'acrossai-mcp-manager' ) . '</h1>';
-		$html .= '<p>' . esc_html(
-			sprintf(
-				/* translators: 1: server slug */
-				__( 'A CLI tool is requesting access to your MCP server "%1$s".', 'acrossai-mcp-manager' ),
-				$server
-			)
+		$html .= '<p>' . sprintf(
+			/* translators: 1: server slug from the transient (authoritative source per SEC-001) */
+			esc_html__( 'A CLI tool is requesting access to your MCP server "%1$s".', 'acrossai-mcp-manager' ),
+			esc_html( $bound_server )
 		) . '</p>';
 		$html .= '<p>' . esc_html__( 'Click Approve to grant the tool access. The session is single-use.', 'acrossai-mcp-manager' ) . '</p>';
 		$html .= '<p><a class="button button-primary" href="' . esc_url( $approve_url ) . '">'
 			. esc_html__( 'Approve', 'acrossai-mcp-manager' ) . '</a></p>';
 
-		$this->render_page_shell( $html );
+		$this->render_page_shell( esc_html__( 'AcrossAI MCP Manager', 'acrossai-mcp-manager' ), $html );
 	}
 
 	/**
-	 * Handle Approve click — state-mutating; called only after nonce verify.
+	 * Handle Approve click — state-mutating; called only after per-code nonce
+	 * verify.
 	 *
-	 * @param string $code   Authorization code.
-	 * @param string $server Server slug (validated by CliController::approve_auth_code via the transient).
+	 * 2026-06-30 SEC-002 fix: nonce action is 'cli_auth_approve_' . $code —
+	 * per-code binding prevents cross-code replay if the rendered HTML leaks.
+	 * $code is read+sanitized BEFORE the nonce check (reading $_GET is not
+	 * state mutation; nonce-before-mutation still holds). Empty $code → 400
+	 * BEFORE nonce check to avoid verifying against trailing-underscore.
 	 */
-	private function handle_approve( string $code, string $server ): void {
-		unset( $server ); // server is validated downstream via the transient's stored value.
+	private function handle_approve(): void {
+		// phpcs:disable WordPress.Security.NonceVerification.Recommended -- nonce verified below via wp_verify_nonce with per-code action.
+		$code  = isset( $_GET['code'] ) ? sanitize_text_field( wp_unslash( $_GET['code'] ) ) : '';
+		$nonce = isset( $_GET['_wpnonce'] ) ? sanitize_text_field( wp_unslash( $_GET['_wpnonce'] ) ) : '';
+		// phpcs:enable WordPress.Security.NonceVerification.Recommended
 
-		if ( ! current_user_can( 'manage_options' ) ) {
+		if ( '' === $code ) {
 			wp_die(
-				esc_html__( 'You do not have permission to approve CLI authentication.', 'acrossai-mcp-manager' ),
-				403
+				esc_html__( 'Missing authorization code.', 'acrossai-mcp-manager' ),
+				'',
+				array( 'response' => 400 )
 			);
 		}
 
-		if ( '' === $code ) {
-			wp_die( esc_html__( 'Missing authorization code.', 'acrossai-mcp-manager' ), 400 );
+		if ( ! wp_verify_nonce( $nonce, 'cli_auth_approve_' . $code ) ) {
+			wp_die(
+				esc_html__( 'Security check failed.', 'acrossai-mcp-manager' ),
+				'',
+				array( 'response' => 403 )
+			);
 		}
 
 		$approved = CliController::approve_auth_code( $code, get_current_user_id() );
@@ -206,7 +269,8 @@ final class FrontendAuth {
 		if ( ! $approved ) {
 			wp_die(
 				esc_html__( 'This authorization code is no longer valid. It may have expired or been used already.', 'acrossai-mcp-manager' ),
-				400
+				'',
+				array( 'response' => 400 )
 			);
 		}
 
@@ -221,37 +285,59 @@ final class FrontendAuth {
 		$html  = '<h1>' . esc_html__( 'CLI Authorization Approved', 'acrossai-mcp-manager' ) . '</h1>';
 		$html .= '<p>' . esc_html__( 'You can now return to your CLI tool — it will detect the approval shortly.', 'acrossai-mcp-manager' ) . '</p>';
 		$html .= '<p>' . esc_html__( 'This page can be closed.', 'acrossai-mcp-manager' ) . '</p>';
-		$this->render_page_shell( $html );
+		$this->render_page_shell( esc_html__( 'AcrossAI MCP Manager', 'acrossai-mcp-manager' ), $html );
 	}
 
 	/**
-	 * Render the kill-switch notice when feature flag is OFF.
+	 * Render the kill-switch notice when the feature flag is OFF.
+	 *
+	 * 2026-06-30 SEC-005 fix: emits Retry-After header and noindex meta to
+	 * signal retry timing and prevent search-engine indexing of the
+	 * disabled-notice page (CWE-1004).
 	 */
 	private function render_disabled_notice(): void {
 		status_header( 503 );
-		$html  = '<h1>' . esc_html__( 'CLI Login Not Enabled', 'acrossai-mcp-manager' ) . '</h1>';
+		header( 'Retry-After: 3600' );
+
+		$html  = '<meta name="robots" content="noindex,nofollow">';
+		$html .= '<h1>' . esc_html__( 'CLI Login Not Enabled', 'acrossai-mcp-manager' ) . '</h1>';
 		$html .= '<p>' . esc_html__( 'The CLI login flow is currently disabled on this site. Contact your administrator.', 'acrossai-mcp-manager' ) . '</p>';
-		$this->render_page_shell( $html );
+		$this->render_page_shell( esc_html__( 'AcrossAI MCP Manager', 'acrossai-mcp-manager' ), $html );
 	}
 
 	/**
-	 * Wrap body content in a minimal HTML shell — NO `wp_head()` so themes
-	 * cannot inject markup into the consent flow.
+	 * Wrap body content in a minimal HTML shell — NO `wp_head()` / `wp_footer()`
+	 * so themes cannot inject markup into the consent flow.
 	 *
-	 * @param string $content Pre-escaped HTML body (caller's responsibility).
+	 * The enqueued external CSS (handle `acrossai-mcp-frontend`) is printed
+	 * via `wp_print_styles()`. A minimal inline `<style>` safety-net block is
+	 * permitted ONLY for layout (max-width, body padding) so the page remains
+	 * legible if the external CSS fails to load.
+	 *
+	 * @param string $title       Pre-escaped page title.
+	 * @param string $body_html   Pre-escaped HTML body (caller's responsibility).
 	 */
-	private function render_page_shell( string $content ): void {
+	private function render_page_shell( string $title, string $body_html ): void {
 		header( 'Content-Type: text/html; charset=UTF-8' );
-		$title = esc_html__( 'AcrossAI MCP Manager', 'acrossai-mcp-manager' );
+
+		// We exit from template_redirect without calling wp_head(), so the
+		// 'wp_enqueue_scripts' action that Main wires enqueue_assets to never
+		// fires on this request path. Call it explicitly here — the method
+		// has its own query-var guard and wp_enqueue_style is idempotent,
+		// so the hook-fired call (if WP ever invokes it on a future code
+		// path) would be a safe no-op.
+		$this->enqueue_assets();
 
 		echo '<!DOCTYPE html><html lang="' . esc_attr( get_bloginfo( 'language' ) ) . '"><head>';
 		echo '<meta charset="utf-8">';
-		echo '<title>' . esc_html( $title ) . '</title>';
+		// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- pre-escaped by caller.
+		echo '<title>' . $title . '</title>';
 		echo '<meta name="viewport" content="width=device-width, initial-scale=1">';
-		echo '<style>body{font-family:system-ui,sans-serif;max-width:520px;margin:5em auto;padding:0 1em;color:#1d2327}h1{font-size:1.5em}.button{display:inline-block;padding:0.5em 1.5em;background:#2271b1;color:#fff;border:1px solid #2271b1;border-radius:3px;text-decoration:none;font-size:1em}.button-primary{font-weight:600}</style>';
+		wp_print_styles( 'acrossai-mcp-frontend' );
+		echo '<style>body{font-family:system-ui,sans-serif;max-width:520px;margin:5em auto;padding:0 1em;color:#1d2327}</style>';
 		echo '</head><body>';
-		// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- caller pre-escapes; this is the docblock contract.
-		echo $content;
+		// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- caller pre-escapes per the method's docblock contract.
+		echo $body_html;
 		echo '</body></html>';
 	}
 }

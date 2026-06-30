@@ -352,6 +352,7 @@ Run if either Part A or Part B spec needs clarification.
 
 ---
 
+
 ### Step 5 — `/speckit.architecture-guard.governed-plan`
 
 ```

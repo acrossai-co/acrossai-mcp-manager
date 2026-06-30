@@ -349,3 +349,64 @@ For transients with `array{key: int}` shape, use `is_numeric()` on the int field
 - Canonical implementation: `includes/REST/CliController.php::verify_session_token` (Phase 6) and `::handle_auth_status`.
 - Counter-example (correct for the bare-int shape): `includes/OAuth/BearerAuth.php::resolve_bearer_token`.
 - The Phase 6 Q4 clarification (`specs/006-rest-cli-auth/spec.md` §Clarifications) drove the array-shape adoption; prior-art bare-int reads in Phase 5 are fine because their payloads are bare ints, not arrays.
+
+### 2026-06-30 — wp_enqueue_scripts Does Not Fire When template_redirect Exits Before wp_head() [Feature-007]
+
+**Status**
+Active — known failure mode for standalone HTML rendering via `template_redirect`
+
+**Why this is durable**
+WordPress fires the `wp_enqueue_scripts` action from inside `wp_head()`. Any handler hooked there only runs if the page goes through the theme rendering chain. When a plugin handles `template_redirect`, emits its own HTML, and `exit`s — the standard pattern for browser-mediated consent surfaces, well-known endpoints, JSON-LD pages, and custom Pretty URLs — `wp_head()` is never called and the `wp_enqueue_scripts` action never fires. Hooks wired via the Loader to `wp_enqueue_scripts` silently never run on these requests. The asset registration does not happen, and any subsequent `wp_print_styles( $handle )` call prints nothing because the style was never registered. The page renders unstyled with no error indication.
+
+**Finding**
+Wiring `enqueue_assets` to `wp_enqueue_scripts` via the Loader is necessary but not sufficient for `template_redirect`-based standalone pages. The page renderer MUST also call the enqueue method explicitly before `wp_print_styles()`, in addition to the hook wiring. The hook wiring is kept for future code paths that DO go through `wp_head()`; the explicit call covers the exit-before-head path. `wp_enqueue_style` is idempotent — both invocations are safe.
+
+**Prevention**
+- For any class wired to `wp_enqueue_scripts` that ALSO renders via `template_redirect` + `exit`, call the enqueue method explicitly from the render helper (e.g. `$this->enqueue_assets()` at the top of `render_page_shell()`).
+- Test the asset registration with a dedicated PHPUnit case that asserts `wp_style_is( $handle, 'enqueued' )` after calling the render helper, NOT after firing `do_action( 'wp_enqueue_scripts' )`. Firing the action would mask the gap because the test harness sees the hook fire, but production code paths don't.
+- If the page later starts using `wp_head()` (e.g. a feature flag adds DataViews to the consent UI), the explicit call becomes a redundant no-op via idempotency — no breakage.
+
+**Evidence**
+- 2026-06-30 mid-implementation bug: `public/Partials/FrontendAuth.php` initially relied solely on the `wp_enqueue_scripts` hook wired in `Main::define_public_hooks()`. The consent page rendered without CSS because the action never fired on the `template_redirect` exit path.
+- Fix: `public/Partials/FrontendAuth.php` `render_page_shell()` adds `$this->enqueue_assets();` before `wp_print_styles( 'acrossai-mcp-frontend' )`.
+- Test coverage: `tests/phpunit/FrontendAuth/EnqueueAssetsTest.php` asserts state after calling the render helper directly, not after firing the hook.
+
+**Where to look next**
+`public/Partials/FrontendAuth.php` — the explicit `$this->enqueue_assets();` call inside `render_page_shell()` and the docblock comment above it. Any future standalone-HTML page plugin should grep `wp_print_styles` and verify a paired explicit `enqueue_assets()` call exists in the same render method.
+
+### 2026-06-30 — wp_redirect Test Interception MUST Throw From Filter, Not Return False [Feature-007]
+
+**Status**
+Active — established WP-PHPUnit testing convention
+
+**Why this is durable**
+The standard production pattern for state-mutating GET endpoints is `wp_safe_redirect( $url ); exit;`. WP_UnitTestCase wraps `wp_die()` with a custom handler that throws `WPDieException` so the test runner can catch it — but it does NOT wrap `exit`. Returning false from the `wp_redirect` filter cancels the `header( 'Location: …' )` call (the filter's documented purpose) but does NOT prevent the surrounding code from reaching `exit;`. The test runner then terminates mid-test. This trap is subtle because the test sometimes appears to "work" — if PHPUnit happens to run the offending test last, the runner exit is invisible in the output.
+
+**Finding**
+To intercept `wp_redirect` / `wp_safe_redirect` calls in tests without losing the test runner, the filter MUST throw an exception. The exception propagates up through `wp_redirect()` to the calling code, which never reaches `exit`. The test catches the exception via `try { … } catch ( \RuntimeException $e ) { /* expected */ }`. The repo's existing convention (see `tests/phpunit/OAuth/ClaudeConnectorsDiscoveryTest.php` for the parallel `wp_die` handler pattern) uses `RuntimeException`.
+
+**Prevention**
+- Use this exact pattern for any redirect interception:
+  ```php
+  $redirect_target = null;
+  add_filter(
+      'wp_redirect',
+      static function ( $location ) use ( &$redirect_target ) {
+          $redirect_target = $location;
+          throw new \RuntimeException( 'redirect_intercepted' );
+      },
+      10,
+      1
+  );
+  ```
+- Catch `\RuntimeException` (or `\Exception` if your test also catches `WPDieException` via the same try/catch).
+- Reset `$redirect_target = null` between multiple calls in the same test, since the filter persists across calls.
+- Add the filter BEFORE the first redirect-emitting call in the test, not after — order matters.
+
+**Evidence**
+- 2026-06-30 mid-implementation bug: `HandleApproveTest` + `MaybeRenderPageTest` initially used `return false` and the test runner died on the first `wp_safe_redirect` path.
+- Fix: switched to `throw new \RuntimeException( 'redirect_intercepted' )` in `tests/phpunit/FrontendAuth/HandleApproveTest.php` and `tests/phpunit/FrontendAuth/MaybeRenderPageTest.php`.
+- Repo precedent: `tests/phpunit/OAuth/ClaudeConnectorsDiscoveryTest.php` uses the same throw-from-handler pattern for `wp_die` interception (line ~49 of that file).
+
+**Where to look next**
+`tests/phpunit/FrontendAuth/HandleApproveTest.php` private helper `run_approve()` — the catch pattern that handles BOTH `WPDieException` AND `RuntimeException` in a single test entry point is the canonical implementation.
