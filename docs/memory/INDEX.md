@@ -17,6 +17,7 @@ This is a compact routing map for durable memory. Keep it short. It points to so
 | D10 | Minimal-port deferral pattern — partial port + reserved follow-up task when source class depends on un-ported siblings | Migration | port, deferral, scope | Active | DECISIONS.md |
 | D11 | Phase X.0 absorption — when a phase's P0 prereq doesn't yet exist, absorb its setup as a sub-phase in the consuming phase, not a separate dedicated phase | Process | phase, prereq, p0-gate | Active | DECISIONS.md |
 | D12 | Bulk task-status updates MUST be followed by a re-audit of environment-dependent gates | Process | tasks, completion, ci-gates | Active | DECISIONS.md |
+| D13 | Constitution-level formalization vs. Accepted Deviation — escalate to `.specify/memory/constitution.md` when the deviation describes a generalizable pattern (≥2 features or forward-looking); reserve INDEX.md `DEV*` rows for one-off carve-outs | Process | constitution, deviation, governance, generalizable | Active | DECISIONS.md |
 
 ## Architecture Constraints
 | ID | Constraint | Scope | Tags | Source |
@@ -51,12 +52,15 @@ This is a compact routing map for durable memory. Keep it short. It points to so
 | B9 | PHPUnit 13+ silently ignores `@dataProvider` annotations — use `#[DataProvider]` PHP attribute instead. Same for `@depends`, `@group`, `@test` | PHPUnit tests | testing, phpunit, attributes | BUGS.md |
 | B10 | Check-then-act on one-shot credentials under concurrency → use atomic single-statement CAS (`UPDATE ... WHERE id = :id AND completed_at IS NULL`), not `SELECT` + `UPDATE` | OAuth, custom DB writes | concurrency, race, atomic-cas, one-shot | BUGS.md |
 | B11 | Transient-stored associative arrays MUST be defensively validated with `is_array() + isset() + is_numeric()` triple-check on read — defends against partial writes, type drift, transient corruption | Transient readers, OAuth, CLI auth | transient, defensive, validation, partial-write | BUGS.md |
+| B12 | wp_enqueue_scripts doesn't fire when template_redirect exits before wp_head() — call the enqueue method explicitly from the render helper, not only via Loader hook | template_redirect handlers, standalone HTML pages | enqueue, template_redirect, wp_head, silent-failure | BUGS.md |
+| B13 | wp_redirect filter MUST throw to intercept the trailing exit in tests — returning false cancels the header but the test runner still dies on exit | PHPUnit tests of state-mutation redirects | testing, wp_redirect, wp_safe_redirect, exit, filter | BUGS.md |
 
 ## Accepted Deviations
 | ID | Deviation | Scope | Expiry/Review | Source |
 |---|---|---|---|---|
 | DEV1 | MCP Manager parent menu (`?page=acrossai_mcp_manager`) uses `WP_List_Table` instead of DataViews | Admin UI | Never expires — pre-approved exception | CONSTITUTION.md §IV |
 | DEV2 | `includes/Compat.php` lives in `includes/` not `includes/Utilities/` — boot-time shim exception to Principle I | Boot flow | Review if Utilities/ autoload order changes | DECISIONS.md D3 |
+| DEV3 | Bidirectional `FrontendAuth` ↔ `CliController` import accepted pending A9 promotion to `includes/Utilities/CliAuthRoutes.php` — `CliController::auth_start` reads `FrontendAuth::get_base_url`; `FrontendAuth::handle_*` reads `CliController::approve_auth_code` + `peek_pending_server` | Feature-007 cross-phase coupling | Resolve via tasks.md T044 in next hardening branch; constitution §I Modular Architecture (no new violations) | Feature-007 / 2026-06-30 architecture-review V2 |
 
 ## Security Constraints
 | ID | Constraint | Scope | Tags | Source |
@@ -69,3 +73,4 @@ This is a compact routing map for durable memory. Keep it short. It points to so
 | S6 | Singleton __construct() MUST be private — public constructor allows duplicate instantiation and double hook firing | Plugin-wide | singleton, security | PROJECT_CONTEXT.md |
 | S7 | OAuth token endpoint is the documented exception to S2 — `__return_true` is allowed because RFC 6749 §2.3.1 specifies auth via POST body; exactly one match permitted across `includes/OAuth/` | REST API, OAuth | permission_callback, rfc-6749, exception | PROJECT_CONTEXT.md |
 | S8 | Body-authenticated mutating REST routes broader than S7 — `__return_true` permitted on CLI device-code-grant flows when Content-Type allow-list rejects missing/unknown headers BEFORE field validation AND downstream credential is bound to consented resource scope | REST API, CLI auth | permission_callback, content-type, server-binding, exception | PROJECT_CONTEXT.md |
+| S9 | Consent-surface displayed-state MUST be sourced from server-side authoritative store (transient/option/DB), not URL params — confused-deputy / UI-misrepresentation defense | Consent surfaces (CLI, OAuth, device-grant) | confused-deputy, ui-misrepresentation, consent, deep-link, deep-link-spoof | PROJECT_CONTEXT.md |

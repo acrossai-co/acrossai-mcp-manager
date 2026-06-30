@@ -149,6 +149,7 @@ Run this only if the spec output is ambiguous or incomplete.
 
 ---
 
+
 ### Step 3 — `/speckit.plan`
 
 ```

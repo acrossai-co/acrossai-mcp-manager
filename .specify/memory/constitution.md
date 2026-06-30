@@ -79,8 +79,18 @@ WordPress ecosystem. Non-compliant code will not be merged.
 - File upload operations MUST validate MIME type, extension, and file size before processing
 - No deprecated WordPress security functions are permitted
 
+**Consent-surface exception to the `manage_options` rule** *(added 2026-06-30, Feature-007)*: Browser-mediated consent surfaces where the logged-in user is consenting on their own behalf to issue a credential scoped to their own capabilities (e.g. CLI device-grant consent, OAuth authorization consent, future device-grant flows) are EXEMPT from the `manage_options` minimum. Such surfaces MUST satisfy ALL of the following:
+
+1. Verify `is_user_logged_in()` (the surface is never reachable anonymously);
+2. Bind the resulting credential to the consenting user's own `user_id` (the user can only authorize action on their own behalf — never on another user's);
+3. Be operator-gated via a default-OFF option (e.g. `acrossai_mcp_npm_login_enabled`), so the surface does not exist on a fresh install without explicit operator opt-in;
+4. Cite this exception in the rendering class docblock with the FR identifier driving the broadened authorization;
+5. Source any attacker-controllable consent-context (server slug, scope name, requested capability) from the server-side authoritative store (transient, option, DB row) keyed by an unforgeable code — NOT from URL parameters (S9 / CWE-451 / CWE-441).
+
+The first canonical instance of this exception is `public/Partials/FrontendAuth.php` (Feature-007 / 2026-06-30). Captured as durable pattern S9 in `docs/memory/PROJECT_CONTEXT.md`. Future consent surfaces invoking this exception MUST cite both this constitution paragraph AND S9 in their plan §Constitution Check + rendering class docblock.
+
 **Rationale**: Security failures have irreversible real-world consequences. These rules are absolute
-and cannot be waived for velocity, deadlines, or any other reason.
+and cannot be waived for velocity, deadlines, or any other reason. The consent-surface exception is not a dilution — it acknowledges that the threat-model for "user consenting on own behalf to issue a credential scoped to themselves" is structurally different from the threat-model for "admin action mutating site-wide state". The five conditions above ensure the consent-surface stays within bounded-blast-radius semantics.
 
 ### IV. User-Centric Design (NON-NEGOTIABLE)
 
