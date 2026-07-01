@@ -349,9 +349,18 @@ final class Main {
 		// TODO (phase N): wire Admin\Partials\ApplicationPasswords.
 		// $app_passwords = \AcrossAI_MCP_Manager\Admin\Partials\ApplicationPasswords::instance();
 
-		// TODO (phase 4): wire Includes\MCP\Controller.
-		// $mcp_controller = \AcrossAI_MCP_Manager\Includes\MCP\Controller::instance();
-		// $this->loader->add_action( 'rest_api_init', $mcp_controller, 'initialize_adapter' );
+		/**
+		 * Phase 4 gap closure — Feature-009 (2026-07-01). Boots the WP MCP
+		 * adapter singleton when at least one enabled MCP server row exists.
+		 * v0.0.4 wired this on `init` priority 1; the target design defers to
+		 * `rest_api_init` so `Plugin::instance()`'s internal REST route
+		 * registration lands during WordPress's REST bootstrap window.
+		 * Graceful when adapter package is absent (US3 — sets status
+		 * 'not-found'; `Notices::render_missing_adapter_notice()` handles the
+		 * admin banner separately).
+		 */
+		$mcp_controller = \AcrossAI_MCP_Manager\Includes\MCP\Controller::instance();
+		$this->loader->add_action( 'rest_api_init', $mcp_controller, 'initialize_adapter' );
 
 		// TODO (phase 5): wire REST\CliController.
 		// $cli_controller = \AcrossAI_MCP_Manager\Includes\REST\CliController::instance();
