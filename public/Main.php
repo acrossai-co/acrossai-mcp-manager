@@ -1,11 +1,20 @@
 <?php
-namespace AcrossAI_MCP_Manager\Public;
-
-// Exit if accessed directly
-defined( 'ABSPATH' ) || exit;
-
 /**
- * The public-facing functionality of the plugin.
+ * Public-facing enqueue orchestrator — scoped to the OAuth authorize/consent
+ * surface ONLY.
+ *
+ * Phase 8 refactor (2026-07-01) closes the previous global asset-leak defect
+ * where `enqueue_styles/scripts` fired on every front-end page. Post-Phase-8:
+ *
+ *   - CLI consent surface enqueue is owned entirely by
+ *     `Public\Partials\FrontendAuth::enqueue_assets()` (Phase 7). This class
+ *     does NOT compete with it. B12: `wp_enqueue_scripts` never fires when
+ *     FrontendAuth exits from `template_redirect` before `wp_head()`, so any
+ *     CLI-surface code in this method would be dead. DEV3: avoiding a parallel
+ *     Public\Main → Public\Partials\FrontendAuth import prevents a bidirectional
+ *     coupling parallel to the T044 A9-promotion cleanup.
+ *   - OAuth authorize/consent surface enqueue is owned HERE. Guarded on the
+ *     `ClaudeConnectors::is_authorize_page()` predicate (R1 research).
  *
  * @link       https://github.com/WPBoilerplate/acrossai-mcp-manager
  * @since      0.0.1
@@ -14,11 +23,15 @@ defined( 'ABSPATH' ) || exit;
  * @subpackage AcrossAI_MCP_Manager/public
  */
 
+namespace AcrossAI_MCP_Manager\Public;
+
+use AcrossAI_MCP_Manager\Includes\OAuth\ClaudeConnectors;
+
+// Exit if accessed directly.
+defined( 'ABSPATH' ) || exit;
+
 /**
- * The public-facing functionality of the plugin.
- *
- * Defines the plugin name, version, and two examples hooks for how to
- * enqueue the public-facing stylesheet and JavaScript.
+ * Public-facing enqueue orchestrator.
  *
  * @package    AcrossAI_MCP_Manager
  * @subpackage AcrossAI_MCP_Manager/public
@@ -27,55 +40,19 @@ defined( 'ABSPATH' ) || exit;
 class Main {
 
 	/**
+	 * Enqueue handle for the OAuth consent surface CSS.
+	 */
+	const OAUTH_STYLE_HANDLE = 'acrossai-mcp-frontend-oauth';
+
+	/**
 	 * The single instance of the class.
 	 *
-	 * @var Main
-	 * @since 0.0.1
+	 * @var self|null
 	 */
 	protected static $_instance = null;
 
 	/**
-	 * The ID of this plugin.
-	 *
-	 * @since    0.0.1
-	 * @access   private
-	 * @var      string    $plugin_name    The ID of this plugin.
-	 */
-	private $plugin_name;
-
-	/**
-	 * The version of this plugin.
-	 *
-	 * @since    0.0.1
-	 * @access   private
-	 * @var      string    $version    The current version of this plugin.
-	 */
-	private $version;
-
-	/**
-	 * The js_asset_file of the frontend
-	 *
-	 * @since    0.0.1
-	 * @access   private
-	 * @var      string    $version    The current version of this plugin.
-	 */
-	private $js_asset_file;
-
-	/**
-	 * The css_asset_file of the frontend
-	 *
-	 * @since    0.0.1
-	 * @access   private
-	 * @var      string    $version    The current version of this plugin.
-	 */
-	private $css_asset_file;
-
-	/**
 	 * Main instance.
-	 *
-	 * @since  0.0.1
-	 * @static
-	 * @return self Single instance.
 	 */
 	public static function instance(): self {
 		if ( null === self::$_instance ) {
@@ -85,59 +62,106 @@ class Main {
 	}
 
 	/**
-	 * Initialize the class and set its properties.
-	 *
-	 * @since    0.0.1
+	 * Private — use ::instance() instead. Prevents B5 double-registration.
 	 */
-	private function __construct() {
+	private function __construct() {}
 
-		$this->plugin_name = ACROSSAI_MCP_MANAGER_PLUGIN_NAME_SLUG;
-		$this->version     = ACROSSAI_MCP_MANAGER_VERSION;
+	/**
+	 * Register the OAuth-consent stylesheet. Wired to `wp_enqueue_scripts`
+	 * via Loader.
+	 *
+	 * Guarded — no-op on any surface that is not the OAuth authorize/consent
+	 * page. Reads version + dependencies from `build/css/frontend-oauth.asset.php`
+	 * via B11 defensive triple-check; falls back to the plugin version constant
+	 * on missing/malformed manifest.
+	 *
+	 * @since 0.0.1
+	 */
+	public function enqueue_styles(): void {
+		if ( ! ClaudeConnectors::is_authorize_page() ) {
+			return;
+		}
 
-		$this->js_asset_file  = include \ACROSSAI_MCP_MANAGER_PLUGIN_PATH . 'build/js/frontend.asset.php';
-		$this->css_asset_file = include \ACROSSAI_MCP_MANAGER_PLUGIN_PATH . 'build/css/frontend.asset.php';
+		$asset = $this->read_asset_manifest( 'frontend-oauth', 'css' );
+
+		wp_enqueue_style(
+			self::OAUTH_STYLE_HANDLE,
+			\plugins_url( 'build/css/frontend-oauth.css', \ACROSSAI_MCP_MANAGER_PLUGIN_FILE ),
+			$asset['dependencies'],
+			$asset['version']
+		);
+
+		// FR-021 — WP auto-substitutes `build/css/frontend-oauth-rtl.css` when
+		// `is_rtl()` returns true.
+		wp_style_add_data( self::OAUTH_STYLE_HANDLE, 'rtl', 'replace' );
 	}
 
 	/**
-	 * Register the stylesheets for the public-facing side of the site.
+	 * Register the OAuth-consent JavaScript. Wired to `wp_enqueue_scripts`
+	 * via Loader.
 	 *
-	 * @since    0.0.1
+	 * The v0.0.4 `assets/frontend-oauth.css` had no companion JS, and the
+	 * OAuth consent form (`ClaudeConnectors::render_consent_form`) is a plain
+	 * HTML form — no client-side scripting required. This method is retained
+	 * as a hook target so future OAuth-consent JS additions don't need new
+	 * Loader wiring, but currently no-ops after the guard.
+	 *
+	 * @since 0.0.1
 	 */
-	public function enqueue_styles() {
+	public function enqueue_scripts(): void {
+		if ( ! ClaudeConnectors::is_authorize_page() ) {
+			return;
+		}
 
-		/**
-		 * This function is provided for demonstration purposes only.
-		 *
-		 * An instance of this class should be passed to the run() function
-		 * defined in AcrossAI_MCP_Manager_Loader as all of the hooks are defined
-		 * in that particular class.
-		 *
-		 * The AcrossAI_MCP_Manager_Loader will then create the relationship
-		 * between the defined hooks and the functions defined in this
-		 * class.
-		 */
-		wp_enqueue_style( $this->plugin_name, \ACROSSAI_MCP_MANAGER_PLUGIN_URL . 'build/css/frontend.css', $this->css_asset_file['dependencies'], $this->css_asset_file['version'], 'all' );
+		// No JS is currently enqueued on the OAuth consent surface — see
+		// method docblock. Reserved for future extension.
 	}
 
 	/**
-	 * Register the JavaScript for the public-facing side of the site.
+	 * Read a `build/{css|js}/<handle>.asset.php` manifest with B11 defensive
+	 * triple-check. Returns a shape-guaranteed array — callers can consume
+	 * `['dependencies']` and `['version']` without further checks.
 	 *
-	 * @since    0.0.1
+	 * Silent fallback on missing / unreadable / malformed manifest: version
+	 * is the plugin constant, dependencies are `[]`. No `error_log`, no
+	 * `_doing_it_wrong` — the SEC-008-001 deploy-time gate is the operational
+	 * signal for missing manifests.
+	 *
+	 * @param string $handle_stem Manifest basename without extension (e.g. `'frontend-oauth'`).
+	 * @param string $bucket      `'css'` or `'js'`.
+	 * @return array{dependencies: string[], version: string}
 	 */
-	public function enqueue_scripts() {
+	private function read_asset_manifest( string $handle_stem, string $bucket ): array {
+		$fallback = array(
+			'dependencies' => array(),
+			'version'      => \ACROSSAI_MCP_MANAGER_VERSION,
+		);
 
-		/**
-		 * This function is provided for demonstration purposes only.
-		 *
-		 * An instance of this class should be passed to the run() function
-		 * defined in AcrossAI_MCP_Manager_Loader as all of the hooks are defined
-		 * in that particular class.
-		 *
-		 * The AcrossAI_MCP_Manager_Loader will then create the relationship
-		 * between the defined hooks and the functions defined in this
-		 * class.
-		 */
+		$path = \ACROSSAI_MCP_MANAGER_PLUGIN_PATH . 'build/' . $bucket . '/' . $handle_stem . '.asset.php';
+		if ( ! \file_exists( $path ) || ! \is_readable( $path ) ) {
+			return $fallback;
+		}
 
-		wp_enqueue_script( $this->plugin_name, \ACROSSAI_MCP_MANAGER_PLUGIN_URL . 'build/js/frontend.js', $this->js_asset_file['dependencies'], $this->js_asset_file['version'], false );
+		$asset = include $path;
+
+		// B11 defensive triple-check (generalized from transient reads to
+		// require-returned arrays).
+		if ( ! \is_array( $asset ) ) {
+			return $fallback;
+		}
+		if ( ! isset( $asset['dependencies'], $asset['version'] ) ) {
+			return $fallback;
+		}
+		if ( ! \is_array( $asset['dependencies'] ) ) {
+			return $fallback;
+		}
+		if ( ! \is_string( $asset['version'] ) || '' === $asset['version'] ) {
+			return $fallback;
+		}
+
+		return array(
+			'dependencies' => $asset['dependencies'],
+			'version'      => $asset['version'],
+		);
 	}
 }

@@ -18,6 +18,7 @@ This is a compact routing map for durable memory. Keep it short. It points to so
 | D11 | Phase X.0 absorption — when a phase's P0 prereq doesn't yet exist, absorb its setup as a sub-phase in the consuming phase, not a separate dedicated phase | Process | phase, prereq, p0-gate | Active | DECISIONS.md |
 | D12 | Bulk task-status updates MUST be followed by a re-audit of environment-dependent gates | Process | tasks, completion, ci-gates | Active | DECISIONS.md |
 | D13 | Constitution-level formalization vs. Accepted Deviation — escalate to `.specify/memory/constitution.md` when the deviation describes a generalizable pattern (≥2 features or forward-looking); reserve INDEX.md `DEV*` rows for one-off carve-outs | Process | constitution, deviation, governance, generalizable | Active | DECISIONS.md |
+| D14 | Cross-phase state observation via public-static predicate on the owning module — consumer uses `use` import, never duplicates internal magic strings; matches A11 + B11 defensive-read families | Cross-feature interface design | cross-phase, predicate, static, A11, S9-adjacent | Active | DECISIONS.md |
 
 ## Architecture Constraints
 | ID | Constraint | Scope | Tags | Source |

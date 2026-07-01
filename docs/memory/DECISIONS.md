@@ -415,3 +415,32 @@ When a feature-local deviation describes a GENERALIZABLE pattern (applies to ≥
 
 **Where to look next**
 `.specify/memory/constitution.md` §III for the canonical exception text and the 5 binding conditions. Compare against `docs/memory/INDEX.md` DEV1/DEV2/DEV3 to see what shape qualifies as one-off vs. generalizable.
+
+### 2026-07-01 — Cross-Phase State Observation via Public-Static Predicate on the Owning Module [Feature-008]
+
+**Status**
+Active
+
+**Why this is durable**
+When Phase N needs to observe state owned by Phase M (a query var value, a transient's payload, an owning-module identity check), the design question "should I inspect M's internals directly or ask M to publish an interface" recurs. Two evidenced resolutions to date:
+
+- Feature-007 / 2026-06-30 (SEC-001 fix): `FrontendAuth` needed to know the transient's authoritative `server_id` for the consent UI. Resolution: `CliController::peek_pending_server( string $auth_code ): ?string` published as public static on the OWNING module (Phase 6). `FrontendAuth` consumes via `use AcrossAI_MCP_Manager\Includes\REST\CliController;` — never touches transients directly.
+- Feature-008 / 2026-07-01 (FR-020 fix): `public/Main` needed to know if the current request is on the OAuth authorize surface. Resolution: `ClaudeConnectors::is_authorize_page(): bool` published as public static on the OWNING module (Phase 5). `public/Main` consumes via `use AcrossAI_MCP_Manager\Includes\OAuth\ClaudeConnectors;` — never duplicates the `'authorize'` / `'acrossai_mcp_oauth'` magic strings.
+
+Both cases were memory-informed decisions during the plan phase (the memory-synthesis for each explicitly steered the consumer AWAY from duplicating the check).
+
+**Decision**
+When Phase N needs to observe state owned by Phase M, Phase M publishes the observation as a public static predicate on its own class. Phase N consumes via `use` import. The predicate MUST satisfy A11's pure-stateless-service exemption (no instance state, no hook registration, no side effects, idempotent — safe to call multiple times per request). The consuming module MUST NOT duplicate the magic strings (query var names, transient key prefixes) that Phase M uses internally — always route through the published predicate. If the predicate needs to return richer information than a bool (server_id, user_id, session token), return a `?string` / `?array` shape and apply B11 defensive read on the way out.
+
+**Tradeoffs**
+- Gained: single source of truth for cross-phase state coupling. If Phase M renames its query var or restructures its transient shape, the change lives in one place. Consumers never break silently due to magic-string drift. Reviewers audit ONE predicate location rather than N call sites.
+- Made harder: Phase N acquires a hard dependency on Phase M's public static API. If Phase M is deleted or reorganized, Phase N breaks at compile time — which is preferable to silent runtime drift. For features with an accepted deviation like DEV3 (bidirectional coupling deferral), this pattern IS the fix that unblocks the deferral.
+- Reconsider: if the predicate needs instance state (rare — most cross-phase observations are pure reads), it's no longer A11-eligible and belongs as an instance method. But then reconsider whether cross-phase publication is the right shape at all — instance state usually implies the observation should happen inside the owning module rather than being exposed.
+
+**Evidence**
+- Feature-007 / 2026-06-30 SEC-001 fix: `includes/REST/CliController.php` — `peek_pending_server()` published; consumed by `public/Partials/FrontendAuth.php::handle_cli_auth`
+- Feature-008 / 2026-07-01 FR-020 fix: `includes/OAuth/ClaudeConnectors.php` — `is_authorize_page()` published; consumed by `public/Main.php::enqueue_styles/scripts`
+- Both predicates' docblocks cite each other and A11 + B11 as precedent
+
+**Where to look next**
+Read the two published predicates as a pair — the short form (`is_authorize_page`) shows the simplest shape (bool return, no defensive read); the long form (`peek_pending_server`) shows the full pattern with B11 defensive triple-check on a shape-returning payload. Both use zero side effects; both include their consumer's FR identifier in the docblock so reviewers can trace the call graph via grep.
