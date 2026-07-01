@@ -75,6 +75,25 @@ final class ClaudeConnectors {
 	}
 
 	/**
+	 * Public read-only predicate: is the current request the OAuth
+	 * authorize/consent surface?
+	 *
+	 * Added 2026-07-01 (Feature-008 / R1 research). Published as a static
+	 * helper so external consumers (e.g. `public/Main.php` asset enqueue)
+	 * can guard on the consent surface without duplicating the query var
+	 * name or the `'authorize'` magic string. Analogous to Phase 6
+	 * `CliController::peek_pending_server()` — pure stateless read,
+	 * A11-compliant (no instance state, no hook registration, no side
+	 * effects), idempotent.
+	 *
+	 * POST requests to this surface are also matched — they never reach
+	 * `wp_head()` so the harmless-true return does no work.
+	 */
+	public static function is_authorize_page(): bool {
+		return 'authorize' === (string) get_query_var( 'acrossai_mcp_oauth' );
+	}
+
+	/**
 	 * Dispatch on `template_redirect` — branches by query var value.
 	 *
 	 * Wired via Loader on `template_redirect`.
