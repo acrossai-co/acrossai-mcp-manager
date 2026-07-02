@@ -29,3 +29,10 @@ This is not a changelog. Do not record routine releases, version bumps, or imple
 > - Deployed to staging
 
 This is a changelog entry, not a durable lesson. It records what happened, not what was learned.
+
+### 2026-07-02 - BerlinDB Table subclasses must override maybe_upgrade() with a phantom-version guard
+
+- **Why durable**: The phantom-version guard on every BerlinDB-backed Table subclass is a canonical safety belt against the "version option stamped but physical table missing" edge case. Costs one method override; prevents an entire class of hard-to-diagnose "table doesn't exist" activation bugs.
+- **Future mistake prevented**: A future BerlinDB-backed table shipped without the guard could silently short-circuit `maybe_upgrade()` on any install where a prior activation failed mid-DDL. The bug is invisible until users complain about missing rows/features.
+- **Evidence**: The observed `wp_acrossai_mcp_servers doesn't exist` symptom that originally motivated Feature 011 on the developer's local install (2026-07-02).
+- **Where to look**: The four subclass file paths — `includes/Database/{MCPServer,CliAuthLog,OAuthToken,OAuthAudit}/Table.php` — each contains a `public function maybe_upgrade(): void` override. Canonical sibling reference at `/Users/raftaar1191/local-sites/wordpress-7-0/app/public/wp-content/plugins/acrossai-abilities-manager/includes/Modules/Abilities/Database/AcrossAI_Abilities_Table.php:96-101`.

@@ -312,7 +312,7 @@ final class CliController {
 	 */
 	public function handle_servers( WP_REST_Request $request ): WP_REST_Response {
 		$bound_server_id = (string) $request->get_param( '_bound_server_id' );
-		$rows            = ( new MCPServerQuery() )->query(
+		$rows            = MCPServerQuery::instance()->query(
 			array(
 				'server_slug' => $bound_server_id,
 				'is_enabled'  => 1,
@@ -410,7 +410,7 @@ final class CliController {
 		}
 
 		// Step 7 — server resolves to an enabled row.
-		$server_rows = ( new MCPServerQuery() )->query(
+		$server_rows = MCPServerQuery::instance()->query(
 			array(
 				'server_slug' => $request_server_id,
 				'is_enabled'  => 1,

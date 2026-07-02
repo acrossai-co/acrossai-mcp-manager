@@ -77,7 +77,7 @@ final class Storage {
 		}
 		$hash = hash( 'sha256', $raw );
 
-		$query = new CliAuthLogQuery();
+		$query = CliAuthLogQuery::instance();
 		$id    = $query->add_item(
 			array(
 				'server_id'             => $server_id,
@@ -106,7 +106,7 @@ final class Storage {
 	 */
 	public function lookup_authorization_code( string $raw_code ): ?CliAuthLogRow {
 		$hash  = hash( 'sha256', $raw_code );
-		$query = new CliAuthLogQuery();
+		$query = CliAuthLogQuery::instance();
 		$rows  = $query->query(
 			array(
 				'auth_code_hash' => $hash,
@@ -124,7 +124,7 @@ final class Storage {
 	 * @return bool true if THIS caller won the race.
 	 */
 	public function redeem_authorization_code_cas( int $code_row_id ): bool {
-		return ( new CliAuthLogQuery() )->redeem_atomic( $code_row_id, current_time( 'mysql', 1 ) );
+		return CliAuthLogQuery::instance()->redeem_atomic( $code_row_id, current_time( 'mysql', 1 ) );
 	}
 
 	/**
@@ -155,7 +155,7 @@ final class Storage {
 		$ttl        = $ttl > 0 ? $ttl : self::ACCESS_TOKEN_TTL_SECONDS;
 		$expires_at = gmdate( 'Y-m-d H:i:s', time() + $ttl );
 
-		$query = new OAuthTokenQuery();
+		$query = OAuthTokenQuery::instance();
 		$id    = $query->add_item(
 			array(
 				'access_token_hash'   => $hash,
@@ -182,7 +182,7 @@ final class Storage {
 		if ( $code_row_id <= 0 ) {
 			return array();
 		}
-		$query = new OAuthTokenQuery();
+		$query = OAuthTokenQuery::instance();
 		$rows  = $query->query( array( 'issued_from_code_id' => $code_row_id ) );
 		$ids   = array();
 		$now   = current_time( 'mysql', 1 );
@@ -245,8 +245,8 @@ final class Storage {
 	public function cleanup_oauth_data(): array {
 		global $wpdb;
 
-		$cli_query    = new CliAuthLogQuery();
-		$audit_query  = new OAuthAuditQuery();
+		$cli_query    = CliAuthLogQuery::instance();
+		$audit_query  = OAuthAuditQuery::instance();
 		$tokens_table = \AcrossAI_MCP_Manager\Includes\Database\OAuthToken\Table::instance()->get_table_name();
 
 		// Codes: delete OAuth code rows older than 10-min expiry + 24-h grace.

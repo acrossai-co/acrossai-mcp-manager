@@ -30,9 +30,6 @@ final class AdminPageSlugs {
 	/** CLI Auth Log submenu page slug. */
 	public const CLI_AUTH_LOG = 'acrossai_mcp_manager_cli_auth_log';
 
-	/** Access Control submenu page slug (only registered when vendor pkg present). */
-	public const ACCESS_CONTROL = 'acrossai_mcp_manager_access_control';
-
 	/**
 	 * Screen IDs WordPress generates for our pages.
 	 *
@@ -56,11 +53,9 @@ final class AdminPageSlugs {
 			// Post-Feature-010 submenu IDs (under shared `acrossai` parent).
 			'acrossai_page_' . self::PARENT,
 			'acrossai_page_' . self::CLI_AUTH_LOG,
-			'acrossai_page_' . self::ACCESS_CONTROL,
 			// Legacy top-level IDs (retained additively per A9).
 			'toplevel_page_' . self::PARENT,
 			'mcp-manager_page_' . self::CLI_AUTH_LOG,
-			'mcp-manager_page_' . self::ACCESS_CONTROL,
 		);
 	}
 

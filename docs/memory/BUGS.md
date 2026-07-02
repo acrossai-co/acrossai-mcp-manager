@@ -449,3 +449,54 @@ For any activation-time prerequisite check that emits `wp_die()`, use `add_actio
 
 **Where to look next**
 For any future plugin activation prereq (PHP extension check, WP version check, MySQL feature check), apply the same priority-1 pattern. See D15 for the companion "shared package bootstrap in plugin entry file" pattern — B14 + D15 are the paired vendor-package resilience patterns.
+
+### 2026-07-02 — Regex verification gates that pattern-match only the bare-name form silently miss FQN and short-name aliased forms [Feature-011]
+
+**Status**
+Active
+
+**Why this is durable**
+Grep-based cross-file verification gates that pattern-match a target symbol using a **single surface form** silently produce **false negatives** against the other legal PHP spellings of the same symbol:
+
+1. **Leading-`\` FQN form**: WPCS-compliant code often writes `class Foo extends \WP_List_Table` (leading backslash) rather than `extends WP_List_Table` — the bare-name grep `'extends WP_List_Table'` returns 0.
+2. **Short-name aliased form**: files that add `use AcrossAI_MCP_Manager\Includes\Database\MCPServer\Query;` at the top can call `new Query()` — the qualified-name grep `'new [A-Za-z_]*Query'` misses these because there's no prefix at the call site.
+
+In both cases the gate reports "0 matches — PASS" while the underlying invariant is actually intact — masking the bug where a future regression IS present.
+
+**Pattern to apply**
+For every grep-based verification gate on a target class/method/const, use one of:
+
+**Option A — Single ERE that accepts both forms** (preferred when the pattern is short):
+```
+# Matches both `extends WP_List_Table` and `extends \WP_List_Table`
+grep -cE 'extends\s+\\?WP_List_Table' <file>
+
+# Matches both `new MCPServerQuery()` and `new Query()`
+grep -rEn '\bnew\s+([A-Za-z_\\]+\\)?Query\s*\(\s*\)' <files>
+```
+
+**Option B — Two grep passes** (use when the ERE gets awkward or when the fixed-string form is clearer):
+```
+# Pass 1: qualified form
+grep -rEn '\bnew [A-Za-z_]*(MCPServer|CliAuthLog)Query\s*\(' <files>
+# Pass 2: short-name form (bound via `use ...\Query;`)
+grep -rEn '\bnew\s+Query\s*\(\s*\)' <files>
+# Gate = both greps must be green
+```
+
+**Prevention rule**
+Any grep-based verification gate MUST account for at minimum:
+(a) The bare-name form of the target symbol.
+(b) The leading-`\` FQN form of the target symbol.
+(c) The short-name aliased form (bound via a `use` import) when the target is a class name.
+
+Reviewers writing verification gates in `tasks.md` DoDs (or in FR grep contracts) MUST test the gate against BOTH the intended-pass state AND the intended-fail state before shipping — a gate that returns 0 on both healthy and broken code is worse than no gate at all, because it lulls reviewers into believing the invariant is being enforced.
+
+**Evidence**
+- **Manifestation 1 — DEV1 non-widening gate false negative**: Feature 011 `tasks.md` T032 (pre-fix) used `grep -c 'extends WP_List_Table' admin/Partials/CliAuthLogListTable.php` which returned 0 because the file has `class CliAuthLogListTable extends \WP_List_Table` (leading `\`). Architecture-review V1 (2026-07-02) caught it; T032 fixed to use `grep -cE 'extends\s+\\?WP_List_Table'`.
+- **Manifestation 2 — Pre-flight callers grep missed short-name form**: Feature 011 `spec.md` FR-020 (pre-remediation) used `grep -rEn 'new [A-Za-z_]*(MCPServer|CliAuthLog|OAuthToken|OAuthAudit)[A-Za-z_]*Query'` which missed 11 caller sites in `admin/Partials/Settings.php` (× 7), `admin/Partials/MCPServerListTable.php`, `admin/Partials/ApplicationPasswords.php`, and `includes/Database/CliAuthLog/Recorder.php` that use `use ...\Query;` at the top and call `new Query()` (bare short-name). Whole-plugin gate T037 (2026-07-02) surfaced the survivors post-workflow; FR-020 fixed to require a two-pass grep.
+
+**Where to look next**
+`tasks.md` T032 (post-V1-fix) shows the canonical `extends\s+\\?<Class>` idiom.
+`spec.md` FR-020 (post-I1-fix) shows the two-pass idiom (qualified + short-name via `use`).
+Any future FR that codifies a grep gate for a rename sweep or boundary preservation should reference this B15 entry in its DoD line.

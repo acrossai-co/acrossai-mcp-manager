@@ -148,6 +148,8 @@ pattern.
 **Status**
 Active
 
+**Note (Feature 011)**: Scope narrowed — this rule no longer applies to the four Database\{Module}\Table::instance()->maybe_upgrade() calls in Activator per FR-016 (defensive class_exists would mask a real regression after FR-011's autoload fix). Still active for other class_exists patterns.
+
 **Context**
 DB Query classes (`MCPServer\Query`, `CliAuthLog\Query`,
 `ConnectorAuditLog\Query`) do not exist until Phase 4.
@@ -221,6 +223,8 @@ BUGS.md B1 pattern. Feature 001 Activator.php lines 4-6 use correct `use` import
 ### 2026-05-29 — Activator Does Not Call insert_default_server() [Feature-001]
 
 **Status**
+Superseded (Feature 011)
+
 Active
 
 **Why this is durable**
@@ -271,6 +275,8 @@ Feature 001 clarification Q2 (2026-05-29). Main.php stub line ~294.
 ### 2026-06-17 — BerlinDB-style Query Interface Hand-Rolled Without the Vendor [Feature-002]
 
 **Status**
+Superseded (Feature 011)
+
 Active
 
 **Why this is durable**
@@ -482,3 +488,77 @@ After successful construction, the bootstrap fires `do_action('<resource>_bootst
 
 **Where to look next**
 Read the reference plugin's `acrossai-abilities-manager.php` bootstrap block (lines 82–154) as the canonical shape. Note the two-guard pattern in the `add_action('plugins_loaded', ...)` closure and the priority-1 activation guard's rationale (must run BEFORE the default-priority-10 register_activation_hook callback that would fatal on missing vendor). See INDEX.md `DEV4` row for the deviation's registration + review criteria. Future consumers of the same shared package should copy this bootstrap shape verbatim, adjusting only the plugin-specific slug in error messages.
+
+---
+
+### DEC-BERLINDB-TABLE-REQUEST-BOOT — BerlinDB Table subclasses require request-time instantiation, not just activation-time
+
+**Status**: Active (Feature 011)
+**Scope**: Every plugin subclassing BerlinDB Core `\BerlinDB\Database\Kern\Table`
+**Tags**: berlindb, boot, request-lifecycle, main-php, generalizable
+
+**Why this is durable**
+BerlinDB v3's `Query` subclass looks up its physical table name (`$wpdb->prefix . $name`) from a global DB interface that is populated by the Table subclass's `sunrise()` boot. `sunrise()` runs from the Table constructor. If no Table subclass is instantiated during a given request lifecycle, the Query base class falls back to using `$table_alias` as the FROM clause — producing `Table 'db.<alias>' doesn't exist` fatals at the first Query hit. Calling `Table::instance()` in `Activator::activate()` satisfies DDL lifecycle only; each subsequent request still needs its own `Table::instance()` call to populate the DB interface for that request's Query subclasses.
+
+Feature 011 observed this in the wild on 2026-07-02:
+- Admin `?page=acrossai_mcp_manager` → `MCPServerListTable::prepare_items` → `Query::query` → `Table 'local.mcps' doesn't exist`
+- REST `rest_api_init` → `MCP\Controller::has_any_enabled_server` → `Query::query` → same fatal
+
+Both code paths bypassed `Activator::activate()` (which only runs at plugin activation) and had no other trigger to instantiate the Table.
+
+**Decision**
+Every plugin that hosts BerlinDB Table subclasses MUST instantiate all of them at request time from `Main::load_hooks()` (or equivalent boot method that fires per request during `plugins_loaded`). The call site MUST be reachable BEFORE any admin or public hook that could invoke a Query subclass. Do NOT rely on activation-time instantiation to persist across requests.
+
+For `acrossai-mcp-manager`: a `Main::bootstrap_database_tables()` private helper is invoked from `Main::load_hooks()` inside the `apply_filters( 'acrossai_mcp_manager_load', true )` gate, BEFORE `define_admin_hooks()` and `define_public_hooks()`. It calls `Table::instance()` on each of the four Database\<Module>\Table subclasses.
+
+**Tradeoffs**
+- Gained: correct request-time DB interface registration for every Query subclass. Zero runtime SQL fallback to `$table_alias`. Consistent boot semantics per request.
+- Made harder: newcomers may add a new BerlinDB Table subclass without adding it to `bootstrap_database_tables()`, causing silent alias-as-FROM fatals on the first request the Query hits. Reviewers must audit that every BerlinDB Table subclass added to `includes/Database/<Module>/Table.php` is also wired into `bootstrap_database_tables()`.
+- Reconsider: if BerlinDB Core changes to lazy-register Tables at Query-construction time, this pattern becomes redundant. Until then, the explicit request-time boot is load-bearing.
+
+**Evidence**
+- `includes/Main.php` — `Main::bootstrap_database_tables()` (Feature 011 T044)
+- `includes/Main.php` — `Main::load_hooks()` invocation
+- Sibling plugin `acrossai-abilities-manager/includes/Main.php:349` — `AcrossAI_Abilities_Table::instance()` call inside `define_admin_hooks()` (canonical shape; Feature 011 hoists it to `load_hooks()` for public/REST coverage)
+- Live error log 2026-07-02 16:12:56 UTC (`docs/planings-tasks/011-berlindb-migration.md` Emergent Fixes section)
+- Feature 011 spec.md FR-028
+
+**Where to look next**
+Read `Main::bootstrap_database_tables()` for the canonical shape. Note the call happens INSIDE the `apply_filters` gate (respects the plugin-disable filter) but BEFORE both `define_admin_hooks()` and `define_public_hooks()` (so admin, public, and REST request paths all see the registered Tables). Future BerlinDB-backed features MUST add their Table subclass to this method — audit gate at code review.
+
+---
+
+### DEC-BERLINDB-SUBCLASS-NO-USE-COLLISION — Do not import Kern base class when subclass name matches
+
+**Status**: Active (Feature 011)
+**Scope**: Any file that declares a subclass of `\BerlinDB\Database\Kern\{Table,Schema,Query,Row}` using the SAME class name as the parent
+**Tags**: berlindb, namespace, class-collision, subclass-naming, workflow-template
+
+**Why this is durable**
+This plugin uses a subdirectory-per-module layout (`includes/Database/<Module>/{Table,Schema,Query,Row}.php`) with UNPREFIXED class names — each file declares a class literally named `Table`, `Schema`, `Query`, or `Row` in the module's namespace. If such a file adds `use BerlinDB\Database\Kern\Table;` for readability, PHP imports Kern's `Table` as the local short name `Table` — colliding with the subclass declaration in the same namespace and producing `Cannot redeclare class ... previously declared as local import` fatals. The error surfaces at `php -l`, at `class_exists()` calls, and at autoload time.
+
+Feature 011 hit this across 14 of 16 subclass files during workflow execution (two agents happened to write the correct pattern; twelve did not). The bug was caught by post-workflow `php -l` and fixed by removing the `use` line — the class declarations already used leading-`\` FQN (`extends \BerlinDB\Database\Kern\Table`), so no import was needed.
+
+The sibling plugin `acrossai-abilities-manager` avoids this pattern by prefixing subclass names (`AcrossAI_Abilities_Table` extends `Table`) — so the `use BerlinDB\Database\Kern\Table;` is safe there. That pattern does NOT transfer to a subdir-per-module layout where the subclass shares the parent's short name.
+
+**Decision**
+When a plugin file declares a class subclassing a BerlinDB Kern class using the SAME class name (`class Table extends \BerlinDB\Database\Kern\Table`), do NOT add a `use BerlinDB\Database\Kern\<ClassName>;` import. Two safe alternatives:
+
+1. Drop the `use` entirely; extend via leading-`\` FQN (`extends \BerlinDB\Database\Kern\Table`). This is Feature 011's pattern in the `includes/Database/<Module>/` layout.
+2. Alias the import (`use BerlinDB\Database\Kern\Table as KernTable; class Table extends KernTable`). Marginally cleaner if the parent is referenced multiple times in the file body.
+
+Either alternative is acceptable; the collision is not. The Kern parent MUST be referenced somewhere in the file (leading-`\` FQN in `extends`, or aliased-form in `extends`) — bare `Table` in `extends` will silently resolve to the CURRENT namespace's `Table` (i.e., recursion into itself) and fail at instantiation.
+
+**Tradeoffs**
+- Gained: subclass files with parent-matching names parse cleanly under PHP 8.1+ and load without collision.
+- Made harder: newcomers copying a similar-shape file from the sibling plugin (which uses prefixed subclass names) may not realize the `use` line has to go when the subclass name matches. Reviewers must audit every new BerlinDB Kern subclass file for this pattern.
+- Reconsider: if this plugin migrates to a flat `includes/Database/AcrossAI_MCP_<Module>_<Class>.php` layout with prefixed class names, the sibling plugin's `use` pattern becomes safe and this decision becomes moot. That migration is out of scope for Feature 011.
+
+**Evidence**
+- Feature 011 workflow template bug: 14 of 16 subclass files initially had the collision; caught by post-workflow `php -l` (see `docs/planings-tasks/011-berlindb-migration.md` Emergent Fixes section)
+- Post-fix: `find includes admin public *.php -name '*.php' | xargs php -l` returns zero errors
+- Sibling plugin `acrossai-abilities-manager` uses prefixed subclass names — the `use` is safe there; the collision is specific to the subdir-per-module unprefixed-class-name layout
+- Feature 011 spec.md FR-020 (caller-sweep enumeration, indirectly related as caller files still `use` these subclasses)
+
+**Where to look next**
+Read one of Feature 011's Table subclass files (e.g., `includes/Database/MCPServer/Table.php`) — note the ABSENCE of `use BerlinDB\Database\Kern\Table;` at the top and the presence of `class Table extends \BerlinDB\Database\Kern\Table` (leading-`\` FQN). Any future BerlinDB Kern subclass in this plugin's subdir-per-module layout MUST follow the same pattern.

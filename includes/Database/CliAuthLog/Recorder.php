@@ -34,7 +34,7 @@ final class Recorder {
 	public static function record_approved( int $user_id, string $server_slug, string $auth_code_hash ): void {
 		try {
 			$server_id = self::resolve_server_id( $server_slug );
-			$query     = new Query();
+			$query     = Query::instance();
 			$query->add_item(
 				array(
 					'server_id'      => $server_id,
@@ -65,7 +65,7 @@ final class Recorder {
 	public static function record_success( int $user_id, string $server_slug, string $auth_code_hash, string $app_password_uuid ): void {
 		try {
 			$server_id = self::resolve_server_id( $server_slug );
-			$query     = new Query();
+			$query     = Query::instance();
 			$query->add_item(
 				array(
 					'server_id'         => $server_id,
@@ -95,7 +95,7 @@ final class Recorder {
 		if ( '' === $server_slug ) {
 			return 0;
 		}
-		$rows = ( new MCPServerQuery() )->query(
+		$rows = MCPServerQuery::instance()->query(
 			array(
 				'server_slug' => $server_slug,
 				'number'      => 1,

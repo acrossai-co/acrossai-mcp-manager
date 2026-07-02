@@ -29,7 +29,7 @@ defined( 'ABSPATH' ) || exit;
  */
 class ApplicationPasswords {
 
-	const REST_NAMESPACE = 'acrossai-mcp-manager/v1';
+	const REST_NAMESPACE  = 'acrossai-mcp-manager/v1';
 	const APP_NAME_PREFIX = 'AcrossAI MCP Manager';
 
 	/** @var ApplicationPasswords|null */
@@ -171,10 +171,10 @@ class ApplicationPasswords {
 	 * + a button that POSTs to /generate-app-password via fetch().
 	 */
 	public function render_for_server( int $server_id ): void {
-		$user_id    = get_current_user_id();
-		$has_api    = class_exists( 'WP_Application_Passwords' );
-		$generate   = esc_url( rest_url( self::REST_NAMESPACE . '/generate-app-password' ) );
-		$nonce      = wp_create_nonce( 'wp_rest' );
+		$user_id  = get_current_user_id();
+		$has_api  = class_exists( 'WP_Application_Passwords' );
+		$generate = esc_url( rest_url( self::REST_NAMESPACE . '/generate-app-password' ) );
+		$nonce    = wp_create_nonce( 'wp_rest' );
 
 		echo '<div class="acrossai-tokens-tab">';
 
@@ -239,7 +239,12 @@ class ApplicationPasswords {
 		if ( $server_id <= 0 ) {
 			return self::APP_NAME_PREFIX;
 		}
-		$rows = ( new Query() )->query( array( 'id' => $server_id, 'number' => 1 ) );
+		$rows = Query::instance()->query(
+			array(
+				'id'     => $server_id,
+				'number' => 1,
+			)
+		);
 		if ( empty( $rows ) ) {
 			return self::APP_NAME_PREFIX;
 		}

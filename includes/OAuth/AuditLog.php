@@ -61,7 +61,7 @@ final class AuditLog {
 	 * @param array<string, mixed> $context    Optional event payload (see method docblock).
 	 */
 	public function write( string $event_type, array $context = array() ): void {
-		$query = new OAuthAuditQuery();
+		$query = OAuthAuditQuery::instance();
 		$row   = array(
 			'event_type'        => $event_type,
 			'server_id'         => isset( $context['server_id'] ) ? (int) $context['server_id'] : 0,

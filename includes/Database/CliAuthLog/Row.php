@@ -1,53 +1,53 @@
 <?php
 /**
- * CLI auth log row value object.
+ * BerlinDB Row for a single CliAuthLog record.
  *
  * @package AcrossAI_MCP_Manager
  * @subpackage Includes\Database\CliAuthLog
  */
+
+declare( strict_types = 1 );
 
 namespace AcrossAI_MCP_Manager\Includes\Database\CliAuthLog;
 
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Lightweight typed view of one row from `{prefix}acrossai_mcp_cli_auth_logs`.
+ * Represents a single row from the CliAuthLog module's table.
+ *
+ * @property array $properties
  */
-class Row {
+class Row extends \BerlinDB\Database\Kern\Row {
 
-	public int $id              = 0;
-	public int $server_id       = 0;
-	public string $server_slug  = '';
-	public int $user_id         = 0;
-	public string $status       = '';
-	public string $failure_code = '';
-	public string $auth_code_hash    = '';
-	public string $app_password_uuid = '';
-	// Phase 5 OAuth columns (DB_VERSION 0.0.2).
-	public string $redirect_uri          = '';
-	public string $code_challenge        = '';
-	public string $code_challenge_method = '';
-	public string $scope                 = '';
-	public ?string $approved_at  = null;
-	public ?string $completed_at = null;
-	public string $created_at    = '';
+	/** @var int */         public $id                    = 0;
+	/** @var int */         public $server_id             = 0;
+	/** @var string */      public $server_slug           = '';
+	/** @var int */         public $user_id               = 0;
+	/** @var string */      public $status                = 'pending';
+	/** @var string */      public $failure_code          = '';
+	/** @var string */      public $auth_code_hash        = '';
+	/** @var string */      public $app_password_uuid     = '';
+	/** @var string */      public $redirect_uri          = '';
+	/** @var string */      public $code_challenge        = '';
+	/** @var string */      public $code_challenge_method = 'S256';
+	/** @var string */      public $scope                 = 'mcp';
+	/** @var string|null */ public $approved_at           = null;
+	/** @var string|null */ public $completed_at          = null;
+	/** @var string */      public $created_at            = '';
 
-	public function __construct( array $data = array() ) {
-		foreach ( $data as $key => $value ) {
-			if ( ! property_exists( $this, $key ) ) {
-				continue;
-			}
-			if ( in_array( $key, array( 'id', 'server_id', 'user_id' ), true ) ) {
-				$this->{$key} = (int) $value;
-			} elseif ( in_array( $key, array( 'approved_at', 'completed_at' ), true ) ) {
-				$this->{$key} = ( null === $value ) ? null : (string) $value;
-			} else {
-				$this->{$key} = (string) $value;
-			}
-		}
+	/**
+	 * Constructor — casts primitive types.
+	 *
+	 * @param object|array $item Raw DB row.
+	 */
+	public function __construct( $item ) {
+		parent::__construct( $item );
+		$this->id = (int) $this->id;
 	}
 
 	/**
+	 * Return this row as an associative array (external consumers depend on this).
+	 *
 	 * @return array<string, mixed>
 	 */
 	public function to_array(): array {

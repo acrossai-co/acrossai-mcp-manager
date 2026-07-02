@@ -269,7 +269,7 @@ final class TokenController {
 		if ( '' === $client_id ) {
 			return null;
 		}
-		$rows = ( new MCPServerQuery() )->query(
+		$rows = MCPServerQuery::instance()->query(
 			array(
 				'claude_connector_client_id' => $client_id,
 				'number'                     => 1,

@@ -350,7 +350,7 @@ final class ClaudeConnectors {
 		if ( '' === $client_id ) {
 			return null;
 		}
-		$query   = new MCPServerQuery();
+		$query   = MCPServerQuery::instance();
 		$results = $query->query(
 			array(
 				'claude_connector_client_id' => $client_id,

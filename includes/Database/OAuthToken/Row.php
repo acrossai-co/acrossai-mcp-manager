@@ -1,61 +1,46 @@
 <?php
 /**
- * OAuth access token row value object.
+ * BerlinDB Row for a single OAuthToken record.
  *
  * @package AcrossAI_MCP_Manager
  * @subpackage Includes\Database\OAuthToken
  */
+
+declare( strict_types = 1 );
 
 namespace AcrossAI_MCP_Manager\Includes\Database\OAuthToken;
 
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Typed value object for one access-token row.
+ * Represents a single row from the OAuthToken module's table.
+ *
+ * @property array $properties
  */
-class Row {
+class Row extends \BerlinDB\Database\Kern\Row {
 
-	/** @var int Primary key. */
-	public int $id = 0;
-	/** @var string SHA-256 hex of the raw access token. */
-	public string $access_token_hash = '';
-	/** @var int Server id the token authorises. */
-	public int $server_id = 0;
-	/** @var int Granting user id. */
-	public int $user_id = 0;
-	/** @var int CliAuthLog row id of the auth code this token was issued from. */
-	public int $issued_from_code_id = 0;
-	/** @var string Scope — always `mcp` in this phase. */
-	public string $scope = 'mcp';
-	/** @var string MySQL datetime issued at. */
-	public string $created_at = '';
-	/** @var string MySQL datetime — token expiry. */
-	public string $expires_at = '';
-	/** @var string|null MySQL datetime when revoked (FR-014 anti-replay), or null. */
-	public ?string $revoked_at = null;
+	/** @var int */         public $id                  = 0;
+	/** @var string */      public $access_token_hash   = '';
+	/** @var int */         public $server_id           = 0;
+	/** @var int */         public $user_id             = 0;
+	/** @var int */         public $issued_from_code_id = 0;
+	/** @var string */      public $scope               = 'mcp';
+	/** @var string */      public $created_at          = '';
+	/** @var string */      public $expires_at          = '';
+	/** @var string|null */ public $revoked_at          = null;
 
 	/**
-	 * Hydrate from a wpdb row array (string-keyed).
+	 * Constructor — casts primitive types.
 	 *
-	 * @param array<string, mixed> $data
+	 * @param object|array $item Raw DB row.
 	 */
-	public function __construct( array $data = array() ) {
-		foreach ( $data as $key => $value ) {
-			if ( ! property_exists( $this, $key ) ) {
-				continue;
-			}
-			if ( in_array( $key, array( 'id', 'server_id', 'user_id', 'issued_from_code_id' ), true ) ) {
-				$this->{$key} = (int) $value;
-			} elseif ( 'revoked_at' === $key ) {
-				$this->{$key} = ( null === $value ) ? null : (string) $value;
-			} else {
-				$this->{$key} = (string) $value;
-			}
-		}
+	public function __construct( $item ) {
+		parent::__construct( $item );
+		$this->id = (int) $this->id;
 	}
 
 	/**
-	 * Convenience: convert back to associative array.
+	 * Return this row as an associative array (external consumers depend on this).
 	 *
 	 * @return array<string, mixed>
 	 */

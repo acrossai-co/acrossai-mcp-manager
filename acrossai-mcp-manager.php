@@ -25,7 +25,7 @@ namespace AcrossAI_MCP_Manager;
  * Description:       AcrossAI MCP Manager by WPBoilerplate
  * Version:           0.0.1
  * Requires at least: 6.9
- * Requires PHP:	  8.1
+ * Requires PHP:      8.1
  * Author:            WPBoilerplate
  * Author URI:        https://github.com/WPBoilerplate/acrossai-mcp-manager
  * License:           GPL-2.0+
@@ -51,6 +51,13 @@ define( 'ACROSSAI_MCP_MANAGER_PLUGIN_FILE', __FILE__ );
  * This action is documented in includes/activator.php
  */
 function acrossai_mcp_manager_activate() {
+	// FR-011: Load the vendor autoloader before the Activator so BerlinDB Kern
+	// base classes and the four Database\<Module>\Query FQNs autoload cleanly
+	// during activation — `plugins_loaded` (where Main::__construct() normally
+	// registers the vendor autoloader) has not yet fired at this point.
+	// The priority-1 pre-guard on `activate_<plugin>` (below) provides the
+	// fail-early wp_die() on a missing vendor install (DEV4 / D15 / B14).
+	require_once __DIR__ . '/vendor/autoload_packages.php';
 	require_once plugin_dir_path( __FILE__ ) . 'includes/Activator.php';
 	Includes\Activator::activate();
 }

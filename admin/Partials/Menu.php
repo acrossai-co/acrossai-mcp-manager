@@ -73,11 +73,11 @@ class Menu {
 	public function register_submenu(): void {
 		$settings = Settings::instance();
 
-		// 1) MCP Manager main page — position 2 under `acrossai` parent (FR-020).
+		// 1) MCP main page — position 2 under `acrossai` parent (FR-020).
 		add_submenu_page(
 			SettingsPage::PARENT_SLUG,
-			__( 'MCP Manager', 'acrossai-mcp-manager' ),
-			__( 'MCP Manager', 'acrossai-mcp-manager' ),
+			__( 'MCP', 'acrossai-mcp-manager' ),
+			__( 'MCP', 'acrossai-mcp-manager' ),
 			'manage_options',
 			AdminPageSlugs::PARENT,
 			array( $settings, 'render_list_page' ),
@@ -94,21 +94,6 @@ class Menu {
 			array( $settings, 'render_cli_auth_log_page' ),
 			3
 		);
-
-		// 3) Access Control — position 4, conditional on vendor package presence.
-		// The class_exists guard remains per CONSTRAINT 1 / FR-025 as defense-in-depth
-		// even though the package is now a hard require in composer.json.
-		if ( class_exists( '\WPBoilerplate\AccessControl\AccessControlManager' ) ) {
-			add_submenu_page(
-				SettingsPage::PARENT_SLUG,
-				__( 'Access Control', 'acrossai-mcp-manager' ),
-				__( 'Access Control', 'acrossai-mcp-manager' ),
-				'manage_options',
-				AdminPageSlugs::ACCESS_CONTROL,
-				array( $settings, 'render_access_control_page' ),
-				4
-			);
-		}
 	}
 
 	/**

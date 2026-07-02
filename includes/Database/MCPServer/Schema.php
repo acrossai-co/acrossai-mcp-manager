@@ -1,62 +1,163 @@
 <?php
 /**
- * MCP Server schema definition.
+ * BerlinDB Schema for the MCPServer module.
+ *
+ * 13 columns per Feature 011 plan §Concrete column decisions MCPServer.
  *
  * @package AcrossAI_MCP_Manager
  * @subpackage Includes\Database\MCPServer
  */
 
+declare( strict_types = 1 );
+
 namespace AcrossAI_MCP_Manager\Includes\Database\MCPServer;
 
+// Exit if accessed directly.
 defined( 'ABSPATH' ) || exit;
 
-class Schema {
-
-	protected static $_instance = null;
-
-	public static function instance(): self {
-		if ( null === self::$_instance ) {
-			self::$_instance = new self();
-		}
-		return self::$_instance;
-	}
-
-	private function __construct() {}
+/**
+ * Schema class defining all 13 columns of the acrossai_mcp_servers table.
+ *
+ * @since 0.1.0
+ */
+class Schema extends \BerlinDB\Database\Kern\Schema {
 
 	/**
-	 * Column metadata: name => [type, default, wpdb_format].
-	 * type: 'int' | 'string'. wpdb_format: '%d' | '%s'.
+	 * Array of column definitions.
 	 *
-	 * @return array<string, array{type:string, default:mixed, format:string}>
+	 * @var array
 	 */
-	public function columns(): array {
-		return array(
-			'id'                             => array( 'type' => 'int',    'default' => 0,       'format' => '%d' ),
-			'server_name'                    => array( 'type' => 'string', 'default' => '',      'format' => '%s' ),
-			'server_slug'                    => array( 'type' => 'string', 'default' => '',      'format' => '%s' ),
-			'description'                    => array( 'type' => 'string', 'default' => '',      'format' => '%s' ),
-			'is_enabled'                     => array( 'type' => 'int',    'default' => 0,       'format' => '%d' ),
-			'registered_from'                => array( 'type' => 'string', 'default' => 'plugin','format' => '%s' ),
-			'server_route_namespace'         => array( 'type' => 'string', 'default' => 'mcp',   'format' => '%s' ),
-			'server_route'                   => array( 'type' => 'string', 'default' => '',      'format' => '%s' ),
-			'server_version'                 => array( 'type' => 'string', 'default' => 'v1.0.0','format' => '%s' ),
-			'claude_connector_client_id'     => array( 'type' => 'string', 'default' => '',      'format' => '%s' ),
-			'claude_connector_client_secret' => array( 'type' => 'string', 'default' => '',      'format' => '%s' ),
-			'claude_connector_redirect_uri'  => array( 'type' => 'string', 'default' => '',      'format' => '%s' ),
-			'created_at'                     => array( 'type' => 'string', 'default' => null,    'format' => '%s' ),
-		);
-	}
+	public $columns = array(
 
-	public function column_names(): array {
-		return array_keys( $this->columns() );
-	}
+		// Primary key — 'primary' flag omitted; PRIMARY KEY DDL comes from $indexes.
+		array(
+			'name'     => 'id',
+			'type'     => 'bigint',
+			'length'   => '20',
+			'unsigned' => true,
+			'extra'    => 'auto_increment',
+			'sortable' => true,
+		),
 
-	public function has_column( string $name ): bool {
-		return array_key_exists( $name, $this->columns() );
-	}
+		// Server display name.
+		array(
+			'name'   => 'server_name',
+			'type'   => 'varchar',
+			'length' => '255',
+		),
 
-	public function format_for( string $name ): string {
-		$cols = $this->columns();
-		return $cols[ $name ]['format'] ?? '%s';
-	}
+		// Server slug (route path segment). Indexed for lookup.
+		array(
+			'name'       => 'server_slug',
+			'type'       => 'varchar',
+			'length'     => '255',
+			'default'    => '',
+			'sortable'   => true,
+			'searchable' => true,
+		),
+
+		// Human-readable description.
+		array(
+			'name'    => 'description',
+			'type'    => 'varchar',
+			'length'  => '500',
+			'default' => '',
+		),
+
+		// Enabled toggle (0/1).
+		array(
+			'name'    => 'is_enabled',
+			'type'    => 'tinyint',
+			'length'  => '1',
+			'default' => 0,
+		),
+
+		// Origin: 'plugin' (self-managed) or third-party plugin slug.
+		array(
+			'name'    => 'registered_from',
+			'type'    => 'varchar',
+			'length'  => '50',
+			'default' => 'plugin',
+		),
+
+		// REST route namespace segment.
+		array(
+			'name'    => 'server_route_namespace',
+			'type'    => 'varchar',
+			'length'  => '100',
+			'default' => 'mcp',
+		),
+
+		// REST route path segment.
+		array(
+			'name'    => 'server_route',
+			'type'    => 'varchar',
+			'length'  => '255',
+			'default' => '',
+		),
+
+		// Server version string.
+		array(
+			'name'    => 'server_version',
+			'type'    => 'varchar',
+			'length'  => '50',
+			'default' => 'v1.0.0',
+		),
+
+		// Claude connector OAuth client ID.
+		array(
+			'name'    => 'claude_connector_client_id',
+			'type'    => 'varchar',
+			'length'  => '255',
+			'default' => '',
+		),
+
+		// Claude connector OAuth client secret.
+		array(
+			'name'    => 'claude_connector_client_secret',
+			'type'    => 'varchar',
+			'length'  => '255',
+			'default' => '',
+		),
+
+		// Claude connector OAuth redirect URI.
+		array(
+			'name'    => 'claude_connector_redirect_uri',
+			'type'    => 'varchar',
+			'length'  => '500',
+			'default' => '',
+		),
+
+		// Audit timestamp — no explicit default; BerlinDB uses '0000-00-00 00:00:00'
+		// for datetime columns. 'created' flag handles auto-timestamping at the
+		// application layer (CURRENT_TIMESTAMP quoted by BerlinDB is invalid DDL).
+		array(
+			'name'       => 'created_at',
+			'type'       => 'datetime',
+			'created'    => true,
+			'date_query' => true,
+			'sortable'   => true,
+		),
+	);
+
+	/**
+	 * Array of index definitions.
+	 *
+	 * BerlinDB v3 requires the PRIMARY KEY to be declared as an explicit Index
+	 * entry — the 'primary' column flag is query-layer only, not DDL.
+	 *
+	 * @var array
+	 */
+	public $indexes = array(
+		array(
+			'name'    => 'primary',
+			'type'    => 'primary',
+			'columns' => array( 'id' ),
+		),
+		array(
+			'name'    => 'server_slug',
+			'type'    => 'key',
+			'columns' => array( 'server_slug' ),
+		),
+	);
 }

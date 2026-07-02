@@ -73,7 +73,13 @@
       "Bash(gh pr create --repo acrossai-co/acrossai-mcp-manager --base feature/issue-3 --head 005-oauth-connectors --title 'feat\\(005\\): OAuth / Claude Connectors — full RFC-conformant flow + SEC-001 atomic CAS' --body ' *)",
       "Bash(.specify/scripts/bash/create-new-feature.sh --short-name \"rest-cli-auth\" --json \"REST API CLI Authentication Controller\")",
       "Bash(awk -F'`' '{if \\(NF<2\\) print \"POSSIBLY MISSING PATH: \" $0}')",
-      "Bash(vendor/bin/phpcs --standard=phpcs.xml.dist includes/REST/ public/Partials/ includes/Database/CliAuthLog/Recorder.php --report=summary)"
+      "Bash(vendor/bin/phpcs --standard=phpcs.xml.dist includes/REST/ public/Partials/ includes/Database/CliAuthLog/Recorder.php --report=summary)",
+      "Bash(composer show *)",
+      "Bash(composer require *)",
+      "Read(//Users/raftaar1191/local-sites/wordpress-7-0/app/public/**)",
+      "Bash(wp plugin *)",
+      "Bash(mkdir -p specs/011-berlindb-migration/checklists)",
+      "Bash(cp .specify/templates/spec-template.md specs/011-berlindb-migration/spec.md)"
     ]
   },
   "enabledMcpjsonServers": [
