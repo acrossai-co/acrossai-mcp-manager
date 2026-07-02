@@ -193,7 +193,7 @@ final class Controller {
 	 * rather than scanning the full table.
 	 */
 	private function has_any_enabled_server(): bool {
-		$rows = ( new MCPServerQuery() )->query(
+		$rows = MCPServerQuery::instance()->query(
 			array(
 				'is_enabled' => 1,
 				'number'     => 1,
@@ -210,7 +210,7 @@ final class Controller {
 	 * @return array<int, \AcrossAI_MCP_Manager\Includes\Database\MCPServer\Row>
 	 */
 	private function get_enabled_database_servers(): array {
-		return ( new MCPServerQuery() )->query(
+		return MCPServerQuery::instance()->query(
 			array(
 				'is_enabled'      => 1,
 				'registered_from' => 'database',

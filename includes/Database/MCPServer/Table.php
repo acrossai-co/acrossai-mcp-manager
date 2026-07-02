@@ -1,125 +1,95 @@
 <?php
 /**
- * MCP Server table lifecycle (dbDelta create/upgrade).
+ * BerlinDB Table subclass for the MCPServer module.
  *
  * @package AcrossAI_MCP_Manager
  * @subpackage Includes\Database\MCPServer
  */
 
+declare( strict_types = 1 );
+
 namespace AcrossAI_MCP_Manager\Includes\Database\MCPServer;
 
 defined( 'ABSPATH' ) || exit;
 
-class Table {
+/**
+ * Manages database table creation and upgrades for the MCPServer module.
+ *
+ * Extends BerlinDB Kern Table (Feature 011 — supersedes the hand-rolled
+ * dbDelta lifecycle documented in DECISIONS.md D9 + D7). Overrides
+ * maybe_upgrade() with the phantom-version guard from
+ * AcrossAI_Abilities_Table.php:96-101 — silent per Clarification Q1.
+ */
+class Table extends \BerlinDB\Database\Kern\Table {
 
-	const TABLE_NAME        = 'acrossai_mcp_servers';
-	const DB_VERSION        = '0.0.1';
-	const DB_VERSION_OPTION = 'acrossai_mcp_manager_db_version';
+	/**
+	 * Physical table name (WITHOUT wpdb prefix).
+	 *
+	 * @var string
+	 */
+	protected $name = 'acrossai_mcp_servers';
 
-	const DEFAULT_SERVER_SLUG = 'mcp-adapter-default-server';
-	const CACHE_GROUP         = 'acrossai_mcp';
+	/**
+	 * Table schema version used to trigger maybe_upgrade().
+	 *
+	 * @var string
+	 */
+	protected $version = '1.0.0';
 
-	protected static $_instance = null;
+	/**
+	 * WordPress option key that tracks the installed schema version.
+	 *
+	 * @var string
+	 */
+	protected $db_version_key = 'acrossai_mcp_servers_db_version';
 
+	/**
+	 * Schema class for this table.
+	 *
+	 * @var string
+	 */
+	protected $schema = Schema::class;
+
+	/**
+	 * Use per-site prefix ($wpdb->prefix), not the network base prefix.
+	 *
+	 * @var bool
+	 */
+	protected $global = false;
+
+	/**
+	 * Singleton instance.
+	 *
+	 * @var Table|null
+	 */
+	protected static $instance = null;
+
+	/**
+	 * Get the singleton instance.
+	 *
+	 * @return Table
+	 */
 	public static function instance(): self {
-		if ( null === self::$_instance ) {
-			self::$_instance = new self();
+		if ( null === self::$instance ) {
+			self::$instance = new self();
 		}
-		return self::$_instance;
-	}
-
-	private function __construct() {}
-
-	/**
-	 * Return the full table name including the WP DB prefix.
-	 */
-	public function get_table_name(): string {
-		global $wpdb;
-		return $wpdb->prefix . self::TABLE_NAME;
+		return self::$instance;
 	}
 
 	/**
-	 * Idempotent table create / upgrade. Calls dbDelta.
+	 * Create or upgrade the table with the phantom-version guard.
+	 *
+	 * If the db_version_key option exists but the physical table was manually
+	 * dropped, BerlinDB's needs_upgrade() would return false and skip install.
+	 * Clearing the option first forces a fresh install on the next run.
+	 * SILENT per Clarification Q1 — no error_log, no admin notice, no transient.
+	 *
+	 * @return void
 	 */
-	public function maybe_create_table(): void {
-		if ( get_option( self::DB_VERSION_OPTION ) === self::DB_VERSION ) {
-			$this->insert_default_server();
-			return;
+	public function maybe_upgrade(): void {
+		if ( ! $this->exists() ) {
+			delete_option( $this->db_version_key );
 		}
-
-		$this->create_table();
-		$this->insert_default_server();
-		update_option( self::DB_VERSION_OPTION, self::DB_VERSION );
-	}
-
-	private function create_table(): void {
-		global $wpdb;
-
-		$table_name      = $this->get_table_name();
-		$charset_collate = $wpdb->get_charset_collate();
-
-		// dbDelta requires exactly two spaces before PRIMARY KEY.
-		$sql = "CREATE TABLE {$table_name} (
-			id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
-			server_name VARCHAR(255) NOT NULL,
-			server_slug VARCHAR(255) NOT NULL DEFAULT '',
-			description VARCHAR(500) NOT NULL DEFAULT '',
-			is_enabled TINYINT(1) NOT NULL DEFAULT 0,
-			registered_from VARCHAR(50) NOT NULL DEFAULT 'plugin',
-			server_route_namespace VARCHAR(100) NOT NULL DEFAULT 'mcp',
-			server_route VARCHAR(255) NOT NULL DEFAULT '',
-			server_version VARCHAR(50) NOT NULL DEFAULT 'v1.0.0',
-			claude_connector_client_id VARCHAR(255) NOT NULL DEFAULT '',
-			claude_connector_client_secret VARCHAR(255) NOT NULL DEFAULT '',
-			claude_connector_redirect_uri VARCHAR(500) NOT NULL DEFAULT '',
-			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-			PRIMARY KEY  (id),
-			KEY server_slug (server_slug)
-		) {$charset_collate};";
-
-		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
-		dbDelta( $sql );
-	}
-
-	/**
-	 * Seed the default server row when the table is empty.
-	 * No-op when at least one row exists.
-	 */
-	private function insert_default_server(): void {
-		global $wpdb;
-
-		$table_name = $this->get_table_name();
-
-		// SEC-S1 (2026-06-17): use the %i identifier placeholder rather than
-		// interpolating the table name. The value is server-trusted ($wpdb->prefix
-		// + a constant), so no injection path exists either way, but the %i form
-		// is the modern WordPress pattern and removes the phpcs:ignore.
-		$count = (int) $wpdb->get_var(
-			$wpdb->prepare( 'SELECT COUNT(*) FROM %i', $table_name )
-		);
-
-		if ( 0 !== $count ) {
-			return;
-		}
-
-		$wpdb->insert(
-			$table_name,
-			array(
-				'server_name'                    => 'Default MCP Server',
-				'server_slug'                    => self::DEFAULT_SERVER_SLUG,
-				'description'                    => 'WordPress MCP Adapter integration for AI clients (VS Code, Claude, GitHub Codex, ChatGPT).',
-				'is_enabled'                     => 0,
-				'registered_from'                => 'plugin',
-				'server_route_namespace'         => 'mcp',
-				'server_route'                   => self::DEFAULT_SERVER_SLUG,
-				'server_version'                 => 'v1.0.0',
-				'claude_connector_client_id'     => '',
-				'claude_connector_client_secret' => '',
-				'claude_connector_redirect_uri'  => '',
-			),
-			array( '%s', '%s', '%s', '%d', '%s', '%s', '%s', '%s', '%s', '%s', '%s' )
-		);
-
-		wp_cache_delete( 'all_servers', self::CACHE_GROUP );
+		parent::maybe_upgrade();
 	}
 }

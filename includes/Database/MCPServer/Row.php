@@ -1,51 +1,50 @@
 <?php
 /**
- * MCP Server row value object.
+ * BerlinDB Row for a single MCPServer record.
  *
  * @package AcrossAI_MCP_Manager
  * @subpackage Includes\Database\MCPServer
  */
+
+declare( strict_types = 1 );
 
 namespace AcrossAI_MCP_Manager\Includes\Database\MCPServer;
 
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Lightweight typed view of one row from `{prefix}acrossai_mcp_servers`.
+ * Represents a single row from the MCPServer module's table.
  *
- * Instances are constructed by Query; consumers read public properties.
+ * @property array $properties
  */
-class Row {
+class Row extends \BerlinDB\Database\Kern\Row {
 
-	public int $id              = 0;
-	public string $server_name  = '';
-	public string $server_slug  = '';
-	public string $description  = '';
-	public int $is_enabled      = 0;
-	public string $registered_from        = 'plugin';
-	public string $server_route_namespace = 'mcp';
-	public string $server_route   = '';
-	public string $server_version = 'v1.0.0';
-	public string $claude_connector_client_id     = '';
-	public string $claude_connector_client_secret = '';
-	public string $claude_connector_redirect_uri  = '';
-	public string $created_at = '';
+	/** @var int */    public $id                             = 0;
+	/** @var string */ public $server_name                    = '';
+	/** @var string */ public $server_slug                    = '';
+	/** @var string */ public $description                    = '';
+	/** @var int */    public $is_enabled                     = 0;
+	/** @var string */ public $registered_from                = 'plugin';
+	/** @var string */ public $server_route_namespace         = 'mcp';
+	/** @var string */ public $server_route                   = '';
+	/** @var string */ public $server_version                 = 'v1.0.0';
+	/** @var string */ public $claude_connector_client_id     = '';
+	/** @var string */ public $claude_connector_client_secret = '';
+	/** @var string */ public $claude_connector_redirect_uri  = '';
+	/** @var string */ public $created_at                     = '';
 
-	public function __construct( array $data = array() ) {
-		foreach ( $data as $key => $value ) {
-			if ( ! property_exists( $this, $key ) ) {
-				continue;
-			}
-			if ( 'id' === $key || 'is_enabled' === $key ) {
-				$this->{$key} = (int) $value;
-			} else {
-				$this->{$key} = (string) $value;
-			}
-		}
+	/**
+	 * Constructor — casts primitive types.
+	 *
+	 * @param object|array $item Raw DB row.
+	 */
+	public function __construct( $item ) {
+		parent::__construct( $item );
+		$this->id = (int) $this->id;
 	}
 
 	/**
-	 * Convenience: convert back to associative array for legacy callers.
+	 * Return this row as an associative array (external consumers depend on this).
 	 *
 	 * @return array<string, mixed>
 	 */

@@ -1,14 +1,14 @@
 <?php
 namespace AcrossAI_MCP_Manager\Includes;
 
-use AcrossAI_MCP_Manager\Includes\Database\MCPServer\Query as MCPServerQuery;
-use AcrossAI_MCP_Manager\Includes\Database\CliAuthLog\Query as CliAuthLogQuery;
-use AcrossAI_MCP_Manager\Includes\Database\OAuthToken\Query as OAuthTokenQuery;
-use AcrossAI_MCP_Manager\Includes\Database\OAuthAudit\Query as OAuthAuditQuery;
+use AcrossAI_MCP_Manager\Includes\Database\MCPServer\Table as MCPServerTable;
+use AcrossAI_MCP_Manager\Includes\Database\MCPServer\DefaultServerSeeder;
+use AcrossAI_MCP_Manager\Includes\Database\CliAuthLog\Table as CliAuthLogTable;
+use AcrossAI_MCP_Manager\Includes\Database\OAuthToken\Table as OAuthTokenTable;
+use AcrossAI_MCP_Manager\Includes\Database\OAuthAudit\Table as OAuthAuditTable;
 use AcrossAI_MCP_Manager\Includes\OAuth\ClaudeConnectors;
 use AcrossAI_MCP_Manager\Public\Partials\FrontendAuth;
 
-// Exit if accessed directly.
 defined( 'ABSPATH' ) || exit;
 
 /**
@@ -20,34 +20,25 @@ defined( 'ABSPATH' ) || exit;
 class Activator {
 
 	/**
-	 * Runs on plugin activation: create DB tables, register rewrite rules,
-	 * and schedule the daily OAuth cleanup cron.
+	 * Runs on plugin activation: create DB tables via BerlinDB, seed the default
+	 * MCP server row, register rewrite rules, and schedule the daily OAuth cleanup cron.
+	 *
+	 * Per FR-015: NO class_exists() defensive guards and NO try/catch — after
+	 * FR-011 the autoloader is live and any exception should propagate to
+	 * fail activation loudly (per Clarification Q2).
 	 *
 	 * @since 0.0.1
 	 */
 	public static function activate() {
 
-		// Create the MCP servers custom table if the class is available.
-		if ( class_exists( MCPServerQuery::class ) ) {
-			MCPServerQuery::maybe_create_table();
-		}
-
-		// Create / upgrade the CLI auth log table (Phase 5 bumps DB_VERSION to 0.0.2
-		// to add the 4 OAuth columns: redirect_uri, code_challenge,
-		// code_challenge_method, scope).
-		if ( class_exists( CliAuthLogQuery::class ) ) {
-			CliAuthLogQuery::maybe_create_table();
-		}
-
-		// Create the OAuth tokens table (Phase 5).
-		if ( class_exists( OAuthTokenQuery::class ) ) {
-			OAuthTokenQuery::maybe_create_table();
-		}
-
-		// Create the OAuth audit log table (Phase 5).
-		if ( class_exists( OAuthAuditQuery::class ) ) {
-			OAuthAuditQuery::maybe_create_table();
-		}
+		// Feature 011: four BerlinDB Table subclasses handle create/upgrade lifecycle.
+		// Order matters — MCPServer table must exist before DefaultServerSeeder::seed()
+		// can insert the default row (FR-018).
+		MCPServerTable::instance()->maybe_upgrade();
+		DefaultServerSeeder::seed();
+		CliAuthLogTable::instance()->maybe_upgrade();
+		OAuthTokenTable::instance()->maybe_upgrade();
+		OAuthAuditTable::instance()->maybe_upgrade();
 
 		// FrontendAuth — Phase 6.0 absorbs the full class. Activator delegates
 		// rewrite-rule registration so the pattern definition lives in

@@ -8,18 +8,20 @@ This is a compact routing map for durable memory. Keep it short. It points to so
 | D1 | PLUGIN_NAME_SLUG uses literal string; get_plugin_name() returns property | Boot flow | constants, boot | Active | DECISIONS.md |
 | D2 | Rewrite rules registered immediately at activation with placeholder vars | Activation | rewrite, routing | Active | DECISIONS.md |
 | D3 | Compat.php placed in includes/ not includes/Utilities/ (boot-time shim) | Module structure | compat, placement | Active | DECISIONS.md |
-| D4 | class_exists() guards in Activator are always silent no-op | Activation | db, class-loading | Active | DECISIONS.md |
+| D4 | class_exists() guards in Activator are always silent no-op | Activation | db, class-loading | Active [scope-narrowed F011] | DECISIONS.md |
 | D5 | PHPCS baseline exceptions in phpcs.xml.dist (filename, $_instance, docblocks, namespace Public, PSR12 header) | Plugin-wide | phpcs, baseline | Active | DECISIONS.md |
 | D6 | Activator.php MUST use `use` imports (not bare/inline FQN) for all DB class references | Activation | namespace, fqn | Active | DECISIONS.md |
-| D7 | Activator does NOT call insert_default_server() — Phase 4 MCPServerQuery::maybe_create_table() internal | Activation | db, seeding | Active | DECISIONS.md |
+| D7 | Activator does NOT call insert_default_server() — Phase 4 MCPServerQuery::maybe_create_table() internal | Activation | db, seeding | Superseded (F011) | DECISIONS.md |
 | D8 | AccessControl stub targets wpboilerplate/wpb-access-control ^1.0 vendor package FQN | Phase 7 prep | access-control, vendor | Active | DECISIONS.md |
-| D9 | BerlinDB-style Query interface (Schema/Table/Row/Query) hand-rolled — no berlindb/core vendor dep | Database layer | berlindb, query, vendor | Active | DECISIONS.md |
+| D9 | BerlinDB-style Query interface (Schema/Table/Row/Query) hand-rolled — no berlindb/core vendor dep | Database layer | berlindb, query, vendor | Superseded (F011) | DECISIONS.md |
 | D10 | Minimal-port deferral pattern — partial port + reserved follow-up task when source class depends on un-ported siblings | Migration | port, deferral, scope | Active | DECISIONS.md |
 | D11 | Phase X.0 absorption — when a phase's P0 prereq doesn't yet exist, absorb its setup as a sub-phase in the consuming phase, not a separate dedicated phase | Process | phase, prereq, p0-gate | Active | DECISIONS.md |
 | D12 | Bulk task-status updates MUST be followed by a re-audit of environment-dependent gates | Process | tasks, completion, ci-gates | Active | DECISIONS.md |
 | D13 | Constitution-level formalization vs. Accepted Deviation — escalate to `.specify/memory/constitution.md` when the deviation describes a generalizable pattern (≥2 features or forward-looking); reserve INDEX.md `DEV*` rows for one-off carve-outs | Process | constitution, deviation, governance, generalizable | Active | DECISIONS.md |
 | D14 | Cross-phase state observation via public-static predicate on the owning module — consumer uses `use` import, never duplicates internal magic strings; matches A11 + B11 defensive-read families | Cross-feature interface design | cross-phase, predicate, static, A11, S9-adjacent | Active | DECISIONS.md |
 | D15 | Shared package bootstrap in plugin entry file — scoped A1 deviation for vendor packages owning cross-plugin resources; gated by `did_action('<resource>_bootstrapped')` idempotency + `class_exists()` defense-in-depth; established by Features 038 + 010 across the AcrossAI codebase family | Cross-plugin coordination | a1-deviation, shared-package, bootstrap, plugins_loaded, generalizable | Active | DECISIONS.md |
+| DEC-BERLINDB-TABLE-REQUEST-BOOT | BerlinDB Table subclasses MUST be instantiated at request time via `Main::load_hooks()` — activation-time `Table::instance()` alone leaves BerlinDB's DB interface empty on subsequent requests, causing Query to fall back to `$table_alias` as FROM | BerlinDB, request lifecycle | berlindb, boot, request-lifecycle, main-php, generalizable | Active (F011) | DECISIONS.md |
+| DEC-BERLINDB-SUBCLASS-NO-USE-COLLISION | Do NOT `use BerlinDB\Database\Kern\<X>` when the subclass name matches the parent's name — the `use` claims the same local symbol and produces "Cannot redeclare class" fatals. Drop the `use` and extend via leading-`\` FQN, or alias the import | BerlinDB, namespace | berlindb, namespace, class-collision, subclass-naming, workflow-template | Active (F011) | DECISIONS.md |
 
 ## Architecture Constraints
 | ID | Constraint | Scope | Tags | Source |
@@ -57,6 +59,7 @@ This is a compact routing map for durable memory. Keep it short. It points to so
 | B12 | wp_enqueue_scripts doesn't fire when template_redirect exits before wp_head() — call the enqueue method explicitly from the render helper, not only via Loader hook | template_redirect handlers, standalone HTML pages | enqueue, template_redirect, wp_head, silent-failure | BUGS.md |
 | B13 | wp_redirect filter MUST throw to intercept the trailing exit in tests — returning false cancels the header but the test runner still dies on exit | PHPUnit tests of state-mutation redirects | testing, wp_redirect, wp_safe_redirect, exit, filter | BUGS.md |
 | B14 | register_activation_hook default priority 10 fatals before higher-priority-number guards can run — vendor autoload checks belong at priority 1 to wp_die() gracefully before the main activation callback runs | Plugin activation, vendor autoload | activation, register_activation_hook, priority, silent-failure | BUGS.md |
+| B15 | Regex verification gates that pattern-match only the bare-name form silently pass while missing the leading-`\` FQN form (`extends \Foo`) and short-name aliased form (`new Query()` via `use ...\Query;`) — use ERE with `\\?` optional-backslash or run two grep passes | Verification gates, code review | grep, regex, verification, gate-hygiene, false-negative, refactor, sweep | BUGS.md |
 
 ## Accepted Deviations
 | ID | Deviation | Scope | Expiry/Review | Source |
@@ -78,3 +81,13 @@ This is a compact routing map for durable memory. Keep it short. It points to so
 | S7 | OAuth token endpoint is the documented exception to S2 — `__return_true` is allowed because RFC 6749 §2.3.1 specifies auth via POST body; exactly one match permitted across `includes/OAuth/` | REST API, OAuth | permission_callback, rfc-6749, exception | PROJECT_CONTEXT.md |
 | S8 | Body-authenticated mutating REST routes broader than S7 — `__return_true` permitted on CLI device-code-grant flows when Content-Type allow-list rejects missing/unknown headers BEFORE field validation AND downstream credential is bound to consented resource scope | REST API, CLI auth | permission_callback, content-type, server-binding, exception | PROJECT_CONTEXT.md |
 | S9 | Consent-surface displayed-state MUST be sourced from server-side authoritative store (transient/option/DB), not URL params — confused-deputy / UI-misrepresentation defense | Consent surfaces (CLI, OAuth, device-grant) | confused-deputy, ui-misrepresentation, consent, deep-link, deep-link-spoof | PROJECT_CONTEXT.md |
+
+## Worklog Entries
+| Date | Feature | Summary | Source |
+|---|---|---|---|
+| 2026-07-02 | F011 | BerlinDB-backed Table subclasses — phantom-version guard (`maybe_upgrade` override) prevents silent short-circuit when version option stamped but physical table missing | WORKLOG.md |
+
+## Security Reviews
+| File | Phase | Date | Risk | Findings | Constraints |
+|---|---|---|---|---|---|
+| docs/security-reviews/2026-07-02-011-berlindb-migration-plan.md | plan | 2026-07-02 | LOW | C:0 H:0 M:0 L:3 | A02,A04,A05,A08,A09 |

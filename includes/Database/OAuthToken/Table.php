@@ -1,91 +1,95 @@
 <?php
 /**
- * OAuth access tokens table lifecycle (dbDelta create/upgrade).
+ * BerlinDB Table subclass for the OAuthToken module.
  *
  * @package AcrossAI_MCP_Manager
  * @subpackage Includes\Database\OAuthToken
  */
 
+declare( strict_types = 1 );
+
 namespace AcrossAI_MCP_Manager\Includes\Database\OAuthToken;
 
 defined( 'ABSPATH' ) || exit;
 
-class Table {
+/**
+ * Manages database table creation and upgrades for the OAuthToken module.
+ *
+ * Extends BerlinDB Kern Table (Feature 011 — supersedes the hand-rolled
+ * dbDelta lifecycle documented in DECISIONS.md D9 + D7). Overrides
+ * maybe_upgrade() with the phantom-version guard from
+ * AcrossAI_Abilities_Table.php:96-101 — silent per Clarification Q1.
+ */
+class Table extends \BerlinDB\Database\Kern\Table {
 
-	const TABLE_NAME        = 'acrossai_mcp_oauth_tokens';
-	const DB_VERSION        = '0.0.1';
-	const DB_VERSION_OPTION = 'acrossai_mcp_oauth_tokens_db_version';
+	/**
+	 * Physical table name (WITHOUT wpdb prefix).
+	 *
+	 * @var string
+	 */
+	protected $name = 'acrossai_mcp_oauth_tokens';
 
-	const CACHE_GROUP = 'acrossai_mcp';
+	/**
+	 * Table schema version used to trigger maybe_upgrade().
+	 *
+	 * @var string
+	 */
+	protected $version = '1.0.0';
+
+	/**
+	 * WordPress option key that tracks the installed schema version.
+	 *
+	 * @var string
+	 */
+	protected $db_version_key = 'acrossai_mcp_oauth_tokens_db_version';
+
+	/**
+	 * Schema class for this table.
+	 *
+	 * @var string
+	 */
+	protected $schema = Schema::class;
+
+	/**
+	 * Use per-site prefix ($wpdb->prefix), not the network base prefix.
+	 *
+	 * @var bool
+	 */
+	protected $global = false;
 
 	/**
 	 * Singleton instance.
 	 *
-	 * @var self|null
+	 * @var Table|null
 	 */
-	protected static $_instance = null;
+	protected static $instance = null;
 
 	/**
-	 * Singleton accessor.
+	 * Get the singleton instance.
+	 *
+	 * @return Table
 	 */
 	public static function instance(): self {
-		if ( null === self::$_instance ) {
-			self::$_instance = new self();
+		if ( null === self::$instance ) {
+			self::$instance = new self();
 		}
-		return self::$_instance;
+		return self::$instance;
 	}
 
 	/**
-	 * Private — use ::instance() instead.
+	 * Create or upgrade the table with the phantom-version guard.
+	 *
+	 * If the db_version_key option exists but the physical table was manually
+	 * dropped, BerlinDB's needs_upgrade() would return false and skip install.
+	 * Clearing the option first forces a fresh install on the next run.
+	 * SILENT per Clarification Q1 — no error_log, no admin notice, no transient.
+	 *
+	 * @return void
 	 */
-	private function __construct() {}
-
-	/**
-	 * Fully-qualified table name (with $wpdb->prefix).
-	 */
-	public function get_table_name(): string {
-		global $wpdb;
-		return $wpdb->prefix . self::TABLE_NAME;
-	}
-
-	/**
-	 * Create the table on first activation; no-op once DB_VERSION matches.
-	 */
-	public function maybe_create_table(): void {
-		if ( get_option( self::DB_VERSION_OPTION ) === self::DB_VERSION ) {
-			return;
+	public function maybe_upgrade(): void {
+		if ( ! $this->exists() ) {
+			delete_option( $this->db_version_key );
 		}
-		$this->create_table();
-		update_option( self::DB_VERSION_OPTION, self::DB_VERSION );
-	}
-
-	/**
-	 * Run dbDelta with the canonical schema.
-	 */
-	private function create_table(): void {
-		global $wpdb;
-
-		$table_name      = $this->get_table_name();
-		$charset_collate = $wpdb->get_charset_collate();
-
-		$sql = "CREATE TABLE {$table_name} (
-			id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
-			access_token_hash CHAR(64) NOT NULL,
-			server_id BIGINT(20) UNSIGNED NOT NULL DEFAULT 0,
-			user_id BIGINT(20) UNSIGNED NOT NULL DEFAULT 0,
-			issued_from_code_id BIGINT(20) UNSIGNED NOT NULL DEFAULT 0,
-			scope VARCHAR(64) NOT NULL DEFAULT 'mcp',
-			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-			expires_at DATETIME NOT NULL,
-			revoked_at DATETIME NULL DEFAULT NULL,
-			PRIMARY KEY  (id),
-			UNIQUE KEY access_token_hash (access_token_hash),
-			KEY server_expires (server_id, expires_at),
-			KEY user_created (user_id, created_at),
-			KEY issued_from_code (issued_from_code_id)
-		) {$charset_collate};";
-
-		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
-		dbDelta( $sql );
+		parent::maybe_upgrade();
 	}
 }

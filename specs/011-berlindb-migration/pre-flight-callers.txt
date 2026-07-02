@@ -1,0 +1,39 @@
+includes/Activator.php:4:use AcrossAI_MCP_Manager\Includes\Database\MCPServer\Query as MCPServerQuery;
+includes/Activator.php:5:use AcrossAI_MCP_Manager\Includes\Database\CliAuthLog\Query as CliAuthLogQuery;
+includes/Activator.php:6:use AcrossAI_MCP_Manager\Includes\Database\OAuthToken\Query as OAuthTokenQuery;
+includes/Activator.php:7:use AcrossAI_MCP_Manager\Includes\Database\OAuthAudit\Query as OAuthAuditQuery;
+includes/Database/CliAuthLog/Recorder.php:18:use AcrossAI_MCP_Manager\Includes\Database\MCPServer\Query as MCPServerQuery;
+includes/Database/CliAuthLog/Recorder.php:98:		$rows = ( new MCPServerQuery() )->query(
+includes/OAuth/ClaudeConnectors.php:14:use AcrossAI_MCP_Manager\Includes\Database\MCPServer\Query as MCPServerQuery;
+includes/OAuth/ClaudeConnectors.php:15:use AcrossAI_MCP_Manager\Includes\Database\MCPServer\Row as MCPServerRow;
+includes/OAuth/ClaudeConnectors.php:353:		$query   = new MCPServerQuery();
+includes/OAuth/TokenController.php:22:use AcrossAI_MCP_Manager\Includes\Database\MCPServer\Query as MCPServerQuery;
+includes/OAuth/TokenController.php:272:		$rows = ( new MCPServerQuery() )->query(
+includes/OAuth/AuditLog.php:13:use AcrossAI_MCP_Manager\Includes\Database\OAuthAudit\Query as OAuthAuditQuery;
+includes/OAuth/AuditLog.php:64:		$query = new OAuthAuditQuery();
+includes/OAuth/BearerAuth.php:15:use AcrossAI_MCP_Manager\Includes\Database\MCPServer\Query as MCPServerQuery;
+includes/OAuth/BearerAuth.php:16:use AcrossAI_MCP_Manager\Includes\Database\OAuthToken\Query as OAuthTokenQuery;
+includes/OAuth/BearerAuth.php:72:		$rows = ( new OAuthTokenQuery() )->query(
+includes/OAuth/BearerAuth.php:99:		$any = ( new OAuthTokenQuery() )->query(
+includes/OAuth/BearerAuth.php:181:		$rows = ( new MCPServerQuery() )->query(
+includes/OAuth/Storage.php:12:use AcrossAI_MCP_Manager\Includes\Database\CliAuthLog\Query as CliAuthLogQuery;
+includes/OAuth/Storage.php:13:use AcrossAI_MCP_Manager\Includes\Database\CliAuthLog\Row as CliAuthLogRow;
+includes/OAuth/Storage.php:14:use AcrossAI_MCP_Manager\Includes\Database\OAuthToken\Query as OAuthTokenQuery;
+includes/OAuth/Storage.php:15:use AcrossAI_MCP_Manager\Includes\Database\OAuthAudit\Query as OAuthAuditQuery;
+includes/OAuth/Storage.php:80:		$query = new CliAuthLogQuery();
+includes/OAuth/Storage.php:109:		$query = new CliAuthLogQuery();
+includes/OAuth/Storage.php:127:		return ( new CliAuthLogQuery() )->redeem_atomic( $code_row_id, current_time( 'mysql', 1 ) );
+includes/OAuth/Storage.php:158:		$query = new OAuthTokenQuery();
+includes/OAuth/Storage.php:185:		$query = new OAuthTokenQuery();
+includes/OAuth/Storage.php:248:		$cli_query    = new CliAuthLogQuery();
+includes/OAuth/Storage.php:249:		$audit_query  = new OAuthAuditQuery();
+includes/MCP/Controller.php:32:use AcrossAI_MCP_Manager\Includes\Database\MCPServer\Query as MCPServerQuery;
+includes/MCP/Controller.php:196:		$rows = ( new MCPServerQuery() )->query(
+includes/MCP/Controller.php:213:		return ( new MCPServerQuery() )->query(
+includes/REST/CliController.php:23:use AcrossAI_MCP_Manager\Includes\Database\MCPServer\Query as MCPServerQuery;
+includes/REST/CliController.php:315:		$rows            = ( new MCPServerQuery() )->query(
+includes/REST/CliController.php:413:		$server_rows = ( new MCPServerQuery() )->query(
+admin/Partials/ApplicationPasswords.php:11:use AcrossAI_MCP_Manager\Includes\Database\MCPServer\Query;
+admin/Partials/CliAuthLogListTable.php:11:use AcrossAI_MCP_Manager\Includes\Database\CliAuthLog\Query;
+admin/Partials/MCPServerListTable.php:11:use AcrossAI_MCP_Manager\Includes\Database\MCPServer\Query;
+admin/Partials/Settings.php:11:use AcrossAI_MCP_Manager\Includes\Database\MCPServer\Query;

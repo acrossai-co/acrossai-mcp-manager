@@ -79,14 +79,14 @@ class CliAuthLogListTable extends \WP_List_Table {
 			$query_args['server_id'] = $this->server_id;
 		}
 
-		$query        = new Query();
-		$rows         = $query->query( $query_args );
-		$this->items  = array_map( static fn( $row ) => $row->to_array(), $rows );
+		$query       = Query::instance();
+		$rows        = $query->query( $query_args );
+		$this->items = array_map( static fn( $row ) => $row->to_array(), $rows );
 
 		// Total count for pagination — re-query with no LIMIT.
-		$total_args   = $this->server_id > 0 ? array( 'server_id' => $this->server_id ) : array();
-		$total_rows   = $query->query( $total_args );
-		$total_items  = count( $total_rows );
+		$total_args  = $this->server_id > 0 ? array( 'server_id' => $this->server_id ) : array();
+		$total_rows  = $query->query( $total_args );
+		$total_items = count( $total_rows );
 
 		$this->set_pagination_args(
 			array(

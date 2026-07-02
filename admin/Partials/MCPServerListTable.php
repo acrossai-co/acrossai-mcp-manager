@@ -74,7 +74,12 @@ class MCPServerListTable extends \WP_List_Table {
 	public function prepare_items(): void {
 		$this->_column_headers = array( $this->get_columns(), array(), array() );
 
-		$rows = ( new Query() )->query( array( 'orderby' => 'id', 'order' => 'ASC' ) );
+		$rows = Query::instance()->query(
+			array(
+				'orderby' => 'id',
+				'order'   => 'ASC',
+			)
+		);
 
 		$this->items = array_map(
 			static function ( $row ) {
@@ -151,7 +156,7 @@ class MCPServerListTable extends \WP_List_Table {
 		);
 
 		// Toggle Status row action (in addition to the button in the Actions column).
-		$toggle_url = wp_nonce_url(
+		$toggle_url            = wp_nonce_url(
 			add_query_arg(
 				array(
 					'page'   => AdminPageSlugs::PARENT,
@@ -169,7 +174,7 @@ class MCPServerListTable extends \WP_List_Table {
 		);
 
 		if ( 'database' === $item['registered_from'] ) {
-			$delete_url = wp_nonce_url(
+			$delete_url            = wp_nonce_url(
 				add_query_arg(
 					array(
 						'page'   => AdminPageSlugs::PARENT,

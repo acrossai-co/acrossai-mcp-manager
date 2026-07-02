@@ -1,119 +1,111 @@
 <?php
 /**
- * OAuth access token schema definition.
+ * BerlinDB Schema for the OAuthToken module.
+ *
+ * 9 columns per Feature 011 plan §Concrete column decisions OAuthToken.
+ * FR-010 SHA-256 invariant: access_token_hash char(64).
  *
  * @package AcrossAI_MCP_Manager
  * @subpackage Includes\Database\OAuthToken
  */
 
+declare( strict_types = 1 );
+
 namespace AcrossAI_MCP_Manager\Includes\Database\OAuthToken;
 
 defined( 'ABSPATH' ) || exit;
 
-class Schema {
+class Schema extends \BerlinDB\Database\Kern\Schema {
 
-	/**
-	 * Singleton instance.
-	 *
-	 * @var self|null
-	 */
-	protected static $_instance = null;
+	/** @var array<int, array<string, mixed>> */
+	public $columns = array(
+		array(
+			'name'     => 'id',
+			'type'     => 'bigint',
+			'length'   => '20',
+			'unsigned' => true,
+			'extra'    => 'auto_increment',
+			'sortable' => true,
+		),
+		// FR-010 SHA-256 invariant — DO NOT narrow.
+		array(
+			'name'   => 'access_token_hash',
+			'type'   => 'char',
+			'length' => '64',
+		),
+		array(
+			'name'     => 'server_id',
+			'type'     => 'bigint',
+			'length'   => '20',
+			'unsigned' => true,
+			'default'  => 0,
+			'sortable' => true,
+		),
+		array(
+			'name'     => 'user_id',
+			'type'     => 'bigint',
+			'length'   => '20',
+			'unsigned' => true,
+			'default'  => 0,
+		),
+		array(
+			'name'     => 'issued_from_code_id',
+			'type'     => 'bigint',
+			'length'   => '20',
+			'unsigned' => true,
+			'default'  => 0,
+		),
+		array(
+			'name'    => 'scope',
+			'type'    => 'varchar',
+			'length'  => '64',
+			'default' => 'mcp',
+		),
+		array(
+			'name'       => 'created_at',
+			'type'       => 'datetime',
+			'created'    => true,
+			'date_query' => true,
+			'sortable'   => true,
+		),
+		array(
+			'name' => 'expires_at',
+			'type' => 'datetime',
+		),
+		array(
+			'name'       => 'revoked_at',
+			'type'       => 'datetime',
+			'allow_null' => true,
+			'default'    => null,
+		),
+	);
 
-	/**
-	 * Singleton accessor.
-	 */
-	public static function instance(): self {
-		if ( null === self::$_instance ) {
-			self::$_instance = new self();
-		}
-		return self::$_instance;
-	}
-
-	/**
-	 * Private — use ::instance() instead.
-	 */
-	private function __construct() {}
-
-	/**
-	 * Column metadata for the access-tokens table.
-	 *
-	 * @return array<string, array{type:string, default:mixed, format:string}>
-	 */
-	public function columns(): array {
-		return array(
-			'id'                  => array(
-				'type'    => 'int',
-				'default' => 0,
-				'format'  => '%d',
-			),
-			'access_token_hash'   => array(
-				'type'    => 'string',
-				'default' => '',
-				'format'  => '%s',
-			),
-			'server_id'           => array(
-				'type'    => 'int',
-				'default' => 0,
-				'format'  => '%d',
-			),
-			'user_id'             => array(
-				'type'    => 'int',
-				'default' => 0,
-				'format'  => '%d',
-			),
-			'issued_from_code_id' => array(
-				'type'    => 'int',
-				'default' => 0,
-				'format'  => '%d',
-			),
-			'scope'               => array(
-				'type'    => 'string',
-				'default' => 'mcp',
-				'format'  => '%s',
-			),
-			'created_at'          => array(
-				'type'    => 'string',
-				'default' => null,
-				'format'  => '%s',
-			),
-			'expires_at'          => array(
-				'type'    => 'string',
-				'default' => '',
-				'format'  => '%s',
-			),
-			'revoked_at'          => array(
-				'type'    => 'string',
-				'default' => null,
-				'format'  => '%s',
-			),
-		);
-	}
-
-	/**
-	 * Ordered list of column names.
-	 *
-	 * @return string[]
-	 */
-	public function column_names(): array {
-		return array_keys( $this->columns() );
-	}
-
-	/**
-	 * Whether the given column name is declared in the schema.
-	 *
-	 * @param string $name Candidate column name.
-	 */
-	public function has_column( string $name ): bool {
-		return array_key_exists( $name, $this->columns() );
-	}
-
-	/**
-	 * Wpdb format specifier for the given column (`%d` or `%s`).
-	 *
-	 * @param string $name Column name.
-	 */
-	public function format_for( string $name ): string {
-		$cols = $this->columns();
-		return $cols[ $name ]['format'] ?? '%s';
-	}
+	/** @var array<int, array<string, mixed>> */
+	public $indexes = array(
+		array(
+			'name'    => 'primary',
+			'type'    => 'primary',
+			'columns' => array( 'id' ),
+		),
+		array(
+			'name'    => 'access_token_hash',
+			'type'    => 'unique',
+			'columns' => array( 'access_token_hash' ),
+		),
+		array(
+			'name'    => 'server_expires',
+			'type'    => 'key',
+			'columns' => array( 'server_id', 'expires_at' ),
+		),
+		array(
+			'name'    => 'user_created',
+			'type'    => 'key',
+			'columns' => array( 'user_id', 'created_at' ),
+		),
+		array(
+			'name'    => 'issued_from_code',
+			'type'    => 'key',
+			'columns' => array( 'issued_from_code_id' ),
+		),
+	);
 }

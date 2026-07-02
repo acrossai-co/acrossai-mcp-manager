@@ -69,7 +69,7 @@ final class BearerAuth {
 		$hash = hash( 'sha256', $token );
 
 		// Lookup constrained to (hash, server_id, active) — cross-server defense.
-		$rows = ( new OAuthTokenQuery() )->query(
+		$rows = OAuthTokenQuery::instance()->query(
 			array(
 				'access_token_hash' => $hash,
 				'server_id'         => $server_id,
@@ -96,7 +96,7 @@ final class BearerAuth {
 		}
 
 		// Token might exist for a different server (cross-server attempt).
-		$any = ( new OAuthTokenQuery() )->query(
+		$any = OAuthTokenQuery::instance()->query(
 			array(
 				'access_token_hash' => $hash,
 				'active_only'       => true,
@@ -178,7 +178,7 @@ final class BearerAuth {
 			return 0;
 		}
 
-		$rows = ( new MCPServerQuery() )->query(
+		$rows = MCPServerQuery::instance()->query(
 			array(
 				'server_route' => $route,
 				'number'       => 1,

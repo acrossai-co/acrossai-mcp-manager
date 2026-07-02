@@ -100,7 +100,7 @@ class Settings {
 			check_admin_referer( 'acrossai_mcp_delete_' . $server_id );
 
 			if ( $server_id > 0 ) {
-				( new Query() )->delete_item( $server_id );
+				Query::instance()->delete_item( $server_id );
 			}
 			$this->redirect_to_list( 'server_deleted' );
 		}
@@ -138,8 +138,13 @@ class Settings {
 	 * read current value, flip, update.
 	 */
 	private function toggle_server_status( int $server_id ): void {
-		$query = new Query();
-		$rows  = $query->query( array( 'id' => $server_id, 'number' => 1 ) );
+		$query = Query::instance();
+		$rows  = $query->query(
+			array(
+				'id'     => $server_id,
+				'number' => 1,
+			)
+		);
 		if ( empty( $rows ) ) {
 			return;
 		}
@@ -182,7 +187,7 @@ class Settings {
 			: array();
 		// phpcs:enable WordPress.Security.NonceVerification.Recommended
 
-		$query = new Query();
+		$query = Query::instance();
 		foreach ( $ids as $id ) {
 			if ( $id <= 0 ) {
 				continue;
@@ -214,10 +219,15 @@ class Settings {
 		}
 
 		$slug  = sanitize_title( $name );
-		$query = new Query();
+		$query = Query::instance();
 
 		// Slug collision check via Query — R1 mapping.
-		$existing = $query->query( array( 'server_slug' => $slug, 'number' => 1 ) );
+		$existing = $query->query(
+			array(
+				'server_slug' => $slug,
+				'number'      => 1,
+			)
+		);
 		if ( ! empty( $existing ) ) {
 			$this->redirect_to_create( 'slug_exists' );
 		}
@@ -312,8 +322,13 @@ class Settings {
 	 * General-tab save handler. FR-009 / FR-013. Caller verified nonce + cap.
 	 */
 	private function handle_update_server( int $server_id ): void {
-		$query = new Query();
-		$rows  = $query->query( array( 'id' => $server_id, 'number' => 1 ) );
+		$query = Query::instance();
+		$rows  = $query->query(
+			array(
+				'id'     => $server_id,
+				'number' => 1,
+			)
+		);
 		if ( empty( $rows ) ) {
 			$this->redirect_to_list( 'server_not_found' );
 		}
@@ -348,8 +363,13 @@ class Settings {
 	 * a user re-saves the form without re-entering the secret.
 	 */
 	private function handle_claude_connector_update( int $server_id ): void {
-		$query = new Query();
-		$rows  = $query->query( array( 'id' => $server_id, 'number' => 1 ) );
+		$query = Query::instance();
+		$rows  = $query->query(
+			array(
+				'id'     => $server_id,
+				'number' => 1,
+			)
+		);
 		if ( empty( $rows ) ) {
 			$this->redirect_to_list( 'server_not_found' );
 		}
@@ -466,7 +486,7 @@ class Settings {
 		?>
 		<div class="wrap">
 			<h1><?php esc_html_e( 'Add New MCP Server', 'acrossai-mcp-manager' ); ?></h1>
-			<form method="post" action="<?php echo esc_url( $post_url ); /* SEC-S2: defense in depth — esc_url is idempotent */?>">
+			<form method="post" action="<?php echo esc_url( $post_url ); /* SEC-S2: defense in depth — esc_url is idempotent */ ?>">
 				<?php wp_nonce_field( 'acrossai_mcp_create_server' ); ?>
 				<table class="form-table" role="presentation">
 					<tr>
@@ -512,7 +532,12 @@ class Settings {
 		// phpcs:enable WordPress.Security.NonceVerification.Recommended
 
 		// FR-014: missing-server → redirect to list.
-		$rows = ( new Query() )->query( array( 'id' => $server_id, 'number' => 1 ) );
+		$rows = Query::instance()->query(
+			array(
+				'id'     => $server_id,
+				'number' => 1,
+			)
+		);
 		if ( empty( $rows ) ) {
 			$this->redirect_to_list( 'server_not_found' );
 		}
@@ -574,7 +599,7 @@ class Settings {
 			)
 		);
 		?>
-		<form method="post" action="<?php echo esc_url( $post_url ); /* SEC-S2: defense in depth — esc_url is idempotent */?>">
+		<form method="post" action="<?php echo esc_url( $post_url ); /* SEC-S2: defense in depth — esc_url is idempotent */ ?>">
 			<?php wp_nonce_field( 'acrossai_mcp_update_' . (int) $server['id'] ); ?>
 			<table class="form-table" role="presentation">
 				<tr>
@@ -657,10 +682,10 @@ class Settings {
 			)
 		);
 
-		$has_secret    = ! empty( $server['claude_connector_client_secret'] );
-		$secret_value  = $has_secret ? str_repeat( '•', 12 ) : '';
+		$has_secret   = ! empty( $server['claude_connector_client_secret'] );
+		$secret_value = $has_secret ? str_repeat( '•', 12 ) : '';
 		?>
-		<form method="post" action="<?php echo esc_url( $post_url ); /* SEC-S2: defense in depth — esc_url is idempotent */?>">
+		<form method="post" action="<?php echo esc_url( $post_url ); /* SEC-S2: defense in depth — esc_url is idempotent */ ?>">
 			<?php wp_nonce_field( 'acrossai_mcp_claude_connector_' . (int) $server['id'] ); ?>
 			<p class="description">
 				<?php esc_html_e( 'OAuth credentials this plugin presents to Claude on behalf of this server. The Client Secret is shown as ••••• after first save — re-enter it only when you need to change it.', 'acrossai-mcp-manager' ); ?>
@@ -714,13 +739,5 @@ class Settings {
 		$table->display();
 		echo '</form>';
 		echo '</div>';
-	}
-
-	public function render_access_control_page(): void {
-		if ( ! current_user_can( 'manage_options' ) ) {
-			wp_die( esc_html__( 'You do not have permission to access this page.', 'acrossai-mcp-manager' ) );
-		}
-		echo '<div class="wrap"><h1>' . esc_html__( 'Access Control', 'acrossai-mcp-manager' ) . '</h1>';
-		echo '<p>' . esc_html__( 'Access Control delegation lands in US3 (T038).', 'acrossai-mcp-manager' ) . '</p></div>';
 	}
 }

@@ -1,0 +1,69 @@
+<?php
+/**
+ * FR-018/019 phantom-version guard regression test.
+ *
+ * Verifies that each of the four Table subclasses drops a stamped-but-orphaned
+ * db_version_key option and recreates the missing table on maybe_upgrade().
+ *
+ * @package AcrossAI_MCP_Manager
+ * @subpackage Tests\PHPUnit\Database
+ */
+
+declare( strict_types = 1 );
+
+namespace AcrossAI_MCP_Manager\Tests\PHPUnit\Database;
+
+use AcrossAI_MCP_Manager\Includes\Database\MCPServer\Table as MCPServerTable;
+use AcrossAI_MCP_Manager\Includes\Database\CliAuthLog\Table as CliAuthLogTable;
+use AcrossAI_MCP_Manager\Includes\Database\OAuthToken\Table as OAuthTokenTable;
+use AcrossAI_MCP_Manager\Includes\Database\OAuthAudit\Table as OAuthAuditTable;
+use WP_UnitTestCase;
+
+/**
+ * @coversNothing
+ */
+class PhantomVersionGuardTest extends WP_UnitTestCase {
+
+	/**
+	 * @dataProvider provideTables
+	 *
+	 * @param string $table_class           Fully qualified Table subclass name.
+	 * @param string $table_name_no_prefix  Table name without the wpdb prefix.
+	 * @param string $db_version_key        WordPress option key for the schema version.
+	 * @param string $version               Expected schema version string.
+	 */
+	public function test_phantom_version_guard_recreates_dropped_table( string $table_class, string $table_name_no_prefix, string $db_version_key, string $version ): void {
+		global $wpdb;
+
+		$full_table = $wpdb->prefix . $table_name_no_prefix;
+
+		// Ensure table exists first (baseline).
+		$table = $table_class::instance();
+		$table->maybe_upgrade();
+		$this->assertNotEmpty( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $full_table ) ), 'baseline: table must exist' );
+
+		// Drop the physical table but leave db_version_key stamped — the "phantom version" state.
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange
+		$wpdb->query( $wpdb->prepare( 'DROP TABLE %i', $full_table ) );
+		$this->assertEmpty( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $full_table ) ), 'setup: table must be dropped' );
+		$this->assertSame( $version, get_option( $db_version_key ), 'setup: db_version_key still stamped after drop' );
+
+		// Invoke maybe_upgrade — the phantom-version guard should drop the option and recreate the table.
+		$table->maybe_upgrade();
+
+		$this->assertNotEmpty( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $full_table ) ), 'guard: table must be recreated' );
+		$this->assertSame( $version, get_option( $db_version_key ), 'guard: db_version_key re-stamped after fresh install' );
+	}
+
+	/**
+	 * @return array<string, array{0: string, 1: string, 2: string, 3: string}>
+	 */
+	public static function provideTables(): array {
+		return array(
+			'MCPServer'  => array( MCPServerTable::class, 'acrossai_mcp_servers', 'acrossai_mcp_servers_db_version', '1.0.0' ),
+			'CliAuthLog' => array( CliAuthLogTable::class, 'acrossai_mcp_cli_auth_logs', 'acrossai_mcp_cli_auth_logs_db_version', '1.0.0' ),
+			'OAuthToken' => array( OAuthTokenTable::class, 'acrossai_mcp_oauth_tokens', 'acrossai_mcp_oauth_tokens_db_version', '1.0.0' ),
+			'OAuthAudit' => array( OAuthAuditTable::class, 'acrossai_mcp_oauth_audit', 'acrossai_mcp_oauth_audit_db_version', '1.0.0' ),
+		);
+	}
+}

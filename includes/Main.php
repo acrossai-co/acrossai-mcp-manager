@@ -178,9 +178,34 @@ final class Main {
 		 * @since    0.0.1
 		 */
 		if ( apply_filters( 'acrossai_mcp_manager_load', true ) ) {
+			$this->bootstrap_database_tables();
 			$this->define_admin_hooks();
 			$this->define_public_hooks();
 		}
+	}
+
+	/**
+	 * Instantiate the four BerlinDB Table subclasses at request time.
+	 *
+	 * BerlinDB v3 requires the Table subclass to be instantiated so its
+	 * `sunrise()` / `set_prefixes()` boot registers the physical table
+	 * name with the DB interface. Without this, Query subclasses fall
+	 * back to using $table_alias as the FROM clause, producing
+	 * `Table 'db.<alias>' doesn't exist` errors at runtime.
+	 *
+	 * Matches the sibling plugin's boot pattern
+	 * (acrossai-abilities-manager Main::define_admin_hooks:349) but is
+	 * hoisted here so it also covers public/REST request paths
+	 * (MCP\Controller::has_any_enabled_server hits Query on rest_api_init).
+	 *
+	 * @since 0.0.1
+	 * @return void
+	 */
+	private function bootstrap_database_tables() {
+		\AcrossAI_MCP_Manager\Includes\Database\MCPServer\Table::instance();
+		\AcrossAI_MCP_Manager\Includes\Database\CliAuthLog\Table::instance();
+		\AcrossAI_MCP_Manager\Includes\Database\OAuthToken\Table::instance();
+		\AcrossAI_MCP_Manager\Includes\Database\OAuthAudit\Table::instance();
 	}
 
 	/**
