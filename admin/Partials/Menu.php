@@ -9,18 +9,24 @@
 namespace AcrossAI_MCP_Manager\Admin\Partials;
 
 use AcrossAI_MCP_Manager\Includes\Utilities\AdminPageSlugs;
+use AcrossAI_Main_Menu\SettingsPage;
 
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Registers the top-level "MCP Manager" admin menu, its submenus
- * (Servers, CLI Auth Log, conditional Access Control), and the
- * "Settings" plugin-action link on the Plugins screen.
+ * Registers the plugin's admin surface as SUBMENUS under the shared `acrossai`
+ * top-level menu (owned by the acrossai-co/main-menu package, namespace
+ * \AcrossAI_Main_Menu\). Submenus: MCP Manager (main), CLI Auth Log,
+ * Access Control (conditional). Also registers the "Settings" plugin-action
+ * link on the Plugins screen.
  *
- * Per FR-001 / FR-002 / FR-003.
+ * Per FR-018 / FR-019 / FR-020 / FR-021 (Feature 010, 2026-07-02).
+ *
+ * URL slug `acrossai_mcp_manager` is PRESERVED (CONSTRAINT 5 / FR-019) — submenu
+ * URLs resolve identically to top-level URLs (?page=<slug>).
  *
  * Constitution: singleton + private __construct + zero add_action/add_filter.
- * Hooks wired by Includes\Main::define_admin_hooks().
+ * Hooks wired by Includes\Main::define_admin_hooks() targeting register_submenu().
  *
  * Page slugs live in Includes\Utilities\AdminPageSlugs (RT-1, 2026-06-17)
  * so list tables and Settings don't depend on this sibling for constants.
@@ -49,53 +55,58 @@ class Menu {
 	}
 
 	/**
-	 * Register the top-level menu + submenus. FR-001 / FR-002.
+	 * Register submenus under the shared `acrossai` parent menu (FR-018 / FR-020).
+	 *
+	 * Positions per FR-020 (avoiding collision with acrossai-abilities-manager's
+	 * position 1 for Abilities):
+	 *   - Position 2 — MCP Manager main (Servers listing)
+	 *   - Position 3 — CLI Auth Log
+	 *   - Position 4 — Access Control (conditional on vendor package presence)
 	 *
 	 * Render callbacks delegate to Settings::instance() so that Settings
 	 * owns all page rendering and stays the single source of truth for
 	 * admin HTML (Constitution Admin Partials Rule).
+	 *
+	 * The shared parent menu itself is bootstrapped by \AcrossAI_Main_Menu\SettingsPage
+	 * in acrossai-mcp-manager.php on plugins_loaded priority 0 (FR-029 / D15 / DEV4).
 	 */
-	public function register_menu(): void {
+	public function register_submenu(): void {
 		$settings = Settings::instance();
 
-		// 1) Top-level "MCP Manager" menu (FR-001).
-		add_menu_page(
+		// 1) MCP Manager main page — position 2 under `acrossai` parent (FR-020).
+		add_submenu_page(
+			SettingsPage::PARENT_SLUG,
 			__( 'MCP Manager', 'acrossai-mcp-manager' ),
 			__( 'MCP Manager', 'acrossai-mcp-manager' ),
 			'manage_options',
 			AdminPageSlugs::PARENT,
-			array( $settings, 'render_list_page' )
+			array( $settings, 'render_list_page' ),
+			2
 		);
 
-		// 2) "Servers" submenu — same slug rewrites the parent label (WP convention).
+		// 2) CLI Auth Log — position 3.
 		add_submenu_page(
-			AdminPageSlugs::PARENT,
-			__( 'Servers', 'acrossai-mcp-manager' ),
-			__( 'Servers', 'acrossai-mcp-manager' ),
-			'manage_options',
-			AdminPageSlugs::PARENT,
-			array( $settings, 'render_list_page' )
-		);
-
-		// 3) "CLI Auth Log" submenu.
-		add_submenu_page(
-			AdminPageSlugs::PARENT,
+			SettingsPage::PARENT_SLUG,
 			__( 'CLI Auth Log', 'acrossai-mcp-manager' ),
 			__( 'CLI Auth Log', 'acrossai-mcp-manager' ),
 			'manage_options',
 			AdminPageSlugs::CLI_AUTH_LOG,
-			array( $settings, 'render_cli_auth_log_page' )
+			array( $settings, 'render_cli_auth_log_page' ),
+			3
 		);
 
-		// 4) "Access Control" submenu — only when the vendor package is present.
+		// 3) Access Control — position 4, conditional on vendor package presence.
+		// The class_exists guard remains per CONSTRAINT 1 / FR-025 as defense-in-depth
+		// even though the package is now a hard require in composer.json.
 		if ( class_exists( '\WPBoilerplate\AccessControl\AccessControlManager' ) ) {
 			add_submenu_page(
-				AdminPageSlugs::PARENT,
+				SettingsPage::PARENT_SLUG,
 				__( 'Access Control', 'acrossai-mcp-manager' ),
 				__( 'Access Control', 'acrossai-mcp-manager' ),
 				'manage_options',
 				AdminPageSlugs::ACCESS_CONTROL,
-				array( $settings, 'render_access_control_page' )
+				array( $settings, 'render_access_control_page' ),
+				4
 			);
 		}
 	}

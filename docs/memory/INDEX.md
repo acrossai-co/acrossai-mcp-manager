@@ -19,6 +19,7 @@ This is a compact routing map for durable memory. Keep it short. It points to so
 | D12 | Bulk task-status updates MUST be followed by a re-audit of environment-dependent gates | Process | tasks, completion, ci-gates | Active | DECISIONS.md |
 | D13 | Constitution-level formalization vs. Accepted Deviation — escalate to `.specify/memory/constitution.md` when the deviation describes a generalizable pattern (≥2 features or forward-looking); reserve INDEX.md `DEV*` rows for one-off carve-outs | Process | constitution, deviation, governance, generalizable | Active | DECISIONS.md |
 | D14 | Cross-phase state observation via public-static predicate on the owning module — consumer uses `use` import, never duplicates internal magic strings; matches A11 + B11 defensive-read families | Cross-feature interface design | cross-phase, predicate, static, A11, S9-adjacent | Active | DECISIONS.md |
+| D15 | Shared package bootstrap in plugin entry file — scoped A1 deviation for vendor packages owning cross-plugin resources; gated by `did_action('<resource>_bootstrapped')` idempotency + `class_exists()` defense-in-depth; established by Features 038 + 010 across the AcrossAI codebase family | Cross-plugin coordination | a1-deviation, shared-package, bootstrap, plugins_loaded, generalizable | Active | DECISIONS.md |
 
 ## Architecture Constraints
 | ID | Constraint | Scope | Tags | Source |
@@ -55,6 +56,7 @@ This is a compact routing map for durable memory. Keep it short. It points to so
 | B11 | Transient-stored associative arrays MUST be defensively validated with `is_array() + isset() + is_numeric()` triple-check on read — defends against partial writes, type drift, transient corruption | Transient readers, OAuth, CLI auth | transient, defensive, validation, partial-write | BUGS.md |
 | B12 | wp_enqueue_scripts doesn't fire when template_redirect exits before wp_head() — call the enqueue method explicitly from the render helper, not only via Loader hook | template_redirect handlers, standalone HTML pages | enqueue, template_redirect, wp_head, silent-failure | BUGS.md |
 | B13 | wp_redirect filter MUST throw to intercept the trailing exit in tests — returning false cancels the header but the test runner still dies on exit | PHPUnit tests of state-mutation redirects | testing, wp_redirect, wp_safe_redirect, exit, filter | BUGS.md |
+| B14 | register_activation_hook default priority 10 fatals before higher-priority-number guards can run — vendor autoload checks belong at priority 1 to wp_die() gracefully before the main activation callback runs | Plugin activation, vendor autoload | activation, register_activation_hook, priority, silent-failure | BUGS.md |
 
 ## Accepted Deviations
 | ID | Deviation | Scope | Expiry/Review | Source |
@@ -62,6 +64,7 @@ This is a compact routing map for durable memory. Keep it short. It points to so
 | DEV1 | MCP Manager parent menu (`?page=acrossai_mcp_manager`) uses `WP_List_Table` instead of DataViews | Admin UI | Never expires — pre-approved exception | CONSTITUTION.md §IV |
 | DEV2 | `includes/Compat.php` lives in `includes/` not `includes/Utilities/` — boot-time shim exception to Principle I | Boot flow | Review if Utilities/ autoload order changes | DECISIONS.md D3 |
 | DEV3 | Bidirectional `FrontendAuth` ↔ `CliController` import accepted pending A9 promotion to `includes/Utilities/CliAuthRoutes.php` — `CliController::auth_start` reads `FrontendAuth::get_base_url`; `FrontendAuth::handle_*` reads `CliController::approve_auth_code` + `peek_pending_server` | Feature-007 cross-phase coupling | Resolve via tasks.md T044 in next hardening branch; constitution §I Modular Architecture (no new violations) | Feature-007 / 2026-06-30 architecture-review V2 |
+| DEV4 | FR-029 shared parent menu bootstrap (`\AcrossAI_Main_Menu\SettingsPage`) lives in `acrossai-mcp-manager.php` plugin entry file on `plugins_loaded` priority 0 — scoped A1 exception for cross-plugin shared vendor-package resources; gated by `did_action('acrossai_main_menu_bootstrapped')` + `class_exists()` per D15. Companion FR-030 pre-activation vendor guard on `activate_<plugin>` priority 1. | Feature-010 cross-plugin coordination | Review only if `acrossai-co/main-menu` API changes shape OR if a third AcrossAI plugin creates a distinct shared-resource contract; scope permanent as long as the shared parent menu contract holds | Feature-010 / 2026-07-02 FR-031 + D15 |
 
 ## Security Constraints
 | ID | Constraint | Scope | Tags | Source |
