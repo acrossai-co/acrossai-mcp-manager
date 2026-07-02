@@ -34,14 +34,30 @@ final class AdminPageSlugs {
 	public const ACCESS_CONTROL = 'acrossai_mcp_manager_access_control';
 
 	/**
-	 * Screen IDs WordPress generates for our pages — derived from the parent
-	 * menu *title* (`MCP Manager` → `mcp-manager`) and the per-page slugs above.
+	 * Screen IDs WordPress generates for our pages.
+	 *
+	 * Post-Feature-010 (2026-07-02), the plugin registers as SUBMENUS of the shared
+	 * `acrossai` parent menu (owned by acrossai-co/main-menu package). WordPress
+	 * derives the screen ID prefix from the parent menu *title* — for the shared
+	 * parent it's `'AcrossAI'` → `sanitize_title()` → `'acrossai'`, producing
+	 * `acrossai_page_<slug>` IDs.
+	 *
+	 * Legacy `toplevel_page_*` and `mcp-manager_page_*` IDs are retained ADDITIVELY
+	 * per FR-022 / A9 — defense against multi-plugin ordering scenarios where an
+	 * older `acrossai-co/main-menu` version wins jetpack-autoloader version
+	 * resolution and our plugin re-registers as top-level. Never remove legacy IDs.
+	 *
 	 * Used by Admin\Main::is_plugin_admin_screen() for the asset-enqueue guard.
 	 *
 	 * @return string[]
 	 */
 	public static function plugin_screen_ids(): array {
 		return array(
+			// Post-Feature-010 submenu IDs (under shared `acrossai` parent).
+			'acrossai_page_' . self::PARENT,
+			'acrossai_page_' . self::CLI_AUTH_LOG,
+			'acrossai_page_' . self::ACCESS_CONTROL,
+			// Legacy top-level IDs (retained additively per A9).
 			'toplevel_page_' . self::PARENT,
 			'mcp-manager_page_' . self::CLI_AUTH_LOG,
 			'mcp-manager_page_' . self::ACCESS_CONTROL,

@@ -5,9 +5,19 @@
 	"description": "Composer to autoload the condition checking for which this add-on is made",
 	"homepage": "https://github.com/WPBoilerplate/",
 	"minimum-stability": "dev",
+	"prefer-stable": true,
+	"repositories": [
+		{
+			"type": "vcs",
+			"url": "https://github.com/WPBoilerplate/wpb-access-control"
+		}
+	],
 	"require": {
-		"php": ">=7.4",
-		"automattic/jetpack-autoloader": "^3.0"
+		"php": ">=8.1",
+		"automattic/jetpack-autoloader": "^5.0",
+		"wpboilerplate/wpb-access-control": "^2.0.0",
+		"berlindb/core": "^3.0.0",
+		"acrossai-co/main-menu": "0.0.10"
 	},
 	"keywords": [
 		"wordpress",

@@ -58,7 +58,7 @@ JavaScript MUST pass ESLint with zero errors or warnings.
 All output MUST be escaped using the most specific available WordPress escaping function.
 All input MUST be sanitized at system entry points.
 No deprecated WordPress functions are permitted.
-The plugin MUST be compatible with WordPress 6.9+ and PHP 8.0+.
+The plugin MUST be compatible with WordPress 6.9+ and PHP 8.1+.
 The plugin MUST be multisite-compatible unless a feature is explicitly scoped to single-site with
 documented justification.
 

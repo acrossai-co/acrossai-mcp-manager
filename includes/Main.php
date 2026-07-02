@@ -261,17 +261,19 @@ final class Main {
 		$this->loader->add_action( 'admin_enqueue_scripts', $plugin_admin, 'enqueue_scripts' );
 
 		/**
-		 * Add the Plugin Main Menu (US1 — Phase 2).
+		 * Add the Plugin Submenus under the shared `acrossai` parent (Feature 010 — FR-021).
 		 *
-		 * Menu::register_menu() registers the top-level "MCP Manager" page
-		 * (slug `acrossai_mcp_manager`) + Servers / CLI Auth Log submenus +
-		 * the Access Control submenu (only when the vendor pkg is present).
+		 * Menu::register_submenu() registers MCP Manager (position 2), CLI Auth Log
+		 * (position 3), and Access Control (position 4, conditional). The shared
+		 * `acrossai` parent menu itself is auto-hooked internally by
+		 * \AcrossAI_Main_Menu\SettingsPage (bootstrapped from the plugin entry file
+		 * on plugins_loaded priority 0 per FR-029 / D15 / DEV4).
 		 *
 		 * plugin_action_links_<basename> is the row-specific filter — fires
 		 * only for this plugin's row on the Plugins screen (FR-003).
 		 */
 		$menu = \AcrossAI_MCP_Manager\Admin\Partials\Menu::instance();
-		$this->loader->add_action( 'admin_menu', $menu, 'register_menu' );
+		$this->loader->add_action( 'admin_menu', $menu, 'register_submenu' );
 		$this->loader->add_filter(
 			'plugin_action_links_' . ACROSSAI_MCP_MANAGER_PLUGIN_BASENAME,
 			$menu,

@@ -444,3 +444,41 @@ When Phase N needs to observe state owned by Phase M, Phase M publishes the obse
 
 **Where to look next**
 Read the two published predicates as a pair — the short form (`is_authorize_page`) shows the simplest shape (bool return, no defensive read); the long form (`peek_pending_server`) shows the full pattern with B11 defensive triple-check on a shape-returning payload. Both use zero side effects; both include their consumer's FR identifier in the docblock so reviewers can trace the call graph via grep.
+
+---
+
+### 2026-07-02 — Shared Package Bootstrap in Plugin Entry File (Accepted A1 Deviation) [Feature-010]
+
+**Status**
+Active
+
+**Why this is durable**
+When a plugin consumes a shared vendor package that OWNS a cross-plugin resource (e.g., a shared parent admin menu, a shared REST route namespace, a shared taxonomy), the vendor package's own bootstrap MUST live in the plugin's ENTRY FILE (`<slug>.php`), not routed through the plugin's Loader. Two evidenced instances across the AcrossAI codebase family:
+
+- `acrossai-abilities-manager` Feature 038 (2026-06 / 2026-07) — `DEC-EXTERNAL-PACKAGE-HOOK-CTOR` scope extension. `\AcrossAI_Main_Menu\SettingsPage` bootstrapped from `acrossai-abilities-manager.php` on `plugins_loaded` priority 0. Established the pattern.
+- `acrossai-mcp-manager` Feature 010 (2026-07-02) — FR-029 / FR-030 / FR-031. Same package (`acrossai-co/main-menu 0.0.10`, one patch higher pin), same bootstrap shape, mirrored into `acrossai-mcp-manager.php`.
+
+The Loader is per-plugin-instance and its lifecycle is single-plugin-scoped; the shared resource must be canonically owned regardless of any single consumer's Loader lifecycle. Blindly applying A1 to the shared-package bootstrap causes coordination races where multiple consumer plugins each try to own the resource. Per D13's rule ("escalate to constitution.md when the deviation describes a generalizable pattern ≥2 features"), the pattern IS generalizable across the codebase family and warrants durable registration.
+
+**Decision**
+Accept a **scoped deviation from A1** for external-package cross-plugin-resource bootstrap. The deviation is limited to ONE `add_action` call per shared resource, in the plugin's entry file, and MUST be gated by BOTH:
+
+  (a) `did_action('<resource>_bootstrapped')` idempotency guard (prevents duplicate construction across sibling plugins consuming the same package)
+  (b) `class_exists( <package\\entrypoint>::class )` defense-in-depth guard (Constitution §V Integration Resilience — graceful degradation when the package is absent)
+
+After successful construction, the bootstrap fires `do_action('<resource>_bootstrapped')` so subsequent sibling plugins' guards short-circuit. The deviation MUST be DOCUMENTED at the call site with a docblock referencing this D-entry AND the matching DEV row in `docs/memory/INDEX.md`.
+
+**Tradeoffs**
+- Gained: correct cross-plugin coordination for shared vendor-owned resources. Deterministic single-boot per resource regardless of plugin activation order or jetpack-autoloader version resolution. Consumer plugins can be added/removed without breaking the shared resource lifecycle.
+- Made harder: newcomers must recognize this pattern isn't a general A1 escape hatch. The scoped guards (a) + (b) are load-bearing — omitting either breaks the coordination contract. Reviewers must audit that the deviation is scoped to ONE bootstrap per resource, not spread across the entry file.
+- Reconsider: if a future feature attempts to apply this pattern to a NON-cross-plugin resource (e.g., an internal admin surface, a plugin-scoped REST route), that use is OUT OF SCOPE and violates A1. The A1 escape hatch is specifically for vendor packages that own cross-plugin resources — not for local shortcuts around the Loader.
+
+**Evidence**
+- `acrossai-abilities-manager/acrossai-abilities-manager.php:142–154` — reference implementation (`\AcrossAI_Main_Menu\SettingsPage` bootstrap with `did_action('acrossai_main_menu_bootstrapped')` guard)
+- `acrossai-abilities-manager/acrossai-abilities-manager.php:82–96` — sibling FR-030-analog pattern (pre-activation vendor autoload guard on `activate_<plugin>` priority 1)
+- `acrossai-mcp-manager/acrossai-mcp-manager.php` — Feature 010 T014a + T014b will mirror both patterns
+- Feature 010 spec.md FR-029 / FR-030 / FR-031 documents the deviation contract
+- Feature 010 tasks.md T012a executes the D15 + DEV4 registration
+
+**Where to look next**
+Read the reference plugin's `acrossai-abilities-manager.php` bootstrap block (lines 82–154) as the canonical shape. Note the two-guard pattern in the `add_action('plugins_loaded', ...)` closure and the priority-1 activation guard's rationale (must run BEFORE the default-priority-10 register_activation_hook callback that would fatal on missing vendor). See INDEX.md `DEV4` row for the deviation's registration + review criteria. Future consumers of the same shared package should copy this bootstrap shape verbatim, adjusting only the plugin-specific slug in error messages.

@@ -25,7 +25,7 @@ namespace AcrossAI_MCP_Manager;
  * Description:       AcrossAI MCP Manager by WPBoilerplate
  * Version:           0.0.1
  * Requires at least: 6.9
- * Requires PHP:	  8.0
+ * Requires PHP:	  8.1
  * Author:            WPBoilerplate
  * Author URI:        https://github.com/WPBoilerplate/acrossai-mcp-manager
  * License:           GPL-2.0+
@@ -68,6 +68,31 @@ register_activation_hook( __FILE__, 'AcrossAI_MCP_Manager\acrossai_mcp_manager_a
 register_deactivation_hook( __FILE__, 'AcrossAI_MCP_Manager\acrossai_mcp_manager_deactivate' );
 
 /**
+ * Pre-activation vendor autoload guard (FR-030).
+ *
+ * Registered at priority 1 on the WordPress-internal `activate_<plugin>` action
+ * so it runs BEFORE the default-priority-10 callback registered by the
+ * register_activation_hook above. Without this priority shift the existing
+ * callback would fatal on a missing-vendor install and never reach this guard.
+ *
+ * Mirrors the reference pattern from `acrossai-abilities-manager` Feature 038.
+ */
+add_action(
+	'activate_' . plugin_basename( __FILE__ ),
+	static function () {
+		if ( ! file_exists( __DIR__ . '/vendor/autoload_packages.php' ) ) {
+			wp_die(
+				esc_html__(
+					'AcrossAI MCP Manager cannot activate: the Composer autoloader is missing. Run "composer install" inside the plugin directory and try again.',
+					'acrossai-mcp-manager'
+				)
+			);
+		}
+	},
+	1
+);
+
+/**
  * The core plugin class that is used to define internationalization,
  * admin-specific hooks, and public-facing site hooks.
  */
@@ -93,4 +118,37 @@ function acrossai_mcp_manager_run() {
 	 */
 	add_action( 'plugins_loaded', array( $plugin, 'run' ), 0 );
 }
+
+/**
+ * Bootstrap the shared `acrossai-co/main-menu` top-level menu host (FR-029).
+ *
+ * Registered at plugins_loaded priority 0 so the shared parent menu exists
+ * before any plugin's admin_menu hooks fire on default priority 10. The
+ * `did_action()` guard makes the bootstrap idempotent across multiple
+ * AcrossAI plugins consuming the same shared menu. The `class_exists()` guard
+ * provides Constitution §V Integration Resilience graceful degradation when
+ * the package is absent — submenus simply won't have a parent rather than
+ * fataling.
+ *
+ * Accepted deviation from architecture constraint A1 per FR-031 / D15 / DEV4:
+ * the bootstrap lives in the plugin entry file rather than in includes/Main.php
+ * because the host menu must be the canonical owner of the shared parent menu,
+ * independent of any single consuming plugin's internal Loader. Mirrors
+ * `acrossai-abilities-manager` Feature 038 `DEC-EXTERNAL-PACKAGE-HOOK-CTOR`.
+ * See docs/memory/DECISIONS.md D15 for the full pattern rationale.
+ */
+add_action(
+	'plugins_loaded',
+	static function () {
+		if ( did_action( 'acrossai_main_menu_bootstrapped' ) ) {
+			return;
+		}
+		if ( class_exists( \AcrossAI_Main_Menu\SettingsPage::class ) ) {
+			new \AcrossAI_Main_Menu\SettingsPage();
+			do_action( 'acrossai_main_menu_bootstrapped' );
+		}
+	},
+	0
+);
+
 acrossai_mcp_manager_run();

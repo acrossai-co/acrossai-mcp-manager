@@ -410,3 +410,42 @@ To intercept `wp_redirect` / `wp_safe_redirect` calls in tests without losing th
 
 **Where to look next**
 `tests/phpunit/FrontendAuth/HandleApproveTest.php` private helper `run_approve()` — the catch pattern that handles BOTH `WPDieException` AND `RuntimeException` in a single test entry point is the canonical implementation.
+
+---
+
+### 2026-07-02 — register_activation_hook default priority 10 vs. priority-1 vendor guard [Feature-010]
+
+**Status**
+Active
+
+**Why this is durable**
+WordPress's `register_activation_hook( __FILE__, 'callback' )` internally registers on the action `activate_<plugin-basename>` at default priority 10. A separate `add_action( 'activate_' . plugin_basename( __FILE__ ), ..., N )` with lower priority number N runs BEFORE the default-priority-10 callback (WP hook ordering: lower number = earlier). If the priority-10 activation callback tries to load composer classes and `vendor/` is missing, it FATALS with an unhelpful PHP error before any later-priority guard can wp_die() with a friendly message. Users see a wall of PHP fatal instead of "run composer install".
+
+**Pattern to apply**
+For any activation-time vendor-autoload / vendor-class-existence check that must gracefully wp_die() with a user-friendly message, register the check at priority 1 on `activate_<plugin-basename>`, BEFORE the default-priority-10 `register_activation_hook()` callback runs:
+
+```php
+add_action(
+    'activate_' . plugin_basename( __FILE__ ),
+    static function () {
+        if ( ! file_exists( __DIR__ . '/vendor/autoload_packages.php' ) ) {
+            wp_die( esc_html__( 'Plugin cannot activate: run "composer install".', 'plugin-slug' ) );
+        }
+    },
+    1  // Priority 1 — runs BEFORE the default-priority-10 activation callback
+);
+```
+
+The two-hook pattern coexists cleanly:
+- `register_activation_hook( __FILE__, 'activate_plugin' )` — priority 10, runs the actual activation work
+- `add_action( 'activate_<basename>', fn() => guard, 1 )` — priority 1, runs FIRST, wp_die() early on missing prereqs
+
+**Prevention rule**
+For any activation-time prerequisite check that emits `wp_die()`, use `add_action('activate_' . plugin_basename(__FILE__), ..., 1)` — NEVER put the check inline in the register_activation_hook callback (which runs at default priority 10 and may fatal before your check).
+
+**Evidence**
+- `acrossai-mcp-manager.php:71–90` (Feature 010 / 2026-07-02 FR-030 implementation)
+- `acrossai-abilities-manager/acrossai-abilities-manager.php:82–96` (Feature 038 reference implementation with `SEC-002` documentation)
+
+**Where to look next**
+For any future plugin activation prereq (PHP extension check, WP version check, MySQL feature check), apply the same priority-1 pattern. See D15 for the companion "shared package bootstrap in plugin entry file" pattern — B14 + D15 are the paired vendor-package resilience patterns.
