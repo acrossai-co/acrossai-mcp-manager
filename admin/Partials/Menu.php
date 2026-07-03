@@ -16,9 +16,9 @@ defined( 'ABSPATH' ) || exit;
 /**
  * Registers the plugin's admin surface as SUBMENUS under the shared `acrossai`
  * top-level menu (owned by the acrossai-co/main-menu package, namespace
- * \AcrossAI_Main_Menu\). Submenus: MCP Manager (main), CLI Auth Log,
- * Access Control (conditional). Also registers the "Settings" plugin-action
- * link on the Plugins screen.
+ * \AcrossAI_Main_Menu\). Submenus: MCP Manager (main) and Access Control
+ * (conditional). Also registers the "Settings" plugin-action link on the
+ * Plugins screen.
  *
  * Per FR-018 / FR-019 / FR-020 / FR-021 (Feature 010, 2026-07-02).
  *
@@ -60,7 +60,6 @@ class Menu {
 	 * Positions per FR-020 (avoiding collision with acrossai-abilities-manager's
 	 * position 1 for Abilities):
 	 *   - Position 2 — MCP Manager main (Servers listing)
-	 *   - Position 3 — CLI Auth Log
 	 *   - Position 4 — Access Control (conditional on vendor package presence)
 	 *
 	 * Render callbacks delegate to Settings::instance() so that Settings
@@ -82,17 +81,6 @@ class Menu {
 			AdminPageSlugs::PARENT,
 			array( $settings, 'render_list_page' ),
 			2
-		);
-
-		// 2) CLI Auth Log — position 3.
-		add_submenu_page(
-			SettingsPage::PARENT_SLUG,
-			__( 'CLI Auth Log', 'acrossai-mcp-manager' ),
-			__( 'CLI Auth Log', 'acrossai-mcp-manager' ),
-			'manage_options',
-			AdminPageSlugs::CLI_AUTH_LOG,
-			array( $settings, 'render_cli_auth_log_page' ),
-			3
 		);
 	}
 

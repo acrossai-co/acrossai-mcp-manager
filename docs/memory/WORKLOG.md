@@ -30,6 +30,13 @@ This is not a changelog. Do not record routine releases, version bumps, or imple
 
 This is a changelog entry, not a durable lesson. It records what happened, not what was learned.
 
+### 2026-07-03 - Vendor-owned shared Settings page: register_setting() option_group MUST be the shared slug, not the per-tab page slug
+
+- **Why durable**: The vendor-owned `PageRenderer::render()` emits ONE `settings_fields('acrossai-settings')` nonce for the whole shared page — every consumer plugin's `register_setting()` MUST target that shared option group or Save silently no-ops with no operator-visible error. Getting this wrong looks like a working form (nonce validates, `options.php` accepts the POST) until the reload shows the toggle reverted to its prior value. Feature 012 is the first cross-plugin consumer to formalize this contract; codifying it here prevents every subsequent consumer plugin from rediscovering the trap.
+- **Future mistake prevented**: A future AcrossAI plugin developer using the standard WordPress Settings API `register_setting( '<page-slug>', ... )` reflex — which is correct for a plugin-owned single-page Settings screen — silently breaks Save on the shared vendor page. Reviewers looking at just the tab code cannot spot the bug without knowing the vendor contract; the failure is invisible in phpstan, phpcs, and even PHPUnit runs that stub the option layer.
+- **Evidence**: Feature 012 spec.md CONSTRAINTS ("Do not change the 'acrossai-settings' option group"); Feature 012 security review SEC-012 Trust Boundaries table ("Vendor Save routing → wrong option group"); Sibling `acrossai-abilities-manager/admin/Partials/SettingsMenu.php:111-118` — matching pattern; DEC-VENDOR-SETTINGS-TAB-INTEGRATION rule 3.
+- **Where to look**: `admin/Partials/SettingsMenu.php::register_settings()` for the canonical shape. Any future AcrossAI plugin that adds a tab MUST match this exact shape verbatim — the `option_group` argument is the load-bearing invariant, not the `page_slug`.
+
 ### 2026-07-02 - BerlinDB Table subclasses must override maybe_upgrade() with a phantom-version guard
 
 - **Why durable**: The phantom-version guard on every BerlinDB-backed Table subclass is a canonical safety belt against the "version option stamped but physical table missing" edge case. Costs one method override; prevents an entire class of hard-to-diagnose "table doesn't exist" activation bugs.

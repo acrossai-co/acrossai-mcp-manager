@@ -500,3 +500,57 @@ Reviewers writing verification gates in `tasks.md` DoDs (or in FR grep contracts
 `tasks.md` T032 (post-V1-fix) shows the canonical `extends\s+\\?<Class>` idiom.
 `spec.md` FR-020 (post-I1-fix) shows the two-pass idiom (qualified + short-name via `use`).
 Any future FR that codifies a grep gate for a rename sweep or boundary preservation should reference this B15 entry in its DoD line.
+
+### 2026-07-03 — Mixed positional/numbered printf placeholders in a single format string silently mislabel output [Feature-012]
+
+**Status**
+Active
+
+**Why this is durable**
+PHP's `printf`/`sprintf` accept BOTH positional (`%s`) and numbered (`%1$s`, `%2$s`, ...) placeholders in the same format string without an error. When you concatenate a positional-`%s` format-string with a numbered-`%1$s`/`%2$s`/`%3$s` i18n string (a common pattern when you want translator-friendly `wp_kses_post( __( 'metadata: <code>%1$s</code> ...' ) )` snippets inside a larger admin layout), the numbered placeholders bind to the FIRST N arguments — NOT to the arguments you appended AFTER the leading text arguments. Result: labels or URLs display against the wrong slot with no PHP warning, no PHPStan complaint, no PHPCS violation. The bug is invisible until visual QA catches the mislabeled output.
+
+Feature 012 hit this in `SettingsMenu.php::render_claude_connectors_section_description()`: a single `printf` concatenated `'<p>%s</p>...<p><strong>%s</strong> %s</p>' . wp_kses_post( __( 'Authorization server metadata: <code>%1$s</code><br>Authorize URL: <code>%2$s</code><br>Token endpoint: <code>%3$s</code>' ) )` with 4 leading text-arg `%s` slots followed by 3 URL args. The rendered output showed `"Authorization server metadata: Optional direct Claude Connectors mode. Use this page only to turn the experimental feature on or off."` — because `%1$s` reached for the FIRST arg (the description label), not the AS metadata URL (which was arg 5).
+
+**Pattern to apply**
+When a `printf`/`sprintf` needs to compose a positional-`%s` outer layout with an i18n string that internally uses numbered `%1$s`/`%2$s` placeholders (usually because translators need the numbered form for word-order flexibility), do NOT concatenate the two format strings. Instead:
+
+**Option A — Split into two calls** (preferred; each `printf` sees only ONE placeholder style):
+```php
+// Outer layout uses positional %s only:
+printf(
+    '<div class="notice notice-warning inline"><p><strong>%1$s</strong> %2$s</p><p>%3$s</p></div>',
+    esc_html__( 'Do not cache the URLs.', 'text-domain' ),
+    esc_html__( 'Long explanatory sentence.', 'text-domain' ),
+    // Inner sprintf isolates the numbered placeholders inside their own i18n string:
+    sprintf(
+        /* translators: 1: AS metadata URL, 2: authorize URL, 3: token URL */
+        wp_kses_post( __( 'AS metadata: <code>%1$s</code><br>Authorize: <code>%2$s</code><br>Token: <code>%3$s</code>', 'text-domain' ) ),
+        esc_url( $as_metadata_url ),
+        esc_url( $authorize_url ),
+        esc_url( $token_url )
+    )
+);
+```
+
+Since the inner `sprintf` returns a fully-formatted string with all URLs already substituted, it can safely be passed to the outer `printf` as an ordinary `%s` argument (marked with `// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped` because the sniff can't statically see the `esc_url()`+`wp_kses_post()` chain — the escape is proven by construction).
+
+**Option B — Convert everything to numbered form** (works only when the outer layout is ALSO a translated string; often it isn't):
+```php
+printf(
+    /* translators: 1: label, 2: URL */
+    wp_kses_post( __( '<strong>%1$s</strong>: <code>%2$s</code>', 'text-domain' ) ),
+    esc_html( $label ),
+    esc_url( $url )
+);
+```
+
+**Prevention rule**
+NEVER concatenate a format string containing `%s` with a format string containing `%1$s`/`%2$s`/`%3$s` inside a single `printf`/`sprintf` call. If the composition needs both styles (translated inner + literal outer, or vice versa), split into two calls where each format string uses ONE placeholder style consistently. Code review checkpoint: any `printf( '...' . wp_kses_post( __( '...%1$s...' ) ), ... )` line is a red flag.
+
+**Evidence**
+- **Manifestation**: Feature 012 `admin/Partials/SettingsMenu.php::render_claude_connectors_section_description()` (pre-fix) displayed "Authorization server metadata: Optional direct Claude Connectors mode..." because `%1$s` bound to the FIRST arg (description text) instead of the intended `esc_url( $as_metadata_url )` at arg-5. Reported by user during smoke QA (2026-07-03 session).
+- **Fix commit**: Refactor to 3 separate `printf` calls; URL block built via nested `sprintf` with its own isolated numbered-placeholder i18n string.
+- **Static analysis blindspot**: PHPStan L8 + PHPCS both passed on the buggy code — the mix is legal PHP; only runtime output revealed the label swap.
+
+**Where to look next**
+Any admin partial that emits `wp_kses_post( __( '...%1$s...%2$s...' ) )`-style translated snippets inside a larger `printf` call — verify each such call uses ONE placeholder style. Sibling `acrossai-abilities-manager` `SettingsMenu.php:212-220` shows the pattern working correctly because it uses positional `%s` throughout with no numbered-placeholder concatenation. Sibling wordpress-ai copy at `src/Admin/Settings.php:490-506` uses full `<?php ... ?>`-tag rendering which bypasses printf entirely — either idiom is safe; the mixed-mode idiom is the trap.

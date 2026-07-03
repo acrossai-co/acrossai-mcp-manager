@@ -1,23 +1,21 @@
 <?php
-
 /**
  * Fired when the plugin is uninstalled.
  *
- * When populating this file, consider the following flow
- * of control:
+ * Behavior (Feature 012 — preserve-by-default):
  *
- * - This method should be static
- * - Check if the $_REQUEST content actually is the plugin name
- * - Run an admin referrer check to make sure it goes through authentication
- * - Verify the output of $_GET makes sense
- * - Repeat with other user roles. Best directly by using the links/query string parameters.
- * - Repeat things for multisite. Once for a single site in the network, once sitewide.
- *
- * This file may be updated more in future version of the Boilerplate; however, this is the
- * general skeleton and outline for how the file should work.
- *
- * For more information, see the following discussion:
- * https://github.com/wpboilerplate/acrossai-mcp-manager
+ *   Reads the `acrossai_mcp_uninstall_delete_data` option (int 0/1, default 0).
+ *   - 0 (default): preserves ALL plugin data on uninstall — no tables dropped,
+ *     no options deleted, no scheduled hooks cleared. This matches the WP.org
+ *     plugin guideline #5 (uninstall must not destroy data unless the operator
+ *     explicitly opts in). This is a BEHAVIOR CHANGE from pre-Feature-012, where
+ *     `acrossai_mcp_oauth_tokens` + `acrossai_mcp_oauth_audit` were dropped
+ *     unconditionally.
+ *   - 1 (destructive): drops all four wp_acrossai_mcp_* tables, deletes every
+ *     `acrossai_mcp_*` option via LIKE-sweep, and clears the OAuth cleanup cron.
+ *     Operators opt in via the "Delete all data on uninstall" checkbox on the
+ *     MCP tab of the shared AcrossAI Settings page (see
+ *     admin/Partials/SettingsMenu.php).
  *
  * @link       https://github.com/WPBoilerplate/acrossai-mcp-manager
  * @since      0.0.1
@@ -30,24 +28,39 @@ if ( ! defined( 'WP_UNINSTALL_PLUGIN' ) ) {
 	exit;
 }
 
+// Preserve-by-default gate. Operators opt into destructive teardown by
+// ticking the "Delete all data on uninstall" checkbox on the MCP tab.
+if ( 1 !== (int) get_option( 'acrossai_mcp_uninstall_delete_data', 0 ) ) {
+	return;
+}
+
 global $wpdb;
 
-// Drop Phase 5 OAuth tables — uninstall is destructive by nature
-// (spec.md Edge Cases: outstanding tokens become invalid silently).
-$oauth_tables = array(
+// Drop all four plugin tables. Table names are derived from $wpdb->prefix +
+// hardcoded stems (no user input reaches SQL). Uses the `%i` identifier
+// placeholder (WordPress 6.2+) so $wpdb->prepare() escapes the table name
+// safely and no phpcs:ignore is needed.
+$tables = array(
+	$wpdb->prefix . 'acrossai_mcp_servers',
+	$wpdb->prefix . 'acrossai_mcp_cli_auth_logs',
 	$wpdb->prefix . 'acrossai_mcp_oauth_tokens',
 	$wpdb->prefix . 'acrossai_mcp_oauth_audit',
 );
-foreach ( $oauth_tables as $table ) {
-	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.PreparedSQL.NotPrepared
-	$wpdb->query( "DROP TABLE IF EXISTS {$table}" );
+foreach ( $tables as $table ) {
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange
+	$wpdb->query( $wpdb->prepare( 'DROP TABLE IF EXISTS %i', $table ) );
 }
 
-// Clean up OAuth-related options + scheduled events.
-delete_option( 'acrossai_mcp_oauth_tokens_db_version' );
-delete_option( 'acrossai_mcp_oauth_audit_db_version' );
-wp_clear_scheduled_hook( 'acrossai_mcp_oauth_cleanup' );
+// Delete every `acrossai_mcp_*` option via LIKE-sweep on wp_options.
+$options = $wpdb->get_col(
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+	$wpdb->prepare( "SELECT option_name FROM {$wpdb->options} WHERE option_name LIKE %s", 'acrossai_mcp_%' )
+);
+if ( is_array( $options ) ) {
+	foreach ( $options as $option_name ) {
+		delete_option( $option_name );
+	}
+}
 
-// NOTE: We deliberately do NOT drop `acrossai_mcp_cli_auth_logs` or
-// `acrossai_mcp_servers` — both predate Phase 5 and are owned by Phase 1/2.
-// Their teardown belongs to their respective uninstall paths.
+// Clear the OAuth token cleanup cron hook.
+wp_clear_scheduled_hook( 'acrossai_mcp_oauth_cleanup' );

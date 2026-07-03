@@ -1,0 +1,10 @@
+includes/Utilities/AdminPageSlugs.php:31:	public const CLI_AUTH_LOG = 'acrossai_mcp_manager_cli_auth_log';
+includes/Utilities/AdminPageSlugs.php:55:			'acrossai_page_' . self::CLI_AUTH_LOG,
+includes/Utilities/AdminPageSlugs.php:58:			'mcp-manager_page_' . self::CLI_AUTH_LOG,
+admin/Partials/Menu.php:93:			AdminPageSlugs::CLI_AUTH_LOG,
+admin/Partials/Menu.php:94:			array( $settings, 'render_cli_auth_log_page' ),
+admin/Partials/Settings.php:727:	public function render_cli_auth_log_page(): void {
+admin/Partials/Settings.php:731:		$table = new CliAuthLogListTable( 0 ); // 0 = all servers
+admin/Partials/Settings.php:738:		printf( '<input type="hidden" name="page" value="%s" />', esc_attr( AdminPageSlugs::CLI_AUTH_LOG ) );
+admin/Partials/CliAuthLogListTable.php:23: *  - CLI Auth Log submenu (Settings::render_cli_auth_log_page, all servers)
+admin/Partials/CliAuthLogListTable.php:28:class CliAuthLogListTable extends \WP_List_Table {

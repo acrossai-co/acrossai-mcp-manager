@@ -1,0 +1,11 @@
+includes/Activator.php:6:use AcrossAI_MCP_Manager\Includes\Database\CliAuthLog\Table as CliAuthLogTable;
+includes/Main.php:206:		\AcrossAI_MCP_Manager\Includes\Database\CliAuthLog\Table::instance();
+includes/OAuth/Storage.php:12:use AcrossAI_MCP_Manager\Includes\Database\CliAuthLog\Query as CliAuthLogQuery;
+includes/OAuth/Storage.php:13:use AcrossAI_MCP_Manager\Includes\Database\CliAuthLog\Row as CliAuthLogRow;
+includes/OAuth/Storage.php:80:		$query = CliAuthLogQuery::instance();
+includes/OAuth/Storage.php:107:	public function lookup_authorization_code( string $raw_code ): ?CliAuthLogRow {
+includes/OAuth/Storage.php:109:		$query = CliAuthLogQuery::instance();
+includes/OAuth/Storage.php:127:		return CliAuthLogQuery::instance()->redeem_atomic( $code_row_id, current_time( 'mysql', 1 ) );
+includes/OAuth/Storage.php:248:		$cli_query    = CliAuthLogQuery::instance();
+includes/REST/CliController.php:22:use AcrossAI_MCP_Manager\Includes\Database\CliAuthLog\Recorder;
+admin/Partials/CliAuthLogListTable.php:11:use AcrossAI_MCP_Manager\Includes\Database\CliAuthLog\Query;
