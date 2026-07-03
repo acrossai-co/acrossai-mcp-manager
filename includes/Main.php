@@ -480,6 +480,23 @@ final class Main {
 
 		$cli_controller = \AcrossAI_MCP_Manager\Includes\REST\CliController::instance();
 		$this->loader->add_action( 'rest_api_init', $cli_controller, 'register_routes' );
+
+		/**
+		 * Feature 013 — Public Renderer layer.
+		 *
+		 * Wires the REST endpoint + 3 shortcodes for the public client-config
+		 * renderers (NpmClientBlock, MCPClientsBlock, ClaudeConnectorBlock).
+		 * Third-party plugins (BuddyBoss, WooCommerce, etc.) consume via:
+		 *   - do_action( 'acrossai_mcp_render_client_block', $slug, $server_id, $context )
+		 *   - apply_filters( 'acrossai_mcp_client_block_context', $context, $slug, $server_id )
+		 *   - apply_filters( 'acrossai_mcp_client_classes', $default_fqns )
+		 *   - Shortcodes: [acrossai_mcp_npm_block server=X], etc.
+		 * All @experimental until 1.0.0 per DEC-CLIENT-RENDERER-PUBLIC-API.
+		 */
+		$client_renderer_rest = \AcrossAI_MCP_Manager\Includes\REST\ClientRendererController::instance();
+		$this->loader->add_action( 'rest_api_init', $client_renderer_rest, 'register_rest_routes' );
+
+		$this->loader->add_action( 'init', $client_renderer_rest, 'register_shortcodes_and_actions' );
 	}
 
 	/**

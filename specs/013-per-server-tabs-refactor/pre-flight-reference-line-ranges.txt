@@ -1,0 +1,12 @@
+1101:	private function render_overview_tab( array $server ) {
+1258:	private function render_npm_tab( array $server ) {
+1366:	private function render_clients_tab( array $server, array $clients, string $active_client, int $server_id, callable $make_client_url ) {
+1409:	private function render_client_tab( $client_id, array $client_data, $server_id ) {
+1498:	private function render_claude_connector_tab( array $server ) {
+1762:	private function render_wpcli_tab( array $server ) {
+1893:	private function render_tools_tab( array $server ) {
+1981:	private function render_abilities_tab( array $server ) {
+2157:	private function render_access_control_tab( array $server ) {
+2293:	private function render_mcp_tracker_tab( array $server ) {
+2390:	private function render_update_server_tab( array $server ) {
+2524:	private function render_danger_zone_tab( array $server ) {

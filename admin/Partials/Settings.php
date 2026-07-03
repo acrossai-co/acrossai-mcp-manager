@@ -519,8 +519,18 @@ class Settings {
 	private function render_edit_page(): void {
 		// phpcs:disable WordPress.Security.NonceVerification.Recommended
 		$server_id = isset( $_GET['server'] ) ? absint( $_GET['server'] ) : 0;
-		$tab       = isset( $_GET['tab'] ) ? sanitize_key( wp_unslash( $_GET['tab'] ) ) : 'general';
+		$tab       = isset( $_GET['tab'] ) ? sanitize_key( wp_unslash( $_GET['tab'] ) ) : 'overview';
 		// phpcs:enable WordPress.Security.NonceVerification.Recommended
+
+		// Feature 013 — legacy tab slug back-compat (pre-F013 bookmarks/links).
+		$legacy_slug_map = array(
+			'general'          => 'overview',
+			'access_control'   => 'access-control',
+			'claude_connector' => 'claude-connector',
+		);
+		if ( isset( $legacy_slug_map[ $tab ] ) ) {
+			$tab = $legacy_slug_map[ $tab ];
+		}
 
 		// FR-014: missing-server → redirect to list.
 		$rows = Query::instance()->query(
@@ -535,14 +545,14 @@ class Settings {
 		$row    = $rows[0];
 		$server = $row->to_array();
 
-		$tabs = array(
-			'general'          => __( 'General', 'acrossai-mcp-manager' ),
-			'tokens'           => __( 'Tokens', 'acrossai-mcp-manager' ),
-			'access_control'   => __( 'Access Control', 'acrossai-mcp-manager' ),
-			'claude_connector' => __( 'Claude Connector', 'acrossai-mcp-manager' ),
-		);
+		// Feature 013 — Registry dispatches per-tab render + supplies visible tab list to the nav.
+		$registry = \AcrossAI_MCP_Manager\Admin\Partials\ServerTabs\Registry::instance();
+		$tabs     = array();
+		foreach ( $registry->visible_tabs( $server ) as $tab_obj ) {
+			$tabs[ $tab_obj->slug() ] = $tab_obj->label();
+		}
 		if ( ! array_key_exists( $tab, $tabs ) ) {
-			$tab = 'general';
+			$tab = 'overview';
 		}
 
 		echo '<div class="wrap">';
@@ -554,154 +564,8 @@ class Settings {
 
 		SettingsRenderer::instance()->render_tab_nav( $tabs, $tab, $server_id );
 
-		switch ( $tab ) {
-			case 'tokens':
-				$this->render_tokens_tab( $server );
-				break;
-			case 'access_control':
-				$this->render_access_control_tab( $server );
-				break;
-			case 'claude_connector':
-				$this->render_claude_connector_tab( $server );
-				break;
-			case 'general':
-			default:
-				$this->render_general_tab( $server );
-				break;
-		}
+		$registry->render( $tab, $server );
 
 		echo '</div>';
-	}
-
-	/**
-	 * General tab — Name, Description, Route Namespace, Route, Version. FR-009.
-	 *
-	 * @param array<string, mixed> $server Row data.
-	 */
-	private function render_general_tab( array $server ): void {
-		$post_url = esc_url(
-			add_query_arg(
-				array(
-					'page'   => AdminPageSlugs::PARENT,
-					'action' => 'update',
-					'server' => (int) $server['id'],
-				),
-				admin_url( 'admin.php' )
-			)
-		);
-		?>
-		<form method="post" action="<?php echo esc_url( $post_url ); /* SEC-S2: defense in depth — esc_url is idempotent */ ?>">
-			<?php wp_nonce_field( 'acrossai_mcp_update_' . (int) $server['id'] ); ?>
-			<table class="form-table" role="presentation">
-				<tr>
-					<th scope="row"><label for="server_name"><?php esc_html_e( 'Name', 'acrossai-mcp-manager' ); ?></label></th>
-					<td><input type="text" id="server_name" name="server_name" class="regular-text" value="<?php echo esc_attr( $server['server_name'] ); ?>" required /></td>
-				</tr>
-				<tr>
-					<th scope="row"><label for="description"><?php esc_html_e( 'Description', 'acrossai-mcp-manager' ); ?></label></th>
-					<td><textarea id="description" name="description" class="large-text" rows="3"><?php echo esc_textarea( $server['description'] ); ?></textarea></td>
-				</tr>
-				<tr>
-					<th scope="row"><label for="server_route_namespace"><?php esc_html_e( 'Route Namespace', 'acrossai-mcp-manager' ); ?></label></th>
-					<td><input type="text" id="server_route_namespace" name="server_route_namespace" class="regular-text" value="<?php echo esc_attr( $server['server_route_namespace'] ); ?>" /></td>
-				</tr>
-				<tr>
-					<th scope="row"><label for="server_route"><?php esc_html_e( 'Route', 'acrossai-mcp-manager' ); ?></label></th>
-					<td><input type="text" id="server_route" name="server_route" class="regular-text" value="<?php echo esc_attr( $server['server_route'] ); ?>" /></td>
-				</tr>
-				<tr>
-					<th scope="row"><label for="server_version"><?php esc_html_e( 'Version', 'acrossai-mcp-manager' ); ?></label></th>
-					<td><input type="text" id="server_version" name="server_version" class="regular-text" value="<?php echo esc_attr( $server['server_version'] ); ?>" /></td>
-				</tr>
-			</table>
-			<?php submit_button( __( 'Save General', 'acrossai-mcp-manager' ) ); ?>
-		</form>
-		<?php
-	}
-
-	/**
-	 * Tokens tab — delegates to ApplicationPasswords.
-	 *
-	 * @param array<string, mixed> $server Row data.
-	 */
-	private function render_tokens_tab( array $server ): void {
-		ApplicationPasswords::instance()->render_for_server( (int) $server['id'] );
-	}
-
-	/**
-	 * Access Control tab — delegates to vendor manager when present,
-	 * renders an informational notice when absent. FR-011.
-	 *
-	 * @param array<string, mixed> $server Row data.
-	 */
-	private function render_access_control_tab( array $server ): void {
-		if ( ! class_exists( '\WPBoilerplate\AccessControl\AccessControlManager' ) ) {
-			echo '<div class="notice notice-info inline"><p>';
-			esc_html_e( 'Access Control requires the wpb-access-control package. Install it to manage per-server access rules.', 'acrossai-mcp-manager' );
-			echo '</p></div>';
-			return;
-		}
-
-		// Vendor manager is responsible for its own rendering + persistence.
-		$manager = \WPBoilerplate\AccessControl\AccessControlManager::instance( 'acrossai_mcp_access_control_providers' );
-		if ( method_exists( $manager, 'render_admin_page' ) ) {
-			$manager->render_admin_page( (int) $server['id'] );
-			return;
-		}
-
-		// Fallback notice when the vendor API we expected isn't present yet.
-		echo '<div class="notice notice-warning inline"><p>';
-		esc_html_e( 'Access Control package is present but does not expose the expected render_admin_page() API for this version.', 'acrossai-mcp-manager' );
-		echo '</p></div>';
-	}
-
-	/**
-	 * Claude Connector tab — OAuth Client ID / Secret / Redirect URI. FR-012.
-	 * Secret is masked on re-render after first save.
-	 *
-	 * @param array<string, mixed> $server Row data.
-	 */
-	private function render_claude_connector_tab( array $server ): void {
-		$post_url = esc_url(
-			add_query_arg(
-				array(
-					'page'   => AdminPageSlugs::PARENT,
-					'action' => 'save_claude_connector',
-					'server' => (int) $server['id'],
-				),
-				admin_url( 'admin.php' )
-			)
-		);
-
-		$has_secret   = ! empty( $server['claude_connector_client_secret'] );
-		$secret_value = $has_secret ? str_repeat( '•', 12 ) : '';
-		?>
-		<form method="post" action="<?php echo esc_url( $post_url ); /* SEC-S2: defense in depth — esc_url is idempotent */ ?>">
-			<?php wp_nonce_field( 'acrossai_mcp_claude_connector_' . (int) $server['id'] ); ?>
-			<p class="description">
-				<?php esc_html_e( 'OAuth credentials this plugin presents to Claude on behalf of this server. The Client Secret is shown as ••••• after first save — re-enter it only when you need to change it.', 'acrossai-mcp-manager' ); ?>
-			</p>
-			<table class="form-table" role="presentation">
-				<tr>
-					<th scope="row"><label for="claude_connector_client_id"><?php esc_html_e( 'Client ID', 'acrossai-mcp-manager' ); ?></label></th>
-					<td><input type="text" id="claude_connector_client_id" name="claude_connector_client_id" class="regular-text" value="<?php echo esc_attr( $server['claude_connector_client_id'] ); ?>" /></td>
-				</tr>
-				<tr>
-					<th scope="row"><label for="claude_connector_client_secret"><?php esc_html_e( 'Client Secret', 'acrossai-mcp-manager' ); ?></label></th>
-					<td>
-						<input type="password" id="claude_connector_client_secret" name="claude_connector_client_secret" class="regular-text" value="<?php echo esc_attr( $secret_value ); ?>" autocomplete="off" />
-						<?php if ( $has_secret ) : ?>
-							<p class="description"><?php esc_html_e( 'A secret is currently stored. Leave the masked value unchanged to keep it.', 'acrossai-mcp-manager' ); ?></p>
-						<?php endif; ?>
-					</td>
-				</tr>
-				<tr>
-					<th scope="row"><label for="claude_connector_redirect_uri"><?php esc_html_e( 'Redirect URI', 'acrossai-mcp-manager' ); ?></label></th>
-					<td><input type="url" id="claude_connector_redirect_uri" name="claude_connector_redirect_uri" class="regular-text" value="<?php echo esc_url( $server['claude_connector_redirect_uri'] ); ?>" /></td>
-				</tr>
-			</table>
-			<?php submit_button( __( 'Save Claude Connector', 'acrossai-mcp-manager' ) ); ?>
-		</form>
-		<?php
 	}
 }
