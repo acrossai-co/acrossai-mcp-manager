@@ -562,3 +562,113 @@ Either alternative is acceptable; the collision is not. The Kern parent MUST be 
 
 **Where to look next**
 Read one of Feature 011's Table subclass files (e.g., `includes/Database/MCPServer/Table.php`) — note the ABSENCE of `use BerlinDB\Database\Kern\Table;` at the top and the presence of `class Table extends \BerlinDB\Database\Kern\Table` (leading-`\` FQN). Any future BerlinDB Kern subclass in this plugin's subdir-per-module layout MUST follow the same pattern.
+
+---
+
+### DEC-VENDOR-SETTINGS-TAB-INTEGRATION — Canonical shape for consuming acrossai-co/main-menu's shared Settings page
+
+**Status**: Active (Feature 012)
+**Scope**: Any AcrossAI plugin adding a tab to the shared `?page=acrossai-settings` page owned by the `acrossai-co/main-menu` vendor package
+**Tags**: vendor-integration, settings-api, main-menu, dataform-carveout, class-exists-omission
+
+**Why this is durable**
+The vendor package `acrossai-co/main-menu` exposes ONE shared Settings page that every AcrossAI plugin adds tabs to via the `acrossai_settings_tabs` filter. The vendor's `PageRenderer::render()` emits ONE `settings_fields('acrossai-settings')` nonce + `options.php` handoff for the entire form — so every plugin's `register_setting()` call MUST target the shared `'acrossai-settings'` option group, NOT the per-tab page slug. Getting this wrong makes Save appear to work but silently discard the tab's values with no operator-visible error. Feature 012 is the first AcrossAI plugin outside `acrossai-abilities-manager` to consume this contract — codifying the shape here prevents every future consumer plugin from rediscovering the trap.
+
+**Decision**
+When adding a tab to the shared AcrossAI Settings page, follow these four rules verbatim:
+
+1. **Filter hook**: hook `register_tab( $tabs ): array` onto the `acrossai_settings_tabs` filter. Normalize non-array input with `if ( ! is_array( $tabs ) ) { $tabs = array(); }`. Append `array( 'slug' => TAB_SLUG, 'label' => __( ..., 'text-domain' ), 'priority' => <int> )`.
+2. **Per-tab page slug**: inside `register_settings()`, derive the page slug via `$page_slug = \AcrossAI_Main_Menu\SettingsPage::tab_page_slug( self::TAB_SLUG );` — this returns `'acrossai-settings-<tab>'`. Pass `$page_slug` as the 4th arg to `add_settings_section()` and the 4th arg to `add_settings_field()`.
+3. **Shared option group**: pass literal `'acrossai-settings'` (NOT `$page_slug`) as the 1st arg to `register_setting()`. This is the load-bearing invariant — the vendor's `settings_fields('acrossai-settings')` call inside `PageRenderer::render()` produces a nonce that covers ONLY option keys registered under this group; keys registered under any other group would be silently discarded by `options.php`.
+4. **Class member ordering**: match the sibling `acrossai-abilities-manager/admin/Partials/SettingsMenu.php` verbatim — `protected static $instance = null;` → `public static function instance(): self` → `private function __construct() {}` → `public const TAB_SLUG = '...';` (declared AFTER the singleton scaffolding, not before) → `register_tab()` → `register_settings()` → render methods. Do NOT declare the class `final`. Do NOT add a `class_exists( '\AcrossAI_Main_Menu\SettingsPage' )` guard around the `tab_page_slug()` call — the vendor package is a hard-require in composer.json (D15 / DEV4), so the class is guaranteed present at admin_init.
+
+Also — this pattern is a first-party §IV DataForm carve-out: the shared Settings page's `PageRenderer` is a WordPress Settings API surface owned by the vendor package, not a DataForm module. Per Constitution §IV, admin surfaces prefer DataForm — this vendor page is the accepted exception because the vendor contract mandates the Settings API and the shared-page architecture makes DataForm coordination across plugins intractable.
+
+**Tradeoffs**
+- Gained: cross-plugin Save round-trip works correctly on the first attempt; every operator-facing toggle persists via ONE nonce + ONE options.php submission. Consumer plugins can add tabs without touching vendor code.
+- Made harder: `register_setting( 'acrossai-settings', ..., ... )` looks WRONG to a WordPress dev unfamiliar with the vendor contract — they may "fix" it by changing the option group to the per-tab page slug, silently breaking Save. The docblock above `register_settings()` MUST explain the invariant so reviewers catch the pattern.
+- Reconsider: if `acrossai-co/main-menu` is ever demoted from hard-require to optional integration, the omitted `class_exists()` guard becomes a fatal-error trap on any site that has the plugin installed without the vendor package. Re-evaluate this decision (specifically the "no guard" rule in item 4) if the composer.json dependency shape ever changes.
+
+**Evidence**
+- `admin/Partials/SettingsMenu.php` (Feature 012 T003) — canonical shape for this plugin
+- `acrossai-abilities-manager/admin/Partials/SettingsMenu.php` (Feature 038 sibling) — reference shape
+- `vendor/acrossai-co/main-menu/README.md` sections 133-207 — filter contract + `tab_page_slug()` helper documentation
+- `vendor/acrossai-co/main-menu/src/SettingsPage.php:30-32` — `tab_page_slug()` signature returning `SETTINGS_SLUG . '-' . sanitize_key($tab_slug)`
+- Feature 012 spec.md FR-002..FR-013 + CONSTRAINTS block
+
+**Where to look next**
+Any future AcrossAI plugin that adds a tab to the shared Settings page: read `admin/Partials/SettingsMenu.php` in this plugin and the sibling `acrossai-abilities-manager` first. Verify the 4 rules above are satisfied verbatim. Do NOT invent alternative shapes — the vendor contract is a fixed target, not a suggestion.
+
+---
+
+### DEC-UNINSTALL-OPT-IN-GATE — uninstall.php MUST preserve all data by default; destructive teardown gated on explicit opt-in
+
+**Status**: Active (Feature 012)
+**Scope**: `uninstall.php` and any future destructive teardown code in this plugin
+**Tags**: uninstall, safety-invariant, wp-org-guideline-5, opt-in, behavior-change
+
+**Why this is durable**
+Pre-Feature-012 `uninstall.php` unconditionally dropped `acrossai_mcp_oauth_tokens` and `acrossai_mcp_oauth_audit` on plugin uninstall — meaning any operator who briefly uninstalled the plugin (say, to troubleshoot an activation error, or to try a different version) irreversibly lost their OAuth token store, silently invalidating every issued Claude auth token with no visible warning. WordPress.org plugin guideline #5 explicitly requires preserve-by-default on uninstall: "Uninstall procedures must not affect any user setting or plugin data by default." Feature 012 fixed the pre-Feature-012 violation by inverting the default and wiring an opt-in checkbox on the new MCP settings tab.
+
+**Decision**
+`uninstall.php` MUST short-circuit at the TOP (immediately after the `WP_UNINSTALL_PLUGIN` check) with:
+
+```php
+if ( 1 !== (int) get_option( 'acrossai_mcp_uninstall_delete_data', 0 ) ) {
+    return;
+}
+```
+
+Only when the operator has explicitly ticked the "Delete all data on uninstall" checkbox on the MCP settings tab (which sets the option to `1`) does destructive teardown run. Every line of destructive SQL MUST live AFTER this gate. The default value passed to `get_option()` MUST be `0` — a missing option means preserve-by-default. Do NOT invert the default to `1`; the value the operator saved is the SOLE source of truth.
+
+Future features that need destructive teardown MUST reuse this gate (not add a second one). Adding a second gate that bypasses this one — even for a "safer" cleanup — is prohibited by this decision; consolidate any new teardown into the existing branch below the gate.
+
+**Tradeoffs**
+- Gained: satisfies WordPress.org guideline #5; matches sibling `acrossai-abilities-manager` verbatim; operators who uninstall briefly do not lose data.
+- Made harder: operators who INTENDED the pre-Feature-012 behavior (uninstall = wipe OAuth tables) must now tick the checkbox first. Documented in README.txt Unreleased changelog as BEHAVIOR CHANGE.
+- Reconsider: never. Preserving user data on uninstall is a WordPress.org contract, not a policy choice — even if a future feature justifies a "helpful cleanup," it belongs BELOW the gate, not around it.
+
+**Evidence**
+- `uninstall.php` (Feature 012 T009) — canonical shape with gate at top
+- Feature 012 spec.md FR-019..FR-023 + spec CONSTRAINTS block
+- Feature 012 security review (`docs/security-reviews/2026-07-03-012-mcp-settings-tab-plan.md`) SEC-012-001
+- Sibling `acrossai-abilities-manager/uninstall.php` — identical pattern (predates this decision but validates it)
+
+**Where to look next**
+Read `uninstall.php` and count how many `if`, `return`, or `wp_die` statements precede the first `$wpdb->query()` call. If there is exactly ONE gate (the `acrossai_mcp_uninstall_delete_data` check) and it lives BEFORE `global $wpdb;`, the invariant is intact. If someone later adds another gate above the `WP_UNINSTALL_PLUGIN` check that bypasses the delete-data gate, that is a regression.
+
+---
+
+### DEC-ADMIN-SURFACE-PRUNE-CLI-AUTH-LOG — Standalone admin submenus for read-only DB-inspection views SHOULD be pruned when a lighter inspection path exists
+
+**Status**: Active (Feature 012)
+**Scope**: Plugin admin surface (submenu inventory under the shared `acrossai` parent menu)
+**Tags**: admin-surface, pruning, a9-subtractive-precedent, dev1-scope-narrowing, list-table
+
+**Why this is durable**
+Feature 011 codified A9 (canonical whitelist additive-only) after multiple regressions where subtractive edits to `AdminPageSlugs::plugin_screen_ids()` broke asset enqueuing on legacy screens. Feature 012 removes the CLI Auth Log admin submenu (a pure WP_List_Table view over `wp_acrossai_mcp_cli_auth_logs`) — the FIRST justified subtractive edit under A9. Without this precedent, every future subtractive edit would either be blocked or would land without the accompanying submenu removal, corrupting the "screen IDs correspond to registered submenus" invariant A9 protects.
+
+**Decision**
+Two related rules, applied together:
+
+1. **Prune rule (surface-side)**: standalone admin submenus that render a read-only WP_List_Table view SHOULD be removed when the same inspection is available via a lighter path (WP-CLI, per-server tab on an existing page, dashboard widget). The underlying DB layer + Query/Row classes MUST be preserved when runtime consumers (e.g., OAuth flow) still depend on them.
+2. **A9 subtractive precedent (whitelist-side)**: subtractive edits to `AdminPageSlugs::plugin_screen_ids()` are allowed ONLY when the corresponding submenu page is removed in the SAME feature. The removed screen-ID entries and the removed `add_submenu_page()` call MUST land in the same commit (or same feature branch) so the "screen IDs correspond to registered submenus" invariant is never violated at HEAD.
+
+This also narrows the scope of DEV1 (WP_List_Table exception to §IV DataForm mandate): the exception PERMITS WP_List_Table for legitimate read-only inspection UI on a shared page or dashboard widget; it does NOT permit adding a dedicated top-level submenu for pure read-only inspection when a lighter path is available.
+
+**Tradeoffs**
+- Gained: shrinks the plugin admin surface footprint; matches the "one submenu per interactive/mutating capability" heuristic; codifies the first A9 subtractive precedent so future prunes can proceed cleanly.
+- Made harder: operators who liked the standalone CLI Auth Log page must now use WP-CLI (`wp db query "SELECT ... FROM wp_acrossai_mcp_cli_auth_logs"`) or wait for a future per-server tab. Documented in README.txt Unreleased changelog. No REST or CLI command surface is deleted — only the admin submenu.
+- Reconsider: if a future feature adds interactive/mutating capability to the CLI Auth Log (bulk-delete stale rows, mark-as-completed manual override, resend approval email), THAT is a legitimate reason to re-add a submenu. The prune is not permanent — it applies only while the view is purely read-only.
+
+**Evidence**
+- `admin/Partials/Menu.php` (Feature 012 T014) — position-3 `add_submenu_page` removed
+- `admin/Partials/CliAuthLogListTable.php` — deleted (Feature 012 T013)
+- `includes/Utilities/AdminPageSlugs.php` (Feature 012 T015) — CLI_AUTH_LOG const + 2 whitelist entries removed
+- `admin/Partials/Settings.php` (Feature 012 T016) — `render_cli_auth_log_page()` removed
+- Preserved: every file under `includes/Database/CliAuthLog/**` (Table, Schema, Query, Row, Recorder) — OAuth flow consumes these at runtime
+- Feature 012 spec.md FR-024..FR-028 + spec User Story 4
+- Feature 012 security review SEC-012-006
+
+**Where to look next**
+Before removing any admin submenu in a future feature: (1) verify the target view is purely read-only (no forms, no actions, no toggles); (2) verify a lighter inspection path exists (WP-CLI query, existing tab, dashboard widget); (3) verify the DB layer + Query/Row classes have runtime consumers OUTSIDE the admin submenu — if yes, preserve them; if no, the DB layer can be removed too. Land the submenu removal + `plugin_screen_ids()` entry removal + render-method removal in the SAME commit to preserve the A9 invariant at HEAD.

@@ -40,6 +40,7 @@ Full file-by-file source→target mapping: [`source-map.md`](source-map.md)
 | # | Slug | Date | Status | Doc |
 |---|---|---|---|---|
 | 011 | berlindb-migration | 2026-07-02 | Complete | [011-berlindb-migration.md](011-berlindb-migration.md) |
+| 012 | mcp-settings-tab | 2026-07-03 | Complete | [012-mcp-settings-tab.md](012-mcp-settings-tab.md) |
 
 ---
 

@@ -404,15 +404,6 @@ class Settings {
 	}
 
 	// ─────────────────────────────────────────────────────────────────────────
-	// Settings API registration (no-op stub; populated in US3 T020).
-	// ─────────────────────────────────────────────────────────────────────────
-
-	public function register_settings(): void {
-		// US3 T020 ports the full register_setting / add_settings_section / field calls.
-		// Empty body is safe — register_settings is called on admin_init and may be a no-op.
-	}
-
-	// ─────────────────────────────────────────────────────────────────────────
 	// Page render — wired as the menu callback by Menu::register_menu().
 	// ─────────────────────────────────────────────────────────────────────────
 
@@ -712,32 +703,5 @@ class Settings {
 			<?php submit_button( __( 'Save Claude Connector', 'acrossai-mcp-manager' ) ); ?>
 		</form>
 		<?php
-	}
-
-	// ─────────────────────────────────────────────────────────────────────────
-	// Notice rendering — extracted to Admin\Partials\Notices per RT-2 (2026-06-17).
-	// See admin/Partials/Notices.php for render_action_result_notice (FR-016) and
-	// render_missing_adapter_notice + handle_adapter_notice_dismissal (FR-015 + Q3).
-	// ─────────────────────────────────────────────────────────────────────────
-
-	// ─────────────────────────────────────────────────────────────────────────
-	// Submenu page callbacks (US1).
-	// ─────────────────────────────────────────────────────────────────────────
-
-	public function render_cli_auth_log_page(): void {
-		if ( ! current_user_can( 'manage_options' ) ) {
-			wp_die( esc_html__( 'You do not have permission to access this page.', 'acrossai-mcp-manager' ) );
-		}
-		$table = new CliAuthLogListTable( 0 ); // 0 = all servers
-		$table->prepare_items();
-
-		echo '<div class="wrap">';
-		echo '<h1>' . esc_html__( 'CLI Auth Log', 'acrossai-mcp-manager' ) . '</h1>';
-		echo '<form method="get">';
-		// Preserve `page` query var across pagination.
-		printf( '<input type="hidden" name="page" value="%s" />', esc_attr( AdminPageSlugs::CLI_AUTH_LOG ) );
-		$table->display();
-		echo '</form>';
-		echo '</div>';
 	}
 }

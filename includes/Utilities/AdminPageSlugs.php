@@ -27,8 +27,8 @@ final class AdminPageSlugs {
 	/** Top-level menu page slug. Matches `?page=` URL value. */
 	public const PARENT = 'acrossai_mcp_manager';
 
-	/** CLI Auth Log submenu page slug. */
-	public const CLI_AUTH_LOG = 'acrossai_mcp_manager_cli_auth_log';
+	/** Shared AcrossAI Settings page tab slug (kept in sync with SettingsMenu::TAB_SLUG). */
+	public const SETTINGS_TAB = 'mcp';
 
 	/**
 	 * Screen IDs WordPress generates for our pages.
@@ -52,10 +52,10 @@ final class AdminPageSlugs {
 		return array(
 			// Post-Feature-010 submenu IDs (under shared `acrossai` parent).
 			'acrossai_page_' . self::PARENT,
-			'acrossai_page_' . self::CLI_AUTH_LOG,
+			// Shared Settings page (Feature 012 — MCP tab lives here).
+			'acrossai_page_acrossai-settings',
 			// Legacy top-level IDs (retained additively per A9).
 			'toplevel_page_' . self::PARENT,
-			'mcp-manager_page_' . self::CLI_AUTH_LOG,
 		);
 	}
 

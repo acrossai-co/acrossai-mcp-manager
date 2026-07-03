@@ -40,6 +40,15 @@
             <directory>tests/phpunit/RestCli</directory>
             <directory>tests/phpunit/FrontendAuth</directory>
         </testsuite>
+
+        <!--
+            Admin (Feature 012): tests need WP for register_setting,
+            $wp_registered_settings, WP_UnitTestCase. Run with
+            --bootstrap tests/bootstrap-wp.php.
+        -->
+        <testsuite name="admin">
+            <directory>tests/phpunit/Admin</directory>
+        </testsuite>
     </testsuites>
 
     <source>

@@ -22,6 +22,9 @@ This is a compact routing map for durable memory. Keep it short. It points to so
 | D15 | Shared package bootstrap in plugin entry file — scoped A1 deviation for vendor packages owning cross-plugin resources; gated by `did_action('<resource>_bootstrapped')` idempotency + `class_exists()` defense-in-depth; established by Features 038 + 010 across the AcrossAI codebase family | Cross-plugin coordination | a1-deviation, shared-package, bootstrap, plugins_loaded, generalizable | Active | DECISIONS.md |
 | DEC-BERLINDB-TABLE-REQUEST-BOOT | BerlinDB Table subclasses MUST be instantiated at request time via `Main::load_hooks()` — activation-time `Table::instance()` alone leaves BerlinDB's DB interface empty on subsequent requests, causing Query to fall back to `$table_alias` as FROM | BerlinDB, request lifecycle | berlindb, boot, request-lifecycle, main-php, generalizable | Active (F011) | DECISIONS.md |
 | DEC-BERLINDB-SUBCLASS-NO-USE-COLLISION | Do NOT `use BerlinDB\Database\Kern\<X>` when the subclass name matches the parent's name — the `use` claims the same local symbol and produces "Cannot redeclare class" fatals. Drop the `use` and extend via leading-`\` FQN, or alias the import | BerlinDB, namespace | berlindb, namespace, class-collision, subclass-naming, workflow-template | Active (F011) | DECISIONS.md |
+| DEC-VENDOR-SETTINGS-TAB-INTEGRATION | Canonical shape for adding a tab to `acrossai-co/main-menu`'s shared Settings page — filter `acrossai_settings_tabs`, `SettingsPage::tab_page_slug()` helper, SHARED `'acrossai-settings'` option group (NOT the per-tab page slug), sibling-style class member ordering, no `class_exists()` guard on the vendor call; accepted §IV DataForm carve-out | Cross-plugin vendor integration | vendor-integration, settings-api, main-menu, dataform-carveout, class-exists-omission | Active (F012) | DECISIONS.md |
+| DEC-UNINSTALL-OPT-IN-GATE | `uninstall.php` MUST short-circuit at the top when `acrossai_mcp_uninstall_delete_data !== 1`; preserve-by-default satisfies WP.org guideline #5; every destructive SQL statement MUST live after the gate; default value MUST be `0` | Uninstall path | uninstall, safety-invariant, wp-org-guideline-5, opt-in, behavior-change | Active (F012) | DECISIONS.md |
+| DEC-ADMIN-SURFACE-PRUNE-CLI-AUTH-LOG | Standalone admin submenus for read-only DB-inspection views SHOULD be pruned when a lighter path exists (WP-CLI, per-server tab); first A9 subtractive-edit precedent — submenu removal + `plugin_screen_ids()` entry removal MUST land in the same feature; narrows DEV1 (WP_List_Table exception) to shared pages + dashboard widgets, not dedicated submenus | Admin surface | admin-surface, pruning, a9-subtractive-precedent, dev1-scope-narrowing, list-table | Active (F012) | DECISIONS.md |
 
 ## Architecture Constraints
 | ID | Constraint | Scope | Tags | Source |
@@ -60,6 +63,7 @@ This is a compact routing map for durable memory. Keep it short. It points to so
 | B13 | wp_redirect filter MUST throw to intercept the trailing exit in tests — returning false cancels the header but the test runner still dies on exit | PHPUnit tests of state-mutation redirects | testing, wp_redirect, wp_safe_redirect, exit, filter | BUGS.md |
 | B14 | register_activation_hook default priority 10 fatals before higher-priority-number guards can run — vendor autoload checks belong at priority 1 to wp_die() gracefully before the main activation callback runs | Plugin activation, vendor autoload | activation, register_activation_hook, priority, silent-failure | BUGS.md |
 | B15 | Regex verification gates that pattern-match only the bare-name form silently pass while missing the leading-`\` FQN form (`extends \Foo`) and short-name aliased form (`new Query()` via `use ...\Query;`) — use ERE with `\\?` optional-backslash or run two grep passes | Verification gates, code review | grep, regex, verification, gate-hygiene, false-negative, refactor, sweep | BUGS.md |
+| B16 | Mixed positional (`%s`) + numbered (`%1$s`/`%2$s`) placeholders in a single printf silently mislabel output — the numbered placeholders bind to args 1..N (the leading text args), not the URLs/labels appended after. Split into two calls, or convert everything to numbered form | Admin partials that emit translated HTML with wp_kses_post() | printf, format-string, placeholder, i18n, visual-qa, silent-failure, xss-adjacent | BUGS.md |
 
 ## Accepted Deviations
 | ID | Deviation | Scope | Expiry/Review | Source |
@@ -86,8 +90,10 @@ This is a compact routing map for durable memory. Keep it short. It points to so
 | Date | Feature | Summary | Source |
 |---|---|---|---|
 | 2026-07-02 | F011 | BerlinDB-backed Table subclasses — phantom-version guard (`maybe_upgrade` override) prevents silent short-circuit when version option stamped but physical table missing | WORKLOG.md |
+| 2026-07-03 | F012 | Vendor-owned shared Settings page — `register_setting()` option_group MUST be the shared `'acrossai-settings'` slug, not the per-tab page slug; wrong group makes Save silently no-op with no operator-visible error | WORKLOG.md |
 
 ## Security Reviews
 | File | Phase | Date | Risk | Findings | Constraints |
 |---|---|---|---|---|---|
 | docs/security-reviews/2026-07-02-011-berlindb-migration-plan.md | plan | 2026-07-02 | LOW | C:0 H:0 M:0 L:3 | A02,A04,A05,A08,A09 |
+| docs/security-reviews/2026-07-03-012-mcp-settings-tab-plan.md | plan | 2026-07-03 | LOW | C:0 H:0 M:0 L:3 | A02,A05,A08,A09 |

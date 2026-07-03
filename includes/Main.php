@@ -308,18 +308,40 @@ final class Main {
 		);
 
 		/**
-		 * Settings handler hooks (US2 — Phase 2).
+		 * Settings action handler hooks (US2 — Phase 2).
+		 *
+		 * `Settings` owns the list-page controller for MCP servers (toggle,
+		 * delete, create, bulk actions dispatched via
+		 * `?page=acrossai_mcp_manager&action=...`). It is deliberately kept
+		 * separate from `SettingsMenu` below, which owns the WordPress
+		 * Settings API surface on the shared `?page=acrossai-settings` page.
+		 *
 		 * - handle_actions runs at priority 5 on admin_init so it fires
-		 *   BEFORE other admin_init handlers; it dispatches toggle/delete/
-		 *   create/bulk via `?page=acrossai_mcp_manager&action=...`
-		 * - register_settings is a no-op stub until US3 T020 ports the
-		 *   Settings API registration
+		 *   BEFORE other admin_init handlers.
 		 * - render_action_result_notice consumes the `?notice=...` query var
-		 *   set by handle_actions redirects (FR-016)
+		 *   set by handle_actions redirects (FR-016).
 		 */
 		$settings = \AcrossAI_MCP_Manager\Admin\Partials\Settings::instance();
 		$this->loader->add_action( 'admin_init', $settings, 'handle_actions', 5 );
-		$this->loader->add_action( 'admin_init', $settings, 'register_settings' );
+
+		/**
+		 * Shared AcrossAI Settings page — MCP tab (Feature 012).
+		 *
+		 * Registers the MCP tab on the vendor-owned `?page=acrossai-settings`
+		 * page via the `acrossai_settings_tabs` filter, and wires the tab's
+		 * three sections + toggles via the Settings API on admin_init. The
+		 * vendor's `SettingsPage` is guaranteed present at admin_init because
+		 * the acrossai-co/main-menu package is a hard-require in composer.json
+		 * (Feature 010 — D15 / DEV4). See DEC-VENDOR-SETTINGS-TAB-INTEGRATION.
+		 *
+		 * Loader-order note: this wiring lands after the Feature 011
+		 * `bootstrap_database_tables()` call in load_hooks() (per
+		 * DEC-BERLINDB-TABLE-REQUEST-BOOT), so BerlinDB Tables are booted
+		 * before any admin_init handler runs.
+		 */
+		$settings_menu = \AcrossAI_MCP_Manager\Admin\Partials\SettingsMenu::instance();
+		$this->loader->add_filter( 'acrossai_settings_tabs', $settings_menu, 'register_tab' );
+		$this->loader->add_action( 'admin_init', $settings_menu, 'register_settings' );
 
 		/**
 		 * Admin notices — extracted to Admin\Partials\Notices per RT-2.

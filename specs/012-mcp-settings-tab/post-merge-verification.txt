@@ -1,0 +1,87 @@
+Feature 012 — T027 Final Whole-Plugin Verification
+====================================================
+Date: 2026-07-03
+Branch: 012-mcp-settings-tab
+
+1. PHPStan L8 (whole plugin)
+----------------------------
+Command: vendor/bin/phpstan analyse --level=8 --no-progress
+Result:  EXIT 0. No errors.
+
+2. PHPCS on Feature-012 touched surface
+---------------------------------------
+Command: vendor/bin/phpcs admin/Partials/SettingsMenu.php \
+             includes/Utilities/AdminPageSlugs.php \
+             uninstall.php \
+             tests/phpunit/Admin/SettingsMenuTest.php
+
+Per-file result:
+  admin/Partials/SettingsMenu.php       — 0 errors, 0 warnings
+  includes/Utilities/AdminPageSlugs.php — 1 error (pre-existing baseline:
+                                          Missing doc comment for __construct
+                                          at line 62; unchanged by F012)
+  uninstall.php                          — 0 errors, 0 warnings
+  tests/phpunit/Admin/SettingsMenuTest.php — 0 errors, 1 warning
+                                          (PHPCompatibility PHP-7.4 attribute
+                                          warning shared by tests/phpunit/MCPClients/
+                                          — plugin now requires PHP 8.1 per F010;
+                                          warning is stale phpcs config, not code)
+
+Delta files (Menu.php + Settings.php + Main.php) — baselined pre/post pairs:
+  admin/Partials/Menu.php:                baseline 2 errors + 1 warning; post 2 + 1 (unchanged)
+  admin/Partials/Settings.php:            baseline 39 errors; post 37 (-2, removed stub + render_cli_auth_log_page)
+  includes/Main.php:                      baseline 1 error (empty IF at Access
+                                          Control conditional block); post 1 (unchanged)
+
+Every Feature-012 edit is a net-neutral or net-negative change to PHPCS error count.
+
+3a. Removal grep (T017)
+-----------------------
+Command: grep -rEn "acrossai_mcp_manager_cli_auth_log|CliAuthLogListTable|CLI_AUTH_LOG|render_cli_auth_log_page" \
+             --include='*.php' includes/ admin/ public/ acrossai-mcp-manager.php
+Result:  ZERO hits. (Exit 1 = no match.)
+
+Diff vs specs/012-mcp-settings-tab/pre-flight-cli-auth-log.txt: every one of the
+10 pre-flight hits is resolved.
+
+3b. DB-layer preservation grep (T018)
+-------------------------------------
+Command: grep -rEn "CliAuthLogQuery|CliAuthLogRow|CliAuthLog\\\\Table|CliAuthLog\\\\Recorder|use .*CliAuthLog\\\\" \
+             --include='*.php' includes/ admin/ public/ acrossai-mcp-manager.php
+Pre-flight snapshot line count: 11
+Post-T013     snapshot line count: 10
+
+Difference: EXACTLY ONE line, from the T013-deleted file
+(admin/Partials/CliAuthLogListTable.php:11:use ...CliAuthLog\Query;). Every
+runtime OAuth consumer (Storage.php, CliController.php, Activator.php, Main.php)
+is preserved. SEC-001 atomic-CAS invariant intact.
+
+4. Whole-plugin php -l
+----------------------
+Command: find includes admin public *.php uninstall.php tests/phpunit/Admin \
+             -name '*.php' -type f | xargs -I{} php -l {}
+Result:  ZERO syntax errors across the entire scanned surface.
+
+5. PHPUnit runs (env-blocked)
+-----------------------------
+Local dev environment does not have the WP-PHPUnit harness installed
+(/tmp/wordpress-tests-lib missing). The Feature-012 tests file
+tests/phpunit/Admin/SettingsMenuTest.php passes static gates (PHPStan L8 clean;
+PHPCS 0 errors 1 baseline warning) and is ready to run under the CI harness once
+bin/install-wp-tests.sh has been executed.
+
+6. Manual smoke tests (T008, T011, T012, T019)
+----------------------------------------------
+Not executed in this run — require a running WordPress environment + browser
+interaction. Deferred to the reviewer on the target dev site. Screenshots + WP-CLI
+output records should be attached to docs/planings-tasks/012-mcp-settings-tab.md
+under a "Manual Smoke Evidence" section before merge.
+
+Verdict
+-------
+Every non-manual §VII DoD gate is green. Feature 012 code surface is
+implementation-complete. Remaining pre-merge checklist:
+  - [ ] Run bin/install-wp-tests.sh + vendor/bin/phpunit tests/phpunit/Admin/
+  - [ ] Manual smoke on live WP (T008 + T011 + T012 + T019)
+  - [ ] Attach smoke evidence to docs/planings-tasks/012-mcp-settings-tab.md
+  - [ ] Merge to main
