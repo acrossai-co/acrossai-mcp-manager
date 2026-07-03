@@ -42,12 +42,23 @@
         </testsuite>
 
         <!--
-            Admin (Feature 012): tests need WP for register_setting,
+            Admin (Feature 012 + Feature 013): tests need WP for register_setting,
             $wp_registered_settings, WP_UnitTestCase. Run with
-            --bootstrap tests/bootstrap-wp.php.
+            --bootstrap tests/bootstrap-wp.php. Recursively covers subdirectories
+            including tests/phpunit/Admin/ServerTabs/ added by Feature 013.
         -->
         <testsuite name="admin">
             <directory>tests/phpunit/Admin</directory>
+        </testsuite>
+
+        <!--
+            Renderers (Feature 013): tests for public/Renderers/ layer + REST
+            controller. Need WP for get_option, current_user_can,
+            wp_create_nonce, WP_Application_Passwords. Run with
+            --bootstrap tests/bootstrap-wp.php.
+        -->
+        <testsuite name="renderers">
+            <directory>tests/phpunit/Public/Renderers</directory>
         </testsuite>
     </testsuites>
 

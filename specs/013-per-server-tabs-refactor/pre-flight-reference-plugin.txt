@@ -1,0 +1,1 @@
+    2615 /Users/raftaar1191/local-sites/wordpress-ai/app/public/wp-content/plugins/acrossai-mcp-manager/src/Admin/Settings.php

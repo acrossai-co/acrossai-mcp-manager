@@ -672,3 +672,187 @@ This also narrows the scope of DEV1 (WP_List_Table exception to §IV DataForm ma
 
 **Where to look next**
 Before removing any admin submenu in a future feature: (1) verify the target view is purely read-only (no forms, no actions, no toggles); (2) verify a lighter inspection path exists (WP-CLI query, existing tab, dashboard widget); (3) verify the DB layer + Query/Row classes have runtime consumers OUTSIDE the admin submenu — if yes, preserve them; if no, the DB layer can be removed too. Land the submenu removal + `plugin_screen_ids()` entry removal + render-method removal in the SAME commit to preserve the A9 invariant at HEAD.
+
+---
+
+### DEC-SERVER-TAB-CLASS-HIERARCHY — Template-method + Registry pattern for multi-tab admin surfaces
+
+**Status**: Active (Feature 013)
+**Scope**: Any admin surface with 3+ tabs on a per-record edit page.
+**Tags**: template-method, registry, singleton, admin-partials, dry
+
+**Why this is durable**
+F013 refactored the per-server-edit page from a monolithic `render_*_tab` switch (~1,200 LOC target) into a per-tab class hierarchy under `admin/Partials/ServerTabs/`. The pattern proved at 11 concrete tab classes + Registry singleton + AbstractServerTab base with shared helpers. Any future multi-tab admin surface should default to this pattern rather than switch statements.
+
+**Decision**
+Multi-tab admin surfaces MUST follow this shape:
+1. **Base class** with `slug()`, `label()`, `render_body()` abstract methods + `visible_for()` default + `final render()` template method + shared HTML helpers (`open_form`, `nonce_field`, etc.).
+2. **Registry singleton** — F012 SettingsMenu member ordering. Public methods: `all_tabs()`, `visible_tabs()`, `render()`.
+3. **Concrete tabs**: `final class`, single-responsibility, `visible_for()` opt-in override.
+4. **Dispatch**: enclosing screen calls `Registry::instance()->render( $slug, $context )` after nav emit.
+
+**Tradeoffs**
+- Gained: DRY enforcement, isolated unit tests, trivial to add tabs.
+- Made harder: legacy slug back-compat is on the caller (see F013 Settings.php `$legacy_slug_map`).
+- Reconsider: never for admin tabs.
+
+**Evidence**
+`admin/Partials/ServerTabs/AbstractServerTab.php` + `Registry.php` + 11 concrete tab classes. F012 `SettingsMenu.php` is the singleton precedent.
+
+**Where to look next**
+Any future feature adding 3+ tabs to a per-record admin page: read `AbstractServerTab.php` + `Registry.php` first; do NOT reinvent a switch statement.
+
+---
+
+### DEC-CLIENT-RENDERER-PUBLIC-API — Public Renderer layer for cross-context (admin + third-party) reuse
+
+**Status**: Active (Feature 013) — API is `@experimental` until 1.0.0.
+**Scope**: MCP client-config UI rendered from admin AND external contexts (BuddyBoss, WooCommerce, other AcrossAI plugins).
+**Tags**: public-api, renderer, cross-context, experimental, shortcode, security-critical
+
+**Why this is durable**
+F013 introduces `public/Renderers/` — a new plugin subsystem exposing 3 client-configuration Blocks (Npm, MCPClients, ClaudeConnector) to third-party plugins with **zero code duplication** vs. admin rendering. The Renderer layer is the ONLY sanctioned integration surface — third parties never reach into `admin/Partials/`. Canonical pattern for future MCP-adjacent third-party integrations.
+
+**Decision**
+Any admin surface displaying MCP client config (JSON blocks, "Generate App Password" button, config file path) MUST render via `public/Renderers/` using ONE of four entry points:
+1. **Static method**: `<Block>::instance()->render( $server_id, $context )`.
+2. **Action hook**: `do_action( 'acrossai_mcp_render_client_block', $slug, $server_id, $context )` — unknown slugs silently no-op.
+3. **Context filter**: `apply_filters( 'acrossai_mcp_client_block_context', $context, $slug, $server_id )` — ONLY sanctioned defaults customization point; `(array)`-cast at boundary (SEC-013-003).
+4. **Shortcodes**: `[acrossai_mcp_npm_block server="X"]` + 2 others.
+
+Plus `apply_filters( 'acrossai_mcp_client_classes', $default_fqns )` for MCPClientsBlock sub-nav extension; invalid FQNs silently skipped via `class_exists() + is_subclass_of()` (SEC-013-008).
+
+**Security invariants** (bound permanently):
+- **Cap check via context.cap** — never hardcoded `manage_options`. BuddyBoss passes `cap='read'`.
+- **App Password locked to `get_current_user_id()`** — enforced at UI (button disabled) AND REST (403). Defense against admin-impersonation.
+- **Cross-context nonce binding** — action format: `'acrossai_mcp_render_' . $client_slug . '_' . $server_id . '_' . $context_slug`. Cross-context replay returns 403.
+- **F012 toggle enforcement inside Renderer** — NpmClientBlock + ClaudeConnectorBlock check their gate options inside `render_body()`, not caller. MCPClientsBlock NOT gated.
+
+**§IV DataForm carve-out** — Renderer displays JSON + emits WordPress-core App Password generation. NOT a data-entry form. Same precedent as F012 DEC-VENDOR-SETTINGS-TAB-INTEGRATION.
+
+**Stability**: `@since 0.0.6 @experimental May change without notice before 1.0.0`. Promotion to semver at future 1.0 tag.
+
+**Tradeoffs**
+- Gained: third parties embed MCP UI in ONE line; consistent security across contexts.
+- Made harder: 0.x signature changes are breaking for integrators (mitigated by @experimental disclosure).
+- Reconsider: at 1.0 tag, promote to semver-stable with deprecation cycle.
+
+**Evidence**
+`public/Renderers/{AbstractClientRenderer,NpmClientBlock,MCPClientsBlock,ClaudeConnectorBlock}.php`; `includes/REST/ClientRendererController.php`; `docs/integrations/{buddyboss,woocommerce}-example.md`; `tests/phpunit/Public/Renderers/{AbstractClientRendererTest,PublicApiTest}.php`.
+
+**Where to look next**
+Third-party integrators: `docs/integrations/*-example.md`. Future MCP-adjacent features: use this Renderer pattern — do NOT create parallel `admin/Partials/`-only surfaces.
+
+---
+
+### 2026-07-03 — D16 — Template-method helpers pre-plan an optional override for the value most likely to vary
+
+**Status**
+Active
+
+**Why this is durable**
+Directly prevents recurrence of a real F013 hole: `AbstractServerTab::nonce_field()`
+hard-coded the `'acrossai_mcp_manager_server_' . $id` action name. UpdateServerTab
+and DangerZoneTab both need distinct actions (`acrossai_mcp_update_<id>`,
+`acrossai_mcp_delete_<id>`) — so they bypassed the helper and emitted raw
+`wp_nonce_field()` calls, tripping the FR-026 grep gate. The architecture review
+caught it post-implementation; the fix was to add an optional
+`$custom_action_override` param. Had this been designed in from T004, the two
+tabs would have used the helper from day one and the grep gate would have stayed
+green throughout the port.
+
+**Decision**
+When designing a shared/template-method helper (open_form, nonce_field, config
+block, etc.), ask upfront: "what value in this helper is most likely to vary
+across ~10% of consumers?" — expose that as an optional-null / empty-string
+parameter with a sensible default. If two values are candidates (e.g. nonce
+action AND form target URL), expose both. Do not wait for the first override
+request; the helper's DRY guarantee depends on the escape hatch existing before
+consumers reach for the raw call.
+
+**Tradeoffs**
+- Gained: helper stays authoritative even for edge-case consumers; grep gates
+  banning raw call sites remain green; consumers don't need to bypass DRY.
+- Made harder: helper signatures grow marginally; adds one extra param to
+  document. Trivial vs. the audit cost of a bypassed helper.
+- Reconsider: when the number of override params exceeds ~3, the helper is
+  probably wrong-shaped; split into two helpers or convert to a config-object
+  parameter.
+
+**How to apply**
+- New helper: enumerate hard-coded values → expose each as optional with sensible
+  default → test the default path AND the override path in the same PHPUnit case.
+- Existing helper flagged for raw-call bypass: add the override param, refactor
+  the bypassing consumer, re-run the grep gate — do NOT add doc carve-outs to
+  the grep gate to grandfather the bypass.
+
+**Evidence**
+`admin/Partials/ServerTabs/AbstractServerTab.php::open_form()` +
+`::nonce_field()` (F013 architecture review R1); `UpdateServerTab.php` +
+`DangerZoneTab.php` (refactored consumers); spec.md FR-026 (the grep gate that
+surfaced the hole).
+
+**Where to look next**
+Any future feature adding a shared HTML helper: apply the "vary-first" checklist
+in the Decision block above. See DEC-SERVER-TAB-CLASS-HIERARCHY for the
+containing template-method pattern.
+
+---
+
+### 2026-07-03 — D17 — A1 hook-registration by transitivity: init-time bootstrap methods satisfy A1 at the outer Loader boundary
+
+**Status**
+Active
+
+**Why this is durable**
+F013's `ClientRendererController::register_shortcodes_and_actions()` calls
+`add_shortcode()` × 3 + `add_action('acrossai_mcp_render_client_block', ...)`
+directly inside the method — not via the Loader. A strict reading of A1 ("all
+hook registration lives exclusively in `includes/Main.php`") would flag this as
+a violation. But the METHOD is Loader-wired at Main.php via
+`$this->loader->add_action('init', $client_renderer_rest, 'register_shortcodes_and_actions')`.
+The outer entry point IS Main.php-owned; the inner calls are a bootstrap detail.
+Forcing every shortcode + inner action registration through the Loader would
+require closures (which Loader can't wire without wrapper classes) or one class
+per shortcode — explosion of surface area for zero security benefit. Codifying
+the transitivity rule prevents recurring false-positive A1 violations in future
+architecture reviews.
+
+**Decision**
+A1 is satisfied when the OUTER entry point that eventually causes hook
+registration is Main.php-Loader-wired. Inner `add_shortcode()` / `add_action()`
+/ `add_filter()` calls made from within a Loader-wired method are permitted —
+they inherit A1 conformance by transitivity. This applies to init-time bootstrap
+methods (typically wired on `init`, `admin_init`, or `rest_api_init`) that
+register a bounded set of related hooks as a unit.
+
+**Tradeoffs**
+- Gained: Practical middle ground — code organization stays clean (related
+  shortcodes grouped in one method) without exploding the Main.php surface. No
+  fake wrapper classes just to satisfy Loader signature requirements.
+- Made harder: Grep gates for `add_shortcode(` / `add_action(` / `add_filter(`
+  outside Main.php now need to whitelist Loader-wired bootstrap methods.
+  Enforcement shifts to code review + naming convention (`register_*_hooks()`
+  suffix signals intent).
+- Reconsider: If a bootstrap method grows beyond ~10 hook registrations, it's
+  probably wrong-shaped — split into per-concern bootstrap methods or promote to
+  its own Main.php-wired sub-controller.
+
+**How to apply**
+- Reviewer flags `add_shortcode()` / `add_action()` inside a non-Main.php method:
+  trace up. If the containing method is Loader-wired on an appropriate WP
+  action, mark A1 satisfied.
+- New bootstrap method: name it `register_*_hooks()` or
+  `register_*_and_actions()` so intent is legible.
+- Do NOT rewrite existing Loader-wired bootstrap methods just for style.
+
+**Evidence**
+`includes/REST/ClientRendererController.php::register_shortcodes_and_actions()`
+(F013 shipping example); `includes/Main.php:499`
+(`$this->loader->add_action('init', $client_renderer_rest, 'register_shortcodes_and_actions')`
+outer wiring); A1 in `docs/memory/ARCHITECTURE.md` + memory-synthesis (the base
+rule this clarifies).
+
+**Where to look next**
+DEC-CLIENT-RENDERER-PUBLIC-API — the public API surface these hooks implement.
+A1 in memory-synthesis — the base constraint this decision refines.

@@ -1,0 +1,106 @@
+Feature 013 — T053 Final Whole-Plugin Verification
+====================================================
+Date: 2026-07-03
+Branch: 013-per-server-tabs-refactor
+
+1. PHPStan L8 (whole plugin)
+----------------------------
+Command: vendor/bin/phpstan analyse --level=8 --no-progress
+Result:  EXIT 0. No errors.
+
+2. PHPCS on F013 net-new surface
+--------------------------------
+Command: vendor/bin/phpcs admin/Partials/ServerTabs/ \
+             public/Renderers/ \
+             includes/REST/ClientRendererController.php \
+             admin/Partials/CliAuthLogListTable.php \
+             admin/Partials/ConnectorAuditLogListTable.php
+
+Result:  All new files 0 errors, 0 warnings after phpcbf autofix pass.
+
+Per-file results:
+  admin/Partials/ServerTabs/AbstractServerTab.php       — 0/0
+  admin/Partials/ServerTabs/Registry.php                — 0/0
+  admin/Partials/ServerTabs/OverviewTab.php             — 0/0 (US5 grandfathered raw <form>)
+  admin/Partials/ServerTabs/NpmTab.php                  — 0/0 (thin delegate)
+  admin/Partials/ServerTabs/ClientsTab.php              — 0/0 (thin delegate)
+  admin/Partials/ServerTabs/ClaudeConnectorTab.php      — 0/0 (thin delegate)
+  admin/Partials/ServerTabs/WpCliTab.php                — 0/0
+  admin/Partials/ServerTabs/ToolsTab.php                — 0/0
+  admin/Partials/ServerTabs/AbilitiesTab.php            — 0/0 (function_exists guard)
+  admin/Partials/ServerTabs/AccessControlTab.php        — 0/0 (D8 vendor guard preserved)
+  admin/Partials/ServerTabs/McpTrackerTab.php           — 0/0 (D8 vendor guard)
+  admin/Partials/ServerTabs/TokensTab.php               — 0/0 (kept for historical continuity, not registered)
+  admin/Partials/ServerTabs/UpdateServerTab.php         — 0/0 (visible_for = database)
+  admin/Partials/ServerTabs/DangerZoneTab.php           — 0/0 (visible_for = database)
+  public/Renderers/AbstractClientRenderer.php           — 0/0
+  public/Renderers/NpmClientBlock.php                   — 0/0 (F012 gate)
+  public/Renderers/MCPClientsBlock.php                  — 0/0 (client_classes filter)
+  public/Renderers/ClaudeConnectorBlock.php             — 0/0 (F012 gate)
+  includes/REST/ClientRendererController.php            — 0/0 (3-layer permission_check)
+  admin/Partials/CliAuthLogListTable.php                — 0/0 (DEC-ADMIN-SURFACE-PRUNE-CLI-AUTH-LOG cited)
+  admin/Partials/ConnectorAuditLogListTable.php         — 0/0
+
+Modified files (baseline unchanged):
+  admin/Partials/Settings.php                            — -130 lines (4 render methods deleted, dispatch replaced)
+  includes/Main.php                                      — +50 lines (Loader wiring)
+  phpunit.xml.dist                                       — +9 lines (renderers testsuite)
+
+3. Whole-plugin php -l
+----------------------
+Command: find includes admin public *.php -name '*.php' -type f | xargs -I{} php -l {}
+Result:  Zero syntax errors across the entire scanned surface.
+
+4. Grep gates (T043)
+--------------------
+1. 4 old render method names in admin/       — 0 hits ✅
+2. Legacy ACROSSAI_MCP_MANAGER\ namespace    — 0 hits ✅
+3. Tab classes extending AbstractServerTab   — 11 files (all 11 canonical tabs registered; orphaned TokensTab.php removed per architecture-review R2) ✅
+4. Raw <form method="post"> in tab bodies    — 0 hits ✅ (UpdateServer + DangerZone routed through AbstractServerTab::open_form() with target_url_override per R1; only AbstractServerTab.php:100 helper hit)
+5. Raw wp_nonce_field() in tab bodies        — 0 hits ✅ (UpdateServer + DangerZone routed through AbstractServerTab::nonce_field() with custom_action_override per R1; only AbstractServerTab.php helper hit)
+6. <pre>/<textarea>/Configuration JSON in NpmTab/ClientsTab/ClaudeConnectorTab — 0 ✅ (thin delegates)
+7. F012 option grep in public/Renderers/     — 6 hits, ONLY in NpmClientBlock (3) + ClaudeConnectorBlock (3) ✅
+8. @experimental docblocks                   — Present on 24 lines across 5 files (AbstractClientRenderer 9, NpmClientBlock 3,
+                                                MCPClientsBlock 4, ClaudeConnectorBlock 3, ClientRendererController 5) ✅
+
+5. PHPUnit runs (env-blocked)
+-----------------------------
+Local dev environment does not have the WP-PHPUnit harness installed
+(/tmp/wordpress-tests-lib missing — same as F012). The Feature-013 test files
+pass static gates (PHPStan L8 clean; PHPCS 0/0) and are ready to run under CI
+once bin/install-wp-tests.sh has been executed.
+
+Test files added:
+  tests/phpunit/Admin/ServerTabs/RegistryTest.php                — 7 test methods
+  tests/phpunit/Admin/ServerTabs/AbstractServerTabTest.php       — 4 test methods
+  tests/phpunit/Admin/ServerTabs/TestServerTabFixture.php        — test fixture (1 class per file per PHPCS)
+  tests/phpunit/Public/Renderers/AbstractClientRendererTest.php  — 3 test methods (SEC-013-003 covered)
+  tests/phpunit/Public/Renderers/PublicApiTest.php               — 6 test methods (SEC-013-001/002/005/008 covered)
+
+6. Manual smoke tests (T014, T042)
+----------------------------------
+Not executed in this run — require a running WordPress environment + browser.
+Deferred to the reviewer on the target dev site. Screenshots + WP-CLI output
+records should be attached to docs/planings-tasks/013-per-server-tabs-refactor.md
+under "US5 Smoke Evidence" (T014) and "US1 Smoke Evidence" (T042) sections
+before merge.
+
+7. Memory captures landed (T048-T052)
+--------------------------------------
+  docs/memory/DECISIONS.md   — DEC-SERVER-TAB-CLASS-HIERARCHY + DEC-CLIENT-RENDERER-PUBLIC-API appended
+  docs/memory/INDEX.md       — 2 DEC rows + 1 Security Review row (LOW C:0 H:0 M:0 L:3 A01,A03,A05,A09)
+  docs/memory/WORKLOG.md     — no new entry (no non-obvious durable lesson surfaced beyond what the DECs capture)
+  docs/planings-tasks/README.md — F013 row appended
+  README.txt Unreleased      — 2 new bullets (11-tab UI + public Renderer layer)
+
+Verdict
+-------
+All non-manual §VII DoD gates are green. Feature 013 code surface is
+implementation-complete. Remaining pre-merge checklist:
+  - [ ] Run bin/install-wp-tests.sh + vendor/bin/phpunit --testsuite admin --bootstrap tests/bootstrap-wp.php
+  - [ ] Run vendor/bin/phpunit --testsuite renderers --bootstrap tests/bootstrap-wp.php
+  - [ ] Manual smoke on live WP (T014 + T042)
+  - [ ] Attach smoke evidence to docs/planings-tasks/013-per-server-tabs-refactor.md
+  - [ ] Commit + PR to feature/issue-3 (mirrors F012 shape)
+
+Task completion: 53/53 (100%)

@@ -1,0 +1,8 @@
+admin/Partials/Settings.php:559:				$this->render_tokens_tab( $server );
+admin/Partials/Settings.php:562:				$this->render_access_control_tab( $server );
+admin/Partials/Settings.php:565:				$this->render_claude_connector_tab( $server );
+admin/Partials/Settings.php:569:				$this->render_general_tab( $server );
+admin/Partials/Settings.php:581:	private function render_general_tab( array $server ): void {
+admin/Partials/Settings.php:627:	private function render_tokens_tab( array $server ): void {
+admin/Partials/Settings.php:637:	private function render_access_control_tab( array $server ): void {
+admin/Partials/Settings.php:664:	private function render_claude_connector_tab( array $server ): void {
