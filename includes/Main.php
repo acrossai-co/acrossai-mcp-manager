@@ -147,7 +147,7 @@ final class Main {
 		$this->define( 'ACROSSAI_MCP_MANAGER_PLUGIN_URL', plugin_dir_url( \ACROSSAI_MCP_MANAGER_PLUGIN_FILE ) );
 		$this->define( 'ACROSSAI_MCP_MANAGER_PLUGIN_NAME_SLUG', 'acrossai-mcp-manager' );
 		$this->define( 'ACROSSAI_MCP_MANAGER_PLUGIN_NAME', 'AcrossAI MCP Manager' );
-		$this->define( 'ACROSSAI_MCP_MANAGER_VERSION', '0.0.1' );
+		$this->define( 'ACROSSAI_MCP_MANAGER_VERSION', '0.0.6' );
 	}
 
 	/**
@@ -322,6 +322,9 @@ final class Main {
 		 *   set by handle_actions redirects (FR-016).
 		 */
 		$settings = \AcrossAI_MCP_Manager\Admin\Partials\Settings::instance();
+		// Auto-heal the default MCP server row (reference-plugin pattern).
+		// Runs at priority 4 so the row exists before handle_actions/list-render.
+		$this->loader->add_action( 'admin_init', $settings, 'maybe_seed_default_server', 4 );
 		$this->loader->add_action( 'admin_init', $settings, 'handle_actions', 5 );
 
 		/**
@@ -362,21 +365,20 @@ final class Main {
 		$application_passwords = \AcrossAI_MCP_Manager\Admin\Partials\ApplicationPasswords::instance();
 		$this->loader->add_action( 'rest_api_init', $application_passwords, 'register_rest_routes' );
 
-		/**
-		 * Access Control vendor wiring (US3 — Phase 2), guarded so the
-		 * plugin degrades gracefully when wpb-access-control isn't installed.
-		 * (Per D8 + the Phase 1 Activator's class_exists pattern.)
-		 *
-		 * NOTE: This block intentionally only mirrors the *render* contract —
-		 * the rest_pre_dispatch access-enforcement filter is owned by Phase 7
-		 * and remains a TODO below.
-		 */
-		if ( class_exists( '\WPBoilerplate\AccessControl\AccessControlManager' ) ) {
-			// The render method lives on the vendor singleton; Settings::
-			// render_access_control_tab() resolves it at use-site (no Loader
-			// wiring needed for tab rendering itself). This block exists for
-			// any future hooks the vendor pkg may require — currently empty.
-		}
+		// Feature 015 — Access Control v2 adoption. Replaces the previous Phase 7
+		// TODO block that referenced v1's ::instance() static (fatal in v2). All
+		// wiring flows through the plugin-scoped wrapper; the mcp_adapter_pre_tool_call
+		// filter (D18) is the canonical MCP-boundary enforcement hook.
+		// NB: `register_default_providers` filter is intentionally NOT wired —
+		// the vendor's AccessControlManager::load_providers() already registers
+		// WpRoleProvider + WpUserProvider + WpCapabilityProvider + BuddyBoss +
+		// MemberPress as defaults. Third-party plugins can still hook the
+		// `acrossai_mcp_access_control_providers` filter to append their own.
+		$access_control = \AcrossAI_MCP_Manager\Includes\AccessControl\AcrossAI_MCP_Access_Control::instance();
+		$this->loader->add_action( 'init', $access_control, 'boot_manager', 5 );
+		$this->loader->add_action( 'rest_api_init', $access_control, 'register_rest_api' );
+		$this->loader->add_action( 'admin_notices', $access_control, 'maybe_show_library_notice' );
+		$this->loader->add_filter( 'mcp_adapter_pre_tool_call', $access_control, 'gate_mcp_tool_call', 10, 4 );
 
 		/**
 		 * Adapter-missing notice (US4 — FR-015 + Q3). Lives on Notices per RT-2.
@@ -427,10 +429,6 @@ final class Main {
 		// $this->loader->add_filter( 'determine_current_user', $claude_connectors, 'determine_current_user_from_bearer', 20 );
 		// $this->loader->add_filter( 'rest_post_dispatch', $claude_connectors, 'decorate_mcp_response', 10, 3 );
 		// $this->loader->add_action( 'acrossai_mcp_access_denied', $claude_connectors, 'log_access_denied_event', 10, 4 );
-
-		// TODO (phase 7): wire rest_pre_dispatch access-control filter.
-		// $access_control = \WPBoilerplate\AccessControl\AccessControlManager::instance( 'acrossai_mcp_access_control_providers' );
-		// $this->loader->add_filter( 'rest_pre_dispatch', $access_control, 'enforce_access' );
 	}
 
 	/**

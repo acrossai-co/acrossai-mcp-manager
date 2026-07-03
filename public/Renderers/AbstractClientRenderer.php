@@ -138,11 +138,21 @@ abstract class AbstractClientRenderer {
 	protected function passwords_generate_button( array $server, array $context ): void {
 		$user_id_match = get_current_user_id() === (int) $context['user_id'];
 		$attrs         = $user_id_match ? '' : ' disabled aria-disabled="true"';
+		$endpoint      = rest_url( 'acrossai-mcp-manager/v1/generate-app-password' );
+		$nonce         = wp_create_nonce( 'wp_rest' );
+		// Sub-clients (e.g. MCP Clients Block's per-client tabs) split on
+		// $context['sub_client']; fall back to the block's slug otherwise.
+		$client_slug   = '' !== (string) ( $context['sub_client'] ?? '' )
+			? sanitize_key( (string) $context['sub_client'] )
+			: sanitize_key( $this->slug() );
 		printf(
-			'<button type="button" class="button button-primary" data-server-id="%1$s" data-client-slug="%2$s" data-context="%3$s"%4$s>%5$s</button>',
+			'<button type="button" class="button button-primary generate-app-password" data-server-id="%1$s" data-client-slug="%2$s" data-context="%3$s" data-endpoint="%4$s" data-nonce="%5$s"%6$s>%7$s</button>'
+			. '<span class="acrossai-generate-app-password-status" aria-live="polite"></span>',
 			esc_attr( (string) (int) $server['id'] ),
-			esc_attr( sanitize_key( $this->slug() ) ),
+			esc_attr( $client_slug ),
 			esc_attr( sanitize_key( (string) $context['context'] ) ),
+			esc_url( $endpoint ),
+			esc_attr( $nonce ),
 			esc_attr( $attrs ),
 			esc_html__( 'Generate New Application Password', 'acrossai-mcp-manager' )
 		);

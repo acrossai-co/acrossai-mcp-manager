@@ -329,10 +329,16 @@ final class CliController {
 		$ns      = (string) $row->server_route_namespace;
 		$route   = (string) $row->server_route;
 
-		if ( class_exists( '\WPBoilerplate\AccessControl\AccessControlManager' ) ) {
-			$acm     = \WPBoilerplate\AccessControl\AccessControlManager::instance();
-			$allowed = $acm->user_has_access( $user_id, $ns, $route );
-			if ( ! $allowed ) {
+		// Feature 015 — Access Control v2 adoption. Route through the plugin-scoped
+		// wrapper (never the vendor's v1-API ::instance() static, which does not
+		// exist in v2). Fail-open when the vendor package is unavailable.
+		$ac = \AcrossAI_MCP_Manager\Includes\AccessControl\AcrossAI_MCP_Access_Control::instance();
+		if ( $ac->is_available() ) {
+			$manager = $ac->get_manager();
+			$slug    = $ns . '/' . $route;
+			if ( null !== $manager && ! $manager->user_has_access( $user_id, 'acrossai-mcp-manager', $slug ) ) {
+				// FR-026 observability hook fires BEFORE the silent-empty-list return.
+				do_action( 'acrossai_mcp_access_control_denied', $user_id, $slug, null, 'cli_servers' );
 				return new WP_REST_Response( array( 'servers' => array() ), 200 );
 			}
 		}

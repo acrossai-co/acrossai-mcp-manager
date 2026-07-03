@@ -1,0 +1,3 @@
+admin/Partials/ServerTabs/AccessControlTab.php:65:		$manager = \WPBoilerplate\AccessControl\AccessControlManager::instance( 'acrossai_mcp_access_control_providers' );
+includes/Main.php:432:		// $access_control = \WPBoilerplate\AccessControl\AccessControlManager::instance( 'acrossai_mcp_access_control_providers' );
+includes/REST/CliController.php:333:			$acm     = \WPBoilerplate\AccessControl\AccessControlManager::instance();

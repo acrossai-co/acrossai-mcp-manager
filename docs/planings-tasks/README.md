@@ -42,6 +42,7 @@ Full file-by-file source→target mapping: [`source-map.md`](source-map.md)
 | 011 | berlindb-migration | 2026-07-02 | Complete | [011-berlindb-migration.md](011-berlindb-migration.md) |
 | 012 | mcp-settings-tab | 2026-07-03 | Complete | [012-mcp-settings-tab.md](012-mcp-settings-tab.md) |
 | 013 | per-server-tabs-refactor | 2026-07-03 | Complete | [013-per-server-tabs-refactor.md](013-per-server-tabs-refactor.md) |
+| 015 | access-control-v2-adoption | 2026-07-04 | Implemented | [015-access-control-v2-adoption.md](015-access-control-v2-adoption.md) |
 
 ---
 

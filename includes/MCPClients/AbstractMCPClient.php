@@ -204,6 +204,24 @@ abstract class AbstractMCPClient {
 	}
 
 	/**
+	 * Return the current WP user's login for the WP_API_USERNAME env var.
+	 *
+	 * Application Passwords authenticate via HTTP Basic (username:apppass),
+	 * so every generated snippet needs both. Falls back to an empty string
+	 * when the request has no authenticated user (defensive — this method
+	 * is only called from admin render paths where a user is guaranteed).
+	 *
+	 * @return string
+	 */
+	protected function current_username(): string {
+		if ( ! function_exists( 'wp_get_current_user' ) ) {
+			return '';
+		}
+		$user = wp_get_current_user();
+		return isset( $user->user_login ) ? (string) $user->user_login : '';
+	}
+
+	/**
 	 * Log-safe token representation. First 4 chars + ellipsis + last 2
 	 * chars, or '(empty)' when input is empty.
 	 *

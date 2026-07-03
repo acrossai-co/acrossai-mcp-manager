@@ -1,0 +1,7 @@
+--- v2 vendor package location ---
+vendor/wpboilerplate/wpb-access-control/src/AccessControlManager.php  (present)
+
+--- mcp-adapter filter site ---
+Expected (spec): vendor/wordpress/mcp-adapter/includes/Handlers/ToolsHandler.php:182
+Actual: vendor/wordpress/mcp-adapter/includes/Handlers/Tools/ToolsHandler.php  (nested one level deeper)
+Path drift noted; filter callback signature unchanged (4-arg apply_filters).

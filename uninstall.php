@@ -40,16 +40,33 @@ global $wpdb;
 // hardcoded stems (no user input reaches SQL). Uses the `%i` identifier
 // placeholder (WordPress 6.2+) so $wpdb->prepare() escapes the table name
 // safely and no phpcs:ignore is needed.
+// Feature 015 — Access Control v2 (FR-012 / FR-013). Purge the plugin's
+// namespace via the vendor RuleQuery BEFORE the raw DROP so BerlinDB
+// invalidates its cache for the namespace. class_exists guards against the
+// "vendor package uninstalled before this plugin" edge case (US5 scenario 3).
+if ( class_exists( '\WPBoilerplate\AccessControl\Database\Rule\RuleQuery' ) ) {
+	$rule_query = new \WPBoilerplate\AccessControl\Database\Rule\RuleQuery( 'mcp' );
+	if ( method_exists( $rule_query, 'purge_namespace' ) ) {
+		$rule_query->purge_namespace( 'acrossai-mcp-manager' );
+	}
+}
+
 $tables = array(
 	$wpdb->prefix . 'acrossai_mcp_servers',
 	$wpdb->prefix . 'acrossai_mcp_cli_auth_logs',
 	$wpdb->prefix . 'acrossai_mcp_oauth_tokens',
 	$wpdb->prefix . 'acrossai_mcp_oauth_audit',
+	$wpdb->prefix . 'mcp_access_control', // F015 AC rule table (TABLE_SLUG = 'mcp').
 );
 foreach ( $tables as $table ) {
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange
 	$wpdb->query( $wpdb->prepare( 'DROP TABLE IF EXISTS %i', $table ) );
 }
+
+// Feature 015 — delete the vendor-owned schema version option. The
+// `acrossai_mcp_*` LIKE-sweep below does NOT match `wpb_ac_mcp_*`, so
+// the vendor's version tracking option must be cleaned up explicitly.
+delete_option( 'wpb_ac_mcp_db_version' );
 
 // Delete every `acrossai_mcp_*` option via LIKE-sweep on wp_options.
 $options = $wpdb->get_col(

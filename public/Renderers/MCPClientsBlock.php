@@ -278,9 +278,13 @@ final class MCPClientsBlock extends AbstractClientRenderer {
 			);
 		}
 
-		// Generate button + hint.
+		// Generate button + hint. Override sub_client so the button's
+		// data-client-slug matches the textarea id (see below) and the
+		// JS handler can find and update it.
+		$button_context               = $context;
+		$button_context['sub_client'] = $slug;
 		echo '<div class="password-actions">';
-		$this->passwords_generate_button( $server, $context );
+		$this->passwords_generate_button( $server, $button_context );
 		printf(
 			'<p class="description">%s</p>',
 			esc_html__( 'Creates a one-time password via WordPress Application Passwords. Shown only once — store it safely.', 'acrossai-mcp-manager' )

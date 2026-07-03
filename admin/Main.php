@@ -120,5 +120,81 @@ class Main {
 			$asset['version'],
 			true // load in footer
 		);
+
+		// F015 — Access Control tab React app (vendor's <AccessControl> component).
+		// Only enqueue on the per-server-edit page with tab=access-control so we
+		// don't ship the React bundle on unrelated screens.
+		$this->maybe_enqueue_access_control_app();
+	}
+
+	/**
+	 * Enqueue the vendor AccessControl React app on the Access Control tab.
+	 *
+	 * @since 0.0.7
+	 * @return void
+	 */
+	private function maybe_enqueue_access_control_app(): void {
+		// phpcs:disable WordPress.Security.NonceVerification.Recommended -- Read-only routing check.
+		$is_edit = isset( $_GET['action'] ) && 'edit' === sanitize_key( wp_unslash( $_GET['action'] ) );
+		$is_ac   = isset( $_GET['tab'] ) && 'access-control' === sanitize_key( wp_unslash( $_GET['tab'] ) );
+		if ( ! $is_edit || ! $is_ac ) {
+			return;
+		}
+		// phpcs:enable
+
+		$asset = $this->read_asset_manifest( 'build/js/access-control.asset.php' );
+		if ( null === $asset ) {
+			return;
+		}
+
+		$handle = $this->plugin_name . '-access-control';
+		wp_enqueue_script(
+			$handle,
+			esc_url( \ACROSSAI_MCP_MANAGER_PLUGIN_URL . 'build/js/access-control.js' ),
+			$asset['dependencies'],
+			$asset['version'],
+			true
+		);
+
+		// Vendor CSS bundled alongside the JS entry (webpack emits alongside
+		// the .js/.asset.php). Same handle so the style is deregistered when
+		// the script is.
+		wp_enqueue_style(
+			$handle,
+			esc_url( \ACROSSAI_MCP_MANAGER_PLUGIN_URL . 'build/js/access-control.css' ),
+			array(),
+			$asset['version']
+		);
+
+		// phpcs:disable WordPress.Security.NonceVerification.Recommended
+		$server_id = isset( $_GET['server'] ) ? absint( wp_unslash( $_GET['server'] ) ) : 0;
+		// phpcs:enable
+		$server_slug = '';
+		if ( $server_id > 0 ) {
+			$rows = \AcrossAI_MCP_Manager\Includes\Database\MCPServer\Query::instance()->query(
+				array(
+					'id'     => $server_id,
+					'number' => 1,
+				)
+			);
+			if ( ! empty( $rows ) ) {
+				$server_slug = (string) $rows[0]->server_slug;
+			}
+		}
+
+		wp_localize_script(
+			$handle,
+			'acrossaiMcpAccessControl',
+			array(
+				'pluginSlug'  => \AcrossAI_MCP_Manager\Includes\AccessControl\AcrossAI_MCP_Access_Control::TABLE_SLUG,
+				'namespace'   => 'acrossai-mcp-manager',
+				'resourceKey' => $server_slug,
+				// The vendor's React component concatenates restApiRoot + '/wpb-ac/…'.
+				// `rest_url()` returns with a trailing slash, which would produce
+				// `/wp-json//wpb-ac/…` → 404. Strip the trailing slash here.
+				'restApiRoot' => esc_url_raw( untrailingslashit( rest_url() ) ),
+				'nonce'       => wp_create_nonce( 'wp_rest' ),
+			)
+		);
 	}
 }

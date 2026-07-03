@@ -1,0 +1,101 @@
+F015 Post-Merge Verification
+============================
+Date: 2026-07-04
+Branch: 015-access-control-v2-adoption
+
+=== 6 grep gates (T019) ===
+1. AccessControlManager::instance in admin/includes/public — expect 0 hits
+   Result: 0 ✓
+
+2. `new AccessControlManager` in includes/ — expect exactly 1 hit (wrapper only)
+   Result: 1 ✓ (includes/AccessControl/AcrossAI_MCP_Access_Control.php)
+
+3. RuleTable maybe_upgrade in Activator.php — expect exactly 1 hit
+   Result: 1 ✓
+
+4. mcp_adapter_pre_tool_call in Main.php — expect ≥1 hit
+   Result: 2 ✓ (1 comment + 1 add_filter Loader wire)
+
+5. purge_namespace in uninstall.php — expect ≥1 hit
+   Result: 2 ✓ (1 comment + 1 vendor call)
+
+6. Legacy uppercase namespace (ACROSSAI_MCP_MANAGER\\) — expect 0 hits
+   Result: 0 ✓
+
+=== T020 Whole-plugin PHPStan L8 ===
+vendor/bin/phpstan analyse --level=8 --no-progress → EXIT=0 ✓
+
+=== T021 PHPCS on F015 net-new + modified surface ===
+vendor/bin/phpcs includes/AccessControl/ public/Renderers/AccessControlBlock.php
+                 admin/Partials/ServerTabs/AccessControlTab.php uninstall.php
+Result: 0 errors 0 warnings ✓
+
+Settings.php baseline verification:
+- Pre-F015 baseline: 37 errors
+- Post-F015 count:   37 errors
+- Net-new errors:    0 ✓ (matches F013 "baseline unchanged on modified files" invariant)
+
+=== T022 Whole-plugin php -l ===
+find includes admin public *.php uninstall.php -name '*.php' -type f | xargs php -l
+Result: All files pass — zero syntax errors ✓
+
+=== T023-T028 memory + changelog ===
+- docs/memory/DECISIONS.md: 3 new entries appended
+  * DEC-ACCESS-CONTROL-V2-ADOPTION ✓
+  * D18 (mcp_adapter_pre_tool_call canonical hook) ✓
+  * D19 (fail-open observability pattern) ✓
+- docs/memory/INDEX.md: 6 amendments
+  * D8 amended in-place: ^1.0 → ^2.0.0 ✓
+  * A8 amended in-place: ^1.0 → ^2.0.0 ✓
+  * DEC-ACCESS-CONTROL-V2-ADOPTION new row ✓
+  * D18 new row ✓
+  * D19 new row ✓
+  * Security review row (2026-07-04-015) ✓
+- README.txt Unreleased bullet added ✓
+- docs/planings-tasks/README.md: F015 row appended ✓
+
+=== T018 PHPUnit coverage ===
+tests/phpunit/Includes/AccessControl/AcrossAI_MCP_Access_Control_Test.php
+- 9 test methods (7 FR coverage + SEC-015-002 deny-list guard + Q2 missing-server hook)
+- B9 attribute-based test syntax
+- PHPStan L8 + PHPCS green on the test file
+- Runtime execution deferred to CI (WP-PHPUnit harness not local)
+
+=== Manual smoke deferrals ===
+The following tasks require a live WordPress environment and are deferred to
+the human reviewer for evidence capture in this file:
+
+- T010 (US3 Activator smoke): fresh install → activate → verify mcp_manager_access_control
+       table + wpb_ac_mcp_manager_db_version option created; drop table + re-activate →
+       table restored (idempotent restore per US3 acceptance scenario 3).
+       [ ] Reviewer: attach screenshot or `wp db query` output.
+
+- T014 (US1 UI smoke): activate plugin + navigate to Access Control tab on server id=1;
+       check `editor` role + save → success notice + verify DB row inserted; POST MCP tool
+       call as subscriber → WP_Error acrossai_mcp_access_denied; POST as editor → tool
+       executes; POST as admin → always succeeds; Clear Rules → DB rows deleted +
+       subscriber POST succeeds.
+       [ ] Reviewer: attach screenshots + wp-cli output.
+
+- T015 (US4 fail-open smoke): mv vendor/wpboilerplate/wpb-access-control{,.disabled} →
+       reload wp-admin → verify amber warning notice + Access Control tab renders info
+       notice + POST MCP tool call succeeds (fail-open) + /servers returns full list.
+       Restore vendor dir → enforcement resumes.
+       [ ] Reviewer: attach evidence.
+
+- T017 (US5 uninstall smoke):
+       * wp option update acrossai_mcp_uninstall_delete_data 1 → delete plugin →
+         verify table dropped + wpb_ac_mcp_manager_db_version option deleted.
+       * wp option update acrossai_mcp_uninstall_delete_data 0 → delete plugin →
+         verify table + option BOTH preserved.
+       [ ] Reviewer: attach `SHOW TABLES` output for both scenarios.
+
+=== T029 Final gate summary ===
+Static gates:            ALL GREEN ✓
+Grep gates (T019 × 6):   ALL GREEN ✓
+Memory hygiene:          ALL CAPTURED ✓
+Changelog + planning:    APPENDED ✓
+PHPUnit runtime:         DEFERRED to CI
+Manual smoke:            DEFERRED to reviewer (T010, T014, T015, T017 above)
+
+Ready for commit + PR against feature/issue-3.
