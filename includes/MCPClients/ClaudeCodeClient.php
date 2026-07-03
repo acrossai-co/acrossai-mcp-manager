@@ -18,6 +18,7 @@ defined( 'ABSPATH' ) || exit;
  * Shape:
  *   claude mcp add '<server-key>' \
  *     --env WP_API_URL='<url>' \
+ *     --env WP_API_USERNAME='<username>' \
  *     --env WP_API_PASSWORD='<token>' \
  *     -- npx -y '@automattic/mcp-wordpress-remote@latest'
  *
@@ -48,13 +49,15 @@ final class ClaudeCodeClient extends AbstractMCPClient {
 	 * @return string Shell-command snippet for `claude mcp add`.
 	 */
 	public function get_config_snippet( string $server_url, string $auth_token ): string {
-		$key   = $this->derive_server_key( $server_url );
-		$token = $this->safe_token( $auth_token );
+		$key      = $this->derive_server_key( $server_url );
+		$token    = $this->safe_token( $auth_token );
+		$username = $this->current_username();
 
 		return sprintf(
-			'claude mcp add %s --env WP_API_URL=%s --env WP_API_PASSWORD=%s -- npx -y %s',
+			'claude mcp add %s --env WP_API_URL=%s --env WP_API_USERNAME=%s --env WP_API_PASSWORD=%s -- npx -y %s',
 			escapeshellarg( $key ),
 			escapeshellarg( $server_url ),
+			escapeshellarg( $username ),
 			escapeshellarg( $token ),
 			escapeshellarg( '@automattic/mcp-wordpress-remote@latest' )
 		);

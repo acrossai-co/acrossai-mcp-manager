@@ -48,6 +48,7 @@ final class ClaudeDesktopClient extends AbstractMCPClient {
 					'args'    => array( '-y', '@automattic/mcp-wordpress-remote@latest' ),
 					'env'     => array(
 						'WP_API_URL'      => $server_url,
+						'WP_API_USERNAME' => $this->current_username(),
 						'WP_API_PASSWORD' => $this->safe_token( $auth_token ),
 					),
 				),

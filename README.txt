@@ -5,7 +5,7 @@ Tags: comments, spam
 Requires at least: 6.9
 Tested up to: 7.0
 Requires PHP: 8.1
-Stable tag: 0.0.1
+Stable tag: 0.0.6
 License: GPLv2 or later
 License URI: http://www.gnu.org/licenses/gpl-2.0.html
 
@@ -73,10 +73,39 @@ directory take precedence. For example, `/assets/screenshot-1.png` would win ove
 * Removed the standalone "CLI Auth Log" admin submenu at ?page=acrossai_mcp_manager_cli_auth_log. The underlying wp_acrossai_mcp_cli_auth_logs table + Query/Row classes remain — they continue to power the OAuth authentication flow. Auth-log inspection is now available via WP-CLI (wp db query "SELECT ... FROM wp_acrossai_mcp_cli_auth_logs"); the standalone submenu was redundant post-Feature-011.
 * Refactored the per-server-edit page (?page=acrossai_mcp_manager&action=edit) into a per-tab class hierarchy under admin/Partials/ServerTabs/. Ported 7 additional tabs from the reference plugin (Overview, npm, MCP Clients, WP-CLI, Tools, Abilities, MCP Tracker) plus 2 database-registered-only tabs (Update Server, Danger Zone). The full 11-tab UI is now available for database-registered servers; plugin-registered servers see 9 tabs.
 * NEW: Public Renderer layer under public/Renderers/ exposes 3 client-configuration blocks (npm, MCP Clients, Claude Connector) as a reusable API so third-party plugins (BuddyBoss, WooCommerce, other AcrossAI-family plugins) can embed the same UI on their own admin or frontend surfaces with zero code duplication. Public API surface: static Renderer::render() method + acrossai_mcp_render_client_block action hook + acrossai_mcp_client_block_context filter + acrossai_mcp_client_classes filter + shortcodes ([acrossai_mcp_npm_block], [acrossai_mcp_clients_block], [acrossai_mcp_claude_connector_block]) + REST endpoint (/wp-json/acrossai-mcp-manager/v1/generate-app-password) with defense-in-depth Application Password lockdown to get_current_user_id(). API is @experimental May change without notice before 1.0.0 (per DEC-CLIENT-RENDERER-PUBLIC-API). Restored CliAuthLogListTable + added ConnectorAuditLogListTable as per-server tab inspectors under DEC-ADMIN-SURFACE-PRUNE-CLI-AUTH-LOG's blessed reintroduction path. See docs/integrations/buddyboss-example.md and docs/integrations/woocommerce-example.md for third-party integrator onboarding.
+* Adopted wpboilerplate/wpb-access-control v2 with per-server access rules, MCP-boundary enforcement via the mcp_adapter_pre_tool_call filter shipped by wordpress/mcp-adapter, and a shared Renderer block (AccessControlBlock) that third-party plugins can embed on their own admin surfaces. Fixes 3 fatal v1-API call sites (AccessControlTab.php, CliController.php /servers route, Main.php TODO block). Activator now creates the {prefix}mcp_manager_access_control table; uninstall opt-in gate purges the namespace + drops the table + deletes the version option. Two observability action hooks let operators log denials via any listener: `acrossai_mcp_access_control_denied` fires immediately before returning WP_Error / empty server list on deny (args: user_id, server_slug, tool_name-or-null, context_slug where context_slug is `'cli_servers'` at CliController or `'mcp_tool_call'` at MCP boundary); `acrossai_mcp_access_control_missing_server` fires when a server was DELETEd mid-flight (args: server_slug, tool_name, user_id). Minimal listener example: `add_action('acrossai_mcp_access_control_denied', function($u,$s,$t,$c){ error_log("[AC deny] user=$u server=$s tool=$t via=$c"); }, 10, 4);`. See DEC-ACCESS-CONTROL-V2-ADOPTION + D18 + D19 for the wrapper pattern, canonical MCP-boundary hook, and fail-open observability pattern.
 
-= 1.0 =
-* A change since the previous version.
-* Another change.
+= 0.0.5 =
+* Changed: access-control admin UI now loads assets from the wpb-access-control vendor package's own compiled React bundle; removed plugin-bundled copies at assets/access-control/
+* Changed: replace AccessControlUI AJAX bootstrap with REST API registration via AccessControlManager::register_rest_api(); rules are now served and saved via dedicated REST endpoints
+* Changed: access-control tab renders a React component hydrated by the vendor webpack bundle instead of legacy plain-JS markup
+* Added: graceful degradation notice when vendor assets are unavailable — enforcement remains active
+* Updated: wpb-access-control to v1.0.0 (stable baseline); automattic/jetpack-autoloader to latest minor
+
+= 0.0.4 =
+* Improved: bundle access-control UI assets (CSS + JS) directly in the plugin at assets/access-control/ so the admin panel works regardless of whether the wpb-access-control vendor package ships them
+
+= 0.0.3 =
+* Dependencies: update wpb-access-control to BerlinDB-backed version; add berlindb/core; update bshaffer/oauth2-server-httpfoundation-bridge and symfony/deprecation-contracts
+* Fixed: remove removed AccessControlTable references; fixes fatal error on plugin activation
+* Fixed: access-control table is now auto-bootstrapped by RuleQuery — no manual maybe_create_table() needed
+* Fixed: remove dead save_access_control POST handler; access-control saves now handled by library AJAX
+* Fixed: update v1.5.0 legacy migration to use RuleQuery::set_rule() instead of removed AccessControlTable::update()
+
+= 0.0.2 =
+* Security: sanitize and validate all $_GET/$_POST inputs with sanitize_key(), sanitize_text_field(), absint(), and wp_unslash()
+* Paths: replace hardcoded ABSPATH with get_home_path() for correct subdirectory-install support
+* Enqueue: remove all inline <style>/<script> blocks; move to external CSS/JS files loaded via wp_enqueue_style() and wp_enqueue_script()
+
+= 0.0.1 =
+* Initial release
+* Support for VS Code, Claude, GitHub Copilot, ChatGPT Codex, and custom clients
+* Format #1 (Automattic-recommended) MCP configuration
+* Native WordPress Application Passwords integration
+* Dynamic configuration generation per provider
+* Full REST API support
+* Admin UI with client tabs
+* Copy-to-clipboard functionality
 
 == Arbitrary section ==
 

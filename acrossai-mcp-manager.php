@@ -23,7 +23,7 @@ namespace AcrossAI_MCP_Manager;
  * Plugin Name:       AcrossAI MCP Manager
  * Plugin URI:        https://github.com/WPBoilerplate/acrossai-mcp-manager
  * Description:       AcrossAI MCP Manager by WPBoilerplate
- * Version:           0.0.1
+ * Version:           0.0.6
  * Requires at least: 6.9
  * Requires PHP:      8.1
  * Author:            WPBoilerplate

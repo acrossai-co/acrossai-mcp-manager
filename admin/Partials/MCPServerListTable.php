@@ -88,7 +88,7 @@ class MCPServerListTable extends \WP_List_Table {
 					'name'                   => $row->server_name,
 					'slug'                   => $row->server_slug,
 					'description'            => $row->description,
-					'enabled'                => 1 === $row->is_enabled,
+					'enabled'                => ! empty( $row->is_enabled ),
 					'registered_from'        => $row->registered_from,
 					'server_route_namespace' => $row->server_route_namespace,
 					'server_route'           => $row->server_route,
@@ -153,24 +153,6 @@ class MCPServerListTable extends \WP_List_Table {
 				esc_url( $edit_url ),
 				esc_html__( 'Edit', 'acrossai-mcp-manager' )
 			),
-		);
-
-		// Toggle Status row action (in addition to the button in the Actions column).
-		$toggle_url            = wp_nonce_url(
-			add_query_arg(
-				array(
-					'page'   => AdminPageSlugs::PARENT,
-					'action' => 'toggle_status',
-					'server' => (int) $item['id'],
-				),
-				admin_url( 'admin.php' )
-			),
-			'acrossai_mcp_toggle_' . (int) $item['id']
-		);
-		$row_actions['toggle'] = sprintf(
-			'<a href="%s">%s</a>',
-			esc_url( $toggle_url ),
-			esc_html__( 'Toggle Status', 'acrossai-mcp-manager' )
 		);
 
 		if ( 'database' === $item['registered_from'] ) {

@@ -856,3 +856,232 @@ rule this clarifies).
 **Where to look next**
 DEC-CLIENT-RENDERER-PUBLIC-API — the public API surface these hooks implement.
 A1 in memory-synthesis — the base constraint this decision refines.
+
+---
+
+### 2026-07-04 — DEC-ACCESS-CONTROL-V2-ADOPTION — canonical v2 wrapper pattern for AcrossAI-family plugin consumption
+
+**Status**
+Active (F015 — supersedes D8's `^1.0` version pin in-place; amends A8 version reference)
+
+**Why this durable**
+Feature 015 discovered that the plugin shipped `wpb-access-control ^2.0.0` in
+composer.json but every consumer (AccessControlTab.php:65, CliController.php:333,
+Main.php:432 comment) targeted v1's `::instance()` singleton API — which does
+not exist in v2. Three fatal call sites. The sibling plugin
+`acrossai-abilities-manager` had already solved this with the
+`AcrossAI_Abilities_Access_Control` wrapper class shape. F015 copy-adapted that
+pattern verbatim. Codifying the pattern here prevents future features (or a
+third sibling plugin adopting v2) from re-inventing the wrapper.
+
+**Decision**
+Any AcrossAI-family plugin consuming `wpboilerplate/wpb-access-control ^2.0.0`
+MUST wrap the v2 `AccessControlManager` in a plugin-scoped singleton wrapper
+class with:
+- `PROVIDERS_FILTER` class constant (plugin-specific hook tag)
+- `TABLE_SLUG` class constant (drives DB table name, cache group, REST route
+  prefix — MUST match `^[a-z0-9_]{1,32}$` per v2 `Slug::PATTERN`)
+- `is_available()` guard (fail-open when package class absent — matches sibling
+  DEC-PERM-CB)
+- `boot_manager()` lazy-init with `new AccessControlManager( PROVIDERS_FILTER,
+  TABLE_SLUG )` — NEVER v1's `::instance()`
+- `get_manager(): ?AccessControlManager` accessor
+- `register_rest_api()` REST route registration delegate
+- `maybe_show_library_notice()` admin notice on package absence
+- Activator MUST call `(new RuleTable(TABLE_SLUG))->maybe_upgrade()` at plugin
+  activation, gated by `class_exists()` defense-in-depth (SEC-015-001)
+- `uninstall.php` MUST purge the namespace + drop the table + delete the version
+  option — but ONLY when the plugin-specific opt-in gate fires (preserve-by-default
+  per DEC-UNINSTALL-OPT-IN-GATE)
+- The 3 built-in providers (`WpRoleProvider`, `WpUserProvider`, `WpCapabilityProvider`)
+  MUST be registered via `add_filter( PROVIDERS_FILTER, ..., 'register_default_providers' )`
+- The AccessControlBlock UI uses a single-provider `<select>` picker
+  (`everyone` / `wp_role` / `wp_user` / `wp_capability`) with a conditional row
+  showing the values for the chosen provider — matches sibling plugin's User
+  Access UX (Clarifications Q4). Rule storage: one `set_rule($ns, $key,
+  $provider_type, $values_array)` call per save, or `clear_rule($ns, $key)` when
+  picker = everyone. Capability picker exposes the FULL WP capability set via
+  `get_available_capabilities()` (SAFE_CAPABILITIES allow-list from initial
+  F015 draft is SUPERSEDED per Q4 — admins bypass every rule per v2
+  access-hierarchy step 2, so exposing high-privilege capabilities is not a
+  privilege-escalation vector).
+
+**Tradeoffs**
+- Gained: consistent v2 consumption pattern across the AcrossAI plugin family;
+  the wrapper contains the fail-open decision + observability contract at ONE
+  boundary; the version pin can advance without touching consumers.
+- Made harder: 158+ LOC of "just wrapper" code per plugin. Acceptable because
+  the alternative is scattered `class_exists` guards + inline v2 API calls
+  across 3+ files per plugin.
+- Reconsider: if the vendor package releases a 3.x with a breaking constructor
+  change, amend this DEC (not the consumers).
+
+**Evidence**
+`includes/AccessControl/AcrossAI_MCP_Access_Control.php` (F015 shipping class);
+sibling plugin `acrossai-abilities-manager` at
+`includes/Modules/Abilities/AcrossAI_Abilities_Access_Control.php` (same shape).
+
+**Where to look next**
+D18 (mcp_adapter_pre_tool_call filter) — the MCP-boundary enforcement hook the
+wrapper's `gate_mcp_tool_call()` implements. D19 (fail-open observability
+pattern) — the general pattern this wrapper's action hooks realize.
+DEC-UNINSTALL-OPT-IN-GATE — the opt-in gate the uninstall block MUST honor.
+
+**Amendment 2026-07-04 (post-implementation drift audit)**
+Two decisions were made after the initial DEC entry was captured:
+
+1. **AccessControlBlock defers to vendor's React component** (not a hand-rolled
+   PHP form). The initial F015 draft had `render_body()` emit `<form
+   method="post">` + three provider pickers + `submit_button()`. During
+   implementation, the user directed adoption of the vendor's React
+   `<AccessControl>` component (shipped at `vendor/wpboilerplate/wpb-access-control/js/AccessControl.js`)
+   via a `webpack.config.js` alias `'@wpb/access-control' → …/js/AccessControl.js`
+   and a new entry `src/js/access-control.js` that mounts it. `render_body()`
+   now emits only `<div id="acrossai-mcp-ac-root" data-server-slug="…">Loading…</div>`.
+   Persistence: vendor REST (`PUT/DELETE /wpb-ac/v1/mcp/rules/{ns}/{key}`) —
+   the previously-scoped `save_access_control` action + `handle_access_control_update()`
+   handler in `admin/Partials/Settings.php` are dead code, marked for removal
+   in T030 (see tasks.md Phase 10).
+
+2. **TABLE_SLUG value: `'mcp'`, not `'mcp_manager'`**. During implementation
+   the user requested the DB table be named `wp_mcp_access_control` (not
+   `wp_mcp_manager_access_control`) — TABLE_SLUG constant value is `'mcp'`.
+   Consequences: table `{prefix}mcp_access_control`, cache group `wpb_ac_mcp`,
+   version option `wpb_ac_mcp_db_version`, vendor REST namespace
+   `/wpb-ac/v1/mcp/…`. The rule per this DEC — that TABLE_SLUG matches
+   `^[a-z0-9_]{1,32}$` — is preserved; the specific value changed.
+
+Both amendments are compatible with the underlying DEC (v2 wrapper pattern,
+fail-open, opt-in uninstall). The vendor React adoption is a §IV DataForm
+carve-out variant of the same DEC-CLIENT-RENDERER-PUBLIC-API precedent that
+authorized the initial hand-rolled form — the block is still a Renderer,
+just deferring rendering to a vendor-shipped component instead of emitting
+PHP form HTML directly.
+
+---
+
+### 2026-07-04 — D18 — `mcp_adapter_pre_tool_call` is the canonical MCP-boundary enforcement hook for the AcrossAI plugin family
+
+**Status**
+Active (F015)
+
+**Why this durable**
+When Feature 015 needed to gate MCP tool invocations by `(user_id, server_id)`,
+the alternatives were (a) fork the mcp-adapter package to add a new hook,
+(b) hook ability-level `permission_callback` on every ability, or (c) hook
+`rest_pre_dispatch` broadly. Options (a) and (b) don't compose cleanly; option
+(c) is too broad. Exploration surfaced that mcp-adapter ships this exact filter
+at `vendor/wordpress/mcp-adapter/includes/Handlers/Tools/ToolsHandler.php:182`
+— returning `WP_Error` short-circuits with a denied MCP response. Codifying
+this as the canonical hook prevents future features from re-inventing the
+enforcement path.
+
+**Decision**
+Any AcrossAI-family plugin wanting to gate MCP tool invocations based on
+`(user_id, server_id)` MUST hook the `mcp_adapter_pre_tool_call` filter fired
+by `vendor/wordpress/mcp-adapter/includes/Handlers/Tools/ToolsHandler.php:182`.
+Signature: `apply_filters( 'mcp_adapter_pre_tool_call', $args, $tool_name,
+$mcp_tool, $server )`. Return `WP_Error` with `array('status' => 403)` to
+short-circuit execution with a denied MCP response. Do NOT fork mcp-adapter
+to add a new hook. Do NOT hook ability-level `permission_callback` (ability-scoped,
+doesn't compose across cross-cutting concerns). Loader-wire via
+`Main::define_public_hooks()` per A1.
+
+**Tradeoffs**
+- Gained: single-line filter registration; no vendor fork; §V Extensibility
+  Without Core Modification preserved.
+- Made harder: consumer must handle the `$server` argument's late-binding —
+  `$server->get_server_id()` returns the mcp-adapter's server-id string, which
+  IS the F011 `server_slug` in our plugin (by convention).
+- Reconsider: if mcp-adapter deprecates the filter in a future release.
+
+**Evidence**
+`includes/AccessControl/AcrossAI_MCP_Access_Control.php::gate_mcp_tool_call()`
+(F015 shipping callback); `includes/Main.php::define_public_hooks()` (Loader
+wiring); `vendor/wordpress/mcp-adapter/includes/Handlers/Tools/ToolsHandler.php:182`
+(vendor filter site).
+
+**Where to look next**
+DEC-ACCESS-CONTROL-V2-ADOPTION — the wrapper class this filter callback lives on.
+D19 — the observability pattern the deny branch realizes.
+
+---
+
+### 2026-07-04 — D19 — Fail-open observability pattern for security-adjacent enforcement
+
+**Status**
+Active (F015)
+
+**Why this durable**
+Feature 015's Clarifications Q2 (missing-server race) + Q3 (denial observability)
+both surfaced the same shape: on defensive fail-open paths, fire a scoped
+`do_action()` so operators can log the anomaly via any observability tool
+(Query Monitor, custom logger, remote SIEM) without a hard dependency. The
+vendor package's low-level `wpb_access_control_denied` hook fires at a
+namespace-agnostic scope; F015's plugin-scoped hooks add the MCP-specific
+payload (`server_slug` + `tool_name` + call-site context) the vendor hook lacks.
+Codifying the pattern generalizes to any future security-adjacent enforcement
+in the AcrossAI plugin family.
+
+**Decision**
+On defensive fail-open paths (missing server, unavailable vendor, invalid
+provider, unknown auth context), fire a scoped `do_action()` so operators can
+log the anomaly without a hard dependency. Fire-and-forget; return value
+ignored. Payload MUST include enough context for operators to correlate the
+event with other logs (user_id, resource_id, action_name, call-site slug).
+Layered pattern: plugin-scoped hooks sit ALONGSIDE (not replacing) any
+vendor-provided lower-level hooks — the plugin scope adds domain-specific
+payload the vendor scope lacks.
+
+**Tradeoffs**
+- Gained: operator visibility into security-adjacent anomalies without adding
+  a persistent audit table; no hard dependency on any specific logging plugin;
+  zero cost when no listener is registered.
+- Made harder: silent-by-default — operators upgrading without adding a
+  listener won't know denials are happening. Mitigated by documenting the
+  hooks in README.txt with a minimal listener snippet.
+- Reconsider: if a specific compliance requirement (SOC 2, HIPAA, PCI) demands
+  persistent DB audit — capture a new DEC for the persistent-audit pattern.
+
+**Evidence**
+F015's `acrossai_mcp_access_control_missing_server` (fires on race with
+concurrent DELETE) + `acrossai_mcp_access_control_denied` (fires BEFORE
+WP_Error/empty-list return at both enforcement sites). Documented in
+`includes/AccessControl/AcrossAI_MCP_Access_Control.php::gate_mcp_tool_call()`
++ `includes/REST/CliController.php:333` (F015 shipping).
+
+**Where to look next**
+DEC-ACCESS-CONTROL-V2-ADOPTION — the wrapper that carries the missing-server
+hook. D18 — the MCP-boundary filter the denial hook fires alongside.
+
+---
+
+### 2026-07-04 — D20 — Verify vendor's default set before wiring a consumer-side default-registration filter
+
+**Status**
+Active (F015)
+
+**Why this is durable**
+Consumer plugins that hook a vendor's "register default providers/handlers/tools/etc." filter can silently double-register when the vendor's own default set grows across releases. This is a recurring risk for any AcrossAI plugin that consumes a shared vendor package (wpb-access-control, mcp-adapter, main-menu, mcp-servers-list). The trap is that the consumer-side wiring is a one-line `add_filter` that reads as harmless boilerplate — until a vendor bump doubles the registered set.
+
+**Decision**
+BEFORE wiring a consumer-side default-provider (or default-handler, default-tool, etc.) registration filter for ANY vendor package, `grep` the vendor's source for its own default set. If the vendor already covers everything you'd register, SKIP the wire and document inline. Reserve the consumer filter for genuine ADDITIONS (third-party extension points), not duplicates of the vendor's defaults. When the vendor's default set grows in a future release, the omission stays correct — no maintenance drift.
+
+**Tradeoffs**
+- Gained: no double-registration; no maintenance drift when vendor defaults grow; consumer surface stays minimal; predictable provider set even after vendor upgrades.
+- Made harder: readers unfamiliar with the vendor's defaults must read the inline comment to understand the missing wire. Mitigate by keeping the comment concise + linking to the vendor source file where defaults are registered.
+- Reconsider: if a vendor releases with a broken default set (bug in its own `load_providers()`), the consumer may need to temporarily wire the fallback. Guard with `class_exists()` or version check if that ever happens.
+
+**Evidence**
+F015: spec (FR-014) called for wiring 5 hooks including `add_filter( PROVIDERS_FILTER, [ ClassName, 'register_default_providers' ] )` to register 3 built-in providers (WpRoleProvider, WpUserProvider, WpCapabilityProvider). But `wpb-access-control ^2.0.0` internally registers 5 default providers (WpRole + WpUser + WpCapability + BuddyBossProfileType + MemberPressMembership) via `AccessControlManager::load_providers()`. Shipping code intentionally omits the consumer wire, documented inline at `includes/Main.php:372-376`:
+
+```php
+// NB: `register_default_providers` filter is intentionally NOT wired —
+// the vendor's AccessControlManager::load_providers() already registers
+// WpRoleProvider + WpUserProvider + WpCapabilityProvider + BuddyBoss +
+// MemberPress as defaults. Third-party plugins can still hook the
+// `acrossai_mcp_access_control_providers` filter to append their own.
+```
+
+**Where to look next**
+DEC-ACCESS-CONTROL-V2-ADOPTION — the vendor consumption pattern this DEC refines. Anytime a future feature adds a `add_filter( '<vendor>_default_<thing>', … )` wire, cross-reference D20 in the plan's Constitution Check. Applies to any Composer-installed vendor package that manages its own "defaults" collection via a filter — verify the vendor's own registration site before wiring.

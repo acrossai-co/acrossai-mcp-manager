@@ -1,10 +1,12 @@
 <?php
 /**
- * Access Control tab — vendor delegate per D8.
+ * Access Control tab — thin delegate to AccessControlBlock.
  *
- * Preserves the class_exists('\WPBoilerplate\AccessControl\AccessControlManager')
- * guard verbatim from the pre-F013 Access Control tab body.
- * TASK-2 shape validation only — no functional changes.
+ * Feature 015 — converts the F013 shape-only shell to a thin delegate to
+ * `public/Renderers/AccessControlBlock.php`, matching the F013
+ * NpmTab/ClientsTab/ClaudeConnectorTab delegate pattern per
+ * DEC-CLIENT-RENDERER-PUBLIC-API. The v1-API singleton call at the old line 65
+ * is deleted (was fatal in v2 — see F015 US2 + FR-016 grep gate).
  *
  * @package    AcrossAI_MCP_Manager
  * @subpackage Admin/Partials/ServerTabs
@@ -17,8 +19,7 @@ namespace AcrossAI_MCP_Manager\Admin\Partials\ServerTabs;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Access Control tab — delegates to wpb-access-control vendor manager
- * when present, renders an informational notice when absent.
+ * Access Control tab — thin delegate to AccessControlBlock (F015).
  *
  * @package    AcrossAI_MCP_Manager
  * @subpackage Admin/Partials/ServerTabs
@@ -47,30 +48,22 @@ final class AccessControlTab extends AbstractServerTab {
 	}
 
 	/**
-	 * Renders the tab body. Preserves the D8 vendor guard verbatim.
+	 * Delegates render to AccessControlBlock. The Block owns the vendor-package
+	 * fail-open branch, the form UI, and the read-side rule lookup.
 	 *
 	 * @since 0.0.6
 	 * @param array $server Server row data.
 	 * @return void
 	 */
 	protected function render_body( array $server ): void {
-		if ( ! class_exists( '\WPBoilerplate\AccessControl\AccessControlManager' ) ) {
-			echo '<div class="notice notice-info inline"><p>';
-			esc_html_e( 'Access Control requires the wpb-access-control package. Install it to manage per-server access rules.', 'acrossai-mcp-manager' );
-			echo '</p></div>';
-			return;
-		}
-
-		// Vendor manager is responsible for its own rendering + persistence.
-		$manager = \WPBoilerplate\AccessControl\AccessControlManager::instance( 'acrossai_mcp_access_control_providers' );
-		if ( method_exists( $manager, 'render_admin_page' ) ) {
-			$manager->render_admin_page( (int) $server['id'] );
-			return;
-		}
-
-		// Fallback notice when the vendor API we expected isn't present yet.
-		echo '<div class="notice notice-warning inline"><p>';
-		esc_html_e( 'Access Control package is present but does not expose the expected render_admin_page() API for this version.', 'acrossai-mcp-manager' );
-		echo '</p></div>';
+		\AcrossAI_MCP_Manager\Public\Renderers\AccessControlBlock::instance()->render(
+			(int) $server['id'],
+			array(
+				'context'           => 'admin',
+				'cap'               => 'manage_options',
+				'submit_target_url' => $this->server_edit_url( $server, 'access-control' ),
+				'nonce_action'      => 'acrossai_mcp_manager_server_' . (int) $server['id'],
+			)
+		);
 	}
 }

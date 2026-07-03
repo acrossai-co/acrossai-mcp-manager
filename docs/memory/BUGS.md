@@ -554,3 +554,57 @@ NEVER concatenate a format string containing `%s` with a format string containin
 
 **Where to look next**
 Any admin partial that emits `wp_kses_post( __( '...%1$s...%2$s...' ) )`-style translated snippets inside a larger `printf` call — verify each such call uses ONE placeholder style. Sibling `acrossai-abilities-manager` `SettingsMenu.php:212-220` shows the pattern working correctly because it uses positional `%s` throughout with no numbered-placeholder concatenation. Sibling wordpress-ai copy at `src/Admin/Settings.php:490-506` uses full `<?php ... ?>`-tag rendering which bypasses printf entirely — either idiom is safe; the mixed-mode idiom is the trap.
+
+---
+
+### 2026-07-04 - B17 — `rest_url()` returns URL WITH trailing slash; consumer concat produces `//`-double-slash 404s
+
+**Status**
+Active
+
+**Why this is durable**
+`rest_url()` returns the site's REST base URL WITH a trailing slash (e.g. `https://example.com/wp-json/`). Any consumer that builds sub-paths by string concat (`restApiRoot + '/wpb-ac/…'`) produces `//wpb-ac/…` which WordPress does not route → 404. Symptom is invisible in PHPStan/PHPCS/PHPUnit because the URL is only assembled at JS runtime by the downstream consumer.
+
+**Evidence**
+- **Manifestation**: F015 vendor `@wpb/access-control` React component received `restApiRoot = 'https://wordpress-7-0.local/wp-json/'` via `wp_localize_script` and concatenated `restApiRoot + '/wpb-ac/v1/mcp/providers'` — every apiFetch call resolved to `/wp-json//wpb-ac/…` and 404'd. Discovered when the Access Control tab picker was empty; DevTools revealed the double slash in Request URL.
+- **Fix commit**: `admin/Main.php:195` — `'restApiRoot' => esc_url_raw( untrailingslashit( rest_url() ) )`. Same pattern applies to any `wp_localize_script` field whose consumer joins with a leading-slash sub-path.
+- **Static analysis blindspot**: PHP-side lint is silent because the trailing-slash URL is well-formed. The bug only manifests in the JS consumer's URL builder.
+
+**Where to look next**
+Before passing `rest_url()` (or `home_url()`, `admin_url()`, `site_url()` — same trailing-slash convention) to any third-party JS bundle / config / template that will concatenate sub-paths, either strip the trailing slash — `esc_url_raw( untrailingslashit( rest_url() ) )` — or pass the fully-formed URL via `rest_url( 'sub-path' )` (WordPress joins correctly). Grep for the pattern: `grep -rn "restApiRoot\|rest_url()" admin/ includes/` and audit each site that hands the value to a downstream URL builder.
+
+---
+
+### 2026-07-04 - B18 — Strict-int comparison against MySQL TINYINT columns silently mislabels every row
+
+**Status**
+Active
+
+**Why this is durable**
+`$wpdb` returns MySQL TINYINT columns as string `"0"` / `"1"` — not int. Strict-equality checks like `1 === $row->is_enabled` are always false → boolean rendering silently defaults to the "0" branch on every row. On BerlinDB Row property reads, the declaration `public int $col = 0;` is a documentation hint, not runtime typing — the driver still returns strings. Bug is invisible to static analysis because the strict compare is valid PHP.
+
+**Evidence**
+- **Manifestation**: F015 session — `admin/Partials/MCPServerListTable::prepare_items()` used `'enabled' => 1 === $row->is_enabled` and every server (regardless of DB state) rendered as "Inactive" + "Enable" button. Same bug in `admin/Partials/Settings::toggle_server_status()`: `1 === $current_enabled` was always false, so the Active→Inactive transition silently no-op'd. The Overview tab used `! empty( $server['is_enabled'] )` and correctly showed "Active" — the mismatch between the two callers is what exposed the bug (same server row rendered as "Active" on the edit page and "Inactive" on the list).
+- **Fix commit**: `MCPServerListTable.php:91` — `1 === $row->is_enabled` → `! empty( $row->is_enabled )`. `Settings.php:277` — `$current_enabled = (int) $rows[0]->is_enabled` before the strict compare.
+- **Static analysis blindspot**: PHPStan L8 sees `$row->is_enabled` as `int` per the Row property doc-hint and considers `1 === int` valid. Runtime typing is where the bug lives.
+
+**Where to look next**
+When rendering a table column derived from a boolean-shaped int, prefer `(bool) $row->col` in the row-map or `! empty( $row->col )` for boolean semantics. When comparing strictly, cast: `1 === (int) $row->col`. Grep gate for new BerlinDB Row consumers: `grep -nE '(===|!==) *\$row->' admin/ includes/` to catch strict-compare-on-driver-string patterns. Applies to every plugin using `$wpdb` or BerlinDB — not F015-specific.
+
+---
+
+### 2026-07-04 - B19 — WP Application Password client-config generators MUST emit both `WP_API_USERNAME` and `WP_API_PASSWORD`
+
+**Status**
+Active
+
+**Why this is durable**
+WordPress Application Passwords authenticate via HTTP Basic (`Authorization: Basic base64(user:pass)`). A client config that ships only `WP_API_PASSWORD` (env var, CLI flag, JSON key) breaks auth silently — the consuming MCP/HTTP client can't build the Basic header without both. Symptom: user pastes the generated config, tool starts, every request 401s with no obvious reason (nothing in `wp-admin` says "your config is missing the username"). Bug is a "shipped without the peer field" pattern — trivial to write, hard to spot on inspection because each individual `env` block looks internally consistent.
+
+**Evidence**
+- **Manifestation**: F015 session — 7 MCP client classes (`VSCodeClient`, `ClaudeDesktopClient`, `CursorClient`, `CodexClient`, `CustomClient`, `GitHubCopilotClient`, `ClaudeCodeClient`) all shipped configs with `WP_API_PASSWORD` but no `WP_API_USERNAME`. Reference plugin `acrossai-mcp-manager` at `/Users/raftaar1191/local-sites/wordpress-ai/…/src/Admin/ApplicationPasswords.php:366-367` had both — the bug was a "port omitted a field" regression.
+- **Fix commit**: Added `AbstractMCPClient::current_username()` helper returning `wp_get_current_user()->user_login`. Every concrete client's `get_config_snippet()` now emits `'WP_API_USERNAME' => $this->current_username()` between URL and PASSWORD. `ClaudeCodeClient` (CLI form) uses `escapeshellarg($username)` in the sprintf.
+- **Static analysis blindspot**: PHPStan + PHPCS both green — each client class is self-consistent. Test coverage passed because tests asserted `env.WP_API_PASSWORD === '(placeholder)'` without inspecting siblings.
+
+**Where to look next**
+When a plugin generates client-facing WP-API auth configs, ship `WP_API_USERNAME` (from `wp_get_current_user()->user_login`) as a peer of `WP_API_PASSWORD`. Add a helper method on the abstract config generator (e.g. `AbstractMCPClient::current_username()`) so no subclass forgets it. Verify by grepping every concrete generator: `grep -L 'WP_API_USERNAME' includes/MCPClients/*.php` should return zero files. Applies to any plugin family generating MCP/HTTP client configs, wp-json REST curl examples, or WP-CLI login snippets that depend on Application Passwords.

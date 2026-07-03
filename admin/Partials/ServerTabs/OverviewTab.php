@@ -210,12 +210,16 @@ final class OverviewTab extends AbstractServerTab {
 			esc_html( $is_enabled ? __( 'Active', 'acrossai-mcp-manager' ) : __( 'Inactive', 'acrossai-mcp-manager' ) )
 		);
 
+		// redirect_to=edit tells Settings::handle_actions() to send the
+		// user back to this edit page after the toggle, instead of the
+		// server list — the toggle button is embedded on the edit page.
 		$toggle_url = wp_nonce_url(
 			add_query_arg(
 				array(
-					'page'   => AdminPageSlugs::PARENT,
-					'action' => 'toggle_status',
-					'server' => (int) $server['id'],
+					'page'        => AdminPageSlugs::PARENT,
+					'action'      => 'toggle_status',
+					'server'      => (int) $server['id'],
+					'redirect_to' => 'edit',
 				),
 				admin_url( 'admin.php' )
 			),

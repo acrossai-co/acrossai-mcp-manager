@@ -118,6 +118,146 @@
 	}, true );
 } )();
 
+/**
+ * Feature — Generate New Application Password button.
+ *
+ * Wires the button emitted by AbstractClientRenderer::passwords_generate_button().
+ * Reference-plugin equivalent lives in assets/admin.js `generatePassword()`.
+ *
+ * On click:
+ *   POST {data-endpoint} with { server_id: <data-server-id> }
+ *   Header: X-WP-Nonce: <data-nonce>
+ * On success:
+ *   1. Show the plaintext password once beside the button (adjacent .acrossai-generate-app-password-status).
+ *   2. Locate `#acrossai-mcp-{slug}-config-{serverId}` textarea and replace the
+ *      env.WP_API_PASSWORD placeholder ("(paste generated password here)")
+ *      with the real password, matching the reference plugin's updateConfig().
+ *   3. Update button label to "Regenerate Application Password".
+ */
+( function () {
+	if ( typeof document === 'undefined' ) {
+		return;
+	}
+
+	const PLACEHOLDER = '(paste generated password here)';
+
+	function injectPasswordIntoConfig( textareaId, password ) {
+		const textarea = document.getElementById( textareaId );
+		if ( ! textarea || ! textarea.value ) {
+			return false;
+		}
+		try {
+			const config = JSON.parse( textarea.value );
+			let mutated = false;
+			// Walk every top-level key (mcpServers/servers/etc.).
+			Object.values( config ).forEach( ( servers ) => {
+				if ( servers && typeof servers === 'object' ) {
+					Object.values( servers ).forEach( ( serverBlock ) => {
+						if (
+							serverBlock &&
+							serverBlock.env &&
+							typeof serverBlock.env === 'object'
+						) {
+							if ( PLACEHOLDER === serverBlock.env.WP_API_PASSWORD || '' === serverBlock.env.WP_API_PASSWORD ) {
+								serverBlock.env.WP_API_PASSWORD = password;
+								mutated = true;
+							}
+						}
+					} );
+				}
+			} );
+			if ( mutated ) {
+				textarea.value = JSON.stringify( config, null, 2 );
+			}
+			return mutated;
+		} catch ( e ) {
+			return false;
+		}
+	}
+
+	function renderStatus( statusEl, message, kind ) {
+		if ( ! statusEl ) {
+			return;
+		}
+		statusEl.textContent = '';
+		const wrap = document.createElement( 'span' );
+		wrap.className = 'notice notice-' + ( 'success' === kind ? 'success' : 'error' ) + ' inline';
+		wrap.style.display = 'inline-block';
+		wrap.style.marginLeft = '1em';
+		wrap.style.padding = '2px 8px';
+		wrap.textContent = message;
+		statusEl.appendChild( wrap );
+	}
+
+	document.addEventListener( 'click', function ( event ) {
+		const target = event.target;
+		if ( ! ( target instanceof Element ) ) {
+			return;
+		}
+		const button = target.closest( '.generate-app-password' );
+		if ( ! button || button.disabled ) {
+			return;
+		}
+		event.preventDefault();
+
+		const endpoint = button.getAttribute( 'data-endpoint' );
+		const nonce = button.getAttribute( 'data-nonce' );
+		const serverId = parseInt( button.getAttribute( 'data-server-id' ) || '0', 10 );
+		const clientSlug = button.getAttribute( 'data-client-slug' ) || '';
+
+		if ( ! endpoint || ! nonce ) {
+			return;
+		}
+
+		const statusEl = button.parentNode
+			? button.parentNode.querySelector( '.acrossai-generate-app-password-status' )
+			: null;
+		const originalLabel = button.textContent;
+		button.disabled = true;
+		button.textContent = 'Generating…';
+
+		fetch( endpoint, {
+			method: 'POST',
+			credentials: 'same-origin',
+			headers: {
+				'Content-Type': 'application/json',
+				'X-WP-Nonce': nonce,
+			},
+			body: JSON.stringify( { server_id: serverId } ),
+		} )
+			.then( ( response ) =>
+				response.json().then( ( body ) => ( { ok: response.ok, body } ) )
+			)
+			.then( ( { ok, body } ) => {
+				if ( ! ok || ! body || ! body.password ) {
+					const msg =
+						( body && ( body.message || body.data?.message ) ) ||
+						'Failed to generate password.';
+					renderStatus( statusEl, msg, 'error' );
+					button.textContent = originalLabel;
+					return;
+				}
+				const injected = injectPasswordIntoConfig(
+					'acrossai-mcp-' + clientSlug + '-config-' + serverId,
+					body.password
+				);
+				const displayMsg = injected
+					? 'Password: ' + body.password + ' (also injected into the config below — shown only once).'
+					: 'Password: ' + body.password + ' (shown only once — copy it now).';
+				renderStatus( statusEl, displayMsg, 'success' );
+				button.textContent = 'Regenerate Application Password';
+				button.classList.add( 'has-password' );
+			} )
+			.catch( ( err ) => {
+				renderStatus( statusEl, 'Network error: ' + err.message, 'error' );
+				button.textContent = originalLabel;
+			} )
+			.finally( () => {
+				button.disabled = false;
+			} );
+	} );
+} )();
+
 ( function () {
 	if ( typeof document === 'undefined' ) {
 		return;

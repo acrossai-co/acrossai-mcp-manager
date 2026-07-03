@@ -8,6 +8,7 @@
 
 namespace AcrossAI_MCP_Manager\Admin\Partials;
 
+use AcrossAI_MCP_Manager\Includes\Database\MCPServer\DefaultServerSeeder;
 use AcrossAI_MCP_Manager\Includes\Database\MCPServer\Query;
 use AcrossAI_MCP_Manager\Includes\Utilities\AdminPageSlugs;
 
@@ -54,6 +55,21 @@ class Settings {
 	// ─────────────────────────────────────────────────────────────────────────
 
 	/**
+	 * Auto-heal the default MCP server row when it goes missing.
+	 *
+	 * DefaultServerSeeder::seed() is idempotent — it only inserts when the
+	 * canonical slug is absent. Running it on admin_init means the row
+	 * self-restores after a manual delete or bulk-delete that removed it,
+	 * without requiring plugin reactivation. Mirrors the reference plugin
+	 * pattern (see MCPServerTable::maybe_create_table → always seed).
+	 *
+	 * @return void
+	 */
+	public function maybe_seed_default_server(): void {
+		DefaultServerSeeder::seed();
+	}
+
+	/**
 	 * Route plugin-page actions to the right handler. FR-007 / FR-007a / FR-013.
 	 *
 	 * NB: Nonce verification happens inside each per-action branch (the page
@@ -72,6 +88,8 @@ class Settings {
 
 		// US2: toggle_status, delete (single), create (POST), bulk.
 		// US3: update (General-tab save), save_claude_connector.
+		// F015 (post-Q4): access-control saves are owned by the vendor React
+		// component via vendor REST — no plugin-owned action handler.
 		if ( ! in_array( $action, array( 'toggle_status', 'delete', 'create', 'update', 'save_claude_connector' ), true )
 			&& ! $this->is_bulk_request()
 		) {
@@ -89,6 +107,14 @@ class Settings {
 
 			if ( $server_id > 0 ) {
 				$this->toggle_server_status( $server_id );
+			}
+
+			// `redirect_to=edit` is set by OverviewTab so the toggle button
+			// on the server-edit page returns the user to the edit page
+			// (overview tab) instead of the list.
+			$redirect_to = isset( $_GET['redirect_to'] ) ? sanitize_key( wp_unslash( $_GET['redirect_to'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification
+			if ( 'edit' === $redirect_to && $server_id > 0 ) {
+				$this->redirect_to_edit( $server_id, 'overview', 'server_toggled' );
 			}
 
 			$this->redirect_to_list( 'server_toggled' );
@@ -131,6 +157,10 @@ class Settings {
 			check_admin_referer( 'acrossai_mcp_claude_connector_' . $server_id );
 			$this->handle_claude_connector_update( $server_id );
 		}
+
+		// F015 note (post-Q4): access-control saves are owned by the vendor
+		// React component via vendor REST endpoints (PUT/DELETE
+		// /wpb-ac/v1/mcp/rules/{ns}/{key}). No plugin-owned POST handler here.
 	}
 
 	/**
@@ -148,7 +178,7 @@ class Settings {
 		if ( empty( $rows ) ) {
 			return;
 		}
-		$current_enabled = $rows[0]->is_enabled;
+		$current_enabled = (int) $rows[0]->is_enabled;
 		$query->update_item( $server_id, array( 'is_enabled' => 1 === $current_enabled ? 0 : 1 ) );
 	}
 
@@ -344,14 +374,14 @@ class Settings {
 		// phpcs:enable WordPress.Security.NonceVerification.Recommended
 
 		if ( '' === $data['server_name'] ) {
-			$this->redirect_to_edit( $server_id, 'general', 'empty_name' );
+			$this->redirect_to_edit( $server_id, 'update-server', 'empty_name' );
 		}
 		if ( '' === $data['server_route'] ) {
 			$data['server_route'] = $rows[0]->server_slug;
 		}
 
 		$query->update_item( $server_id, $data );
-		$this->redirect_to_edit( $server_id, 'general', 'server_saved' );
+		$this->redirect_to_edit( $server_id, 'update-server', 'server_saved' );
 	}
 
 	/**
@@ -395,7 +425,7 @@ class Settings {
 			)
 		);
 
-		$this->redirect_to_edit( $server_id, 'claude_connector', 'server_saved' );
+		$this->redirect_to_edit( $server_id, 'claude-connector', 'server_saved' );
 	}
 
 	private function is_secret_placeholder( string $value ): bool {

@@ -58,12 +58,32 @@ blockJsonFiles.forEach( ( jsonFile ) => {
 // Final Webpack export
 module.exports = {
 	...defaultConfig,
+	resolve: {
+		...defaultConfig.resolve,
+		alias: {
+			...( defaultConfig.resolve?.alias ?? {} ),
+			// F015 — Access Control v2 adoption. Aliases the vendor's React
+			// component so `import { AccessControl } from '@wpb/access-control'`
+			// resolves to the vendor's source file. Matches the sibling
+			// acrossai-abilities-manager plugin's setup.
+			'@wpb/access-control': path.resolve(
+				process.cwd(),
+				'vendor/wpboilerplate/wpb-access-control/js/AccessControl.js'
+			),
+		},
+	},
 	entry: {
 		...getWebpackEntryPoints(), // Default WP entry points (e.g., index.js)
 		...blockStylesheets(), // Core block styles (scss)
 		...blockEntries, // Custom blocks (index.js/view.js)
 		'js/frontend': path.resolve( process.cwd(), 'src/js', 'frontend.js' ),
 		'js/backend': path.resolve( process.cwd(), 'src/js', 'backend.js' ),
+		// F015 — Access Control tab React entry (mounts the vendor's <AccessControl>).
+		'js/access-control': path.resolve(
+			process.cwd(),
+			'src/js',
+			'access-control.js'
+		),
 		'css/frontend': path.resolve(
 			process.cwd(),
 			'src/scss',
