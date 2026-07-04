@@ -24,19 +24,18 @@ jobs:
       - name: Verify build outputs
         run: |
           test -f vendor/autoload_packages.php || { echo "::error::vendor/autoload_packages.php missing"; exit 1; }
-          test -f build/js/abilities.js || { echo "::error::build/js/abilities.js missing"; exit 1; }
 
       - name: Create release zip
         run: |
-          zip -r acrossai-abilities-manager.zip . \
+          zip -r acrossai-mcp-manager.zip . \
             -x "*.git*" "node_modules/*" ".github/*" \
             "tests/*" "*.md" "*.json" "*.lock" "composer.json" \
             "package.json" "wp.env.json" ".env*"
           mkdir -p releases
-          mv acrossai-abilities-manager.zip releases/
+          mv acrossai-mcp-manager.zip releases/
 
       - name: Upload release artifact
         uses: actions/upload-artifact@v4
         with:
-          name: acrossai-abilities-manager
-          path: releases/acrossai-abilities-manager.zip
+          name: acrossai-mcp-manager
+          path: releases/acrossai-mcp-manager.zip
