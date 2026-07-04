@@ -1,13 +1,15 @@
 === AcrossAI MCP Manager ===
-Contributors: (this should be a list of wordpress.org userid's)
+Contributors: raftaar1191
 Donate link: https://github.com/WPBoilerplate/acrossai-mcp-manager
-Tags: comments, spam
+Tags: mcp, ai, claude, anthropic, oauth
 Requires at least: 6.9
 Tested up to: 7.0
 Requires PHP: 8.1
 Stable tag: 0.0.7
 License: GPLv2 or later
 License URI: http://www.gnu.org/licenses/gpl-2.0.html
+
+Manage MCP (Model Context Protocol) servers in WordPress — register, configure, and expose them to AI clients like Claude.
 
 == Description ==
 
