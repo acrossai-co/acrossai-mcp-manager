@@ -1,0 +1,42 @@
+name: Build release zip
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    name: Build release zip
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          composer install --no-dev --prefer-dist --no-progress --optimize-autoloader
+          npm ci
+
+      - name: Build plugin
+        run: npm run build
+
+      - name: Verify build outputs
+        run: |
+          test -f vendor/autoload_packages.php || { echo "::error::vendor/autoload_packages.php missing"; exit 1; }
+          test -f build/js/abilities.js || { echo "::error::build/js/abilities.js missing"; exit 1; }
+
+      - name: Create release zip
+        run: |
+          zip -r acrossai-abilities-manager.zip . \
+            -x "*.git*" "node_modules/*" ".github/*" \
+            "tests/*" "*.md" "*.json" "*.lock" "composer.json" \
+            "package.json" "wp.env.json" ".env*"
+          mkdir -p releases
+          mv acrossai-abilities-manager.zip releases/
+
+      - name: Upload release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: acrossai-abilities-manager
+          path: releases/acrossai-abilities-manager.zip
