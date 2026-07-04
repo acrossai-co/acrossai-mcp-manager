@@ -35,7 +35,7 @@ jobs:
             --extensions=php \
             --runtime-set testVersion 8.1- \
             --report=checkstyle \
-            acrossai-abilities-manager.php \
+            acrossai-mcp-manager.php \
             uninstall.php \
             includes/ \
             admin/ \

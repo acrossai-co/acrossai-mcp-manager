@@ -1,72 +1,187 @@
 === AcrossAI MCP Manager ===
-Contributors: (this should be a list of wordpress.org userid's)
-Donate link: https://github.com/WPBoilerplate/acrossai-mcp-manager
-Tags: comments, spam
-Requires at least: 6.9
-Tested up to: 7.0
+Contributors: raftaar1191
+Tags: mcp, ai, copilot, vscode, claude
+Requires at least: 7.0
 Requires PHP: 8.1
-Stable tag: 0.0.6
-License: GPLv2 or later
-License URI: http://www.gnu.org/licenses/gpl-2.0.html
+Tested up to: 7.0
+Stable tag: 0.0.7
+License: GPL-2.0-or-later
+License URI: https://www.gnu.org/licenses/gpl-2.0.html
+
+Connect WordPress to MCP clients like VS Code, Claude, and Copilot using secure application passwords.
 
 == Description ==
 
-This is the long description.  No limit, and you can use Markdown (as well as in the following sections).
+MCP Manager uses the standard `@automattic/mcp-wordpress-remote@latest` package with WordPress Application Passwords for the default remote flow. It also includes an optional experimental direct Claude Connectors mode backed by a WordPress-hosted OAuth approval flow.
 
-For backwards compatibility, if this section is missing, the full length of the short description will be used, and
-Markdown parsed.
+MCP Manager is a WordPress plugin that enables seamless integration with Model Context Protocol (MCP) servers, allowing AI assistants and code editors to safely access your WordPress instance through secure application passwords.
 
-A few notes about the sections above:
+= Key Features =
 
-*   "Contributors" is a comma separated list of wp.org/wp-plugins.org usernames
-*   "Tags" is a comma separated list of tags that apply to the plugin
-*   "Requires at least" is the lowest version that the plugin will work on
-*   "Tested up to" is the highest version that you've *successfully used to test the plugin*. Note that it might work on
-higher versions... this is just the highest one you've verified.
-*   Stable tag should indicate the Subversion "tag" of the latest stable version, or "trunk," if you use `/trunk/` for
-stable.
+* **Multi-Client Support**: Configure MCP for:
+  - VS Code with Copilot
+  - Claude Desktop App
+  - GitHub Copilot & Codex
+  - OpenAI ChatGPT Codex
+  - Custom MCP Clients
 
-    Note that the `readme.txt` of the stable tag is the one that is considered the defining one for the plugin, so
-if the `/trunk/readme.txt` file says that the stable tag is `4.3`, then it is `/tags/4.3/readme.txt` that'll be used
-for displaying information about the plugin.  In this situation, the only thing considered from the trunk `readme.txt`
-is the stable tag pointer.  Thus, if you develop in trunk, you can update the trunk `readme.txt` to reflect changes in
-your in-development version, without having that information incorrectly disclosed about the current stable version
-that lacks those changes -- as long as the trunk's `readme.txt` points to the correct stable tag.
+* **Secure Authentication**: Uses WordPress native Application Passwords system
+  - One-click password generation
+  - Secure credential management
+  - Password revocation support
+  - Per-server Access Control still enforced after authentication
 
-    If no stable tag is provided, it is assumed that trunk is stable, but you should specify "trunk" if that's where
-you put the stable version, in order to eliminate any doubt.
+* **Easy Configuration**:
+  - Copy-paste ready JSON configurations
+  - Per-provider configuration file paths
+  - Automatic top-level key detection
+
+* **Format #1 Standard**: Uses the Automattic-recommended MCP configuration format
+  - npx command execution
+  - @automattic/mcp-wordpress-remote@latest package
+  - Full environment variable support
+
+= How It Works =
+
+1. Navigate to Settings → MCP Manager
+2. Select your MCP client (VS Code, Claude, GitHub Copilot, ChatGPT, or Custom)
+3. Click "Generate New Application Password"
+4. Copy the ready-to-use JSON configuration
+5. Paste into your client's configuration file
+6. Restart your MCP client
+
+All application passwords are managed through WordPress's native Application Passwords system and appear in your profile under Account Management.
+
+= CLI Connection and Authorization Flow =
+
+MCP Manager also supports a browser-assisted CLI connection flow for local MCP clients.
+
+Typical command:
+
+`npx -y @acrossai/mcp-manager --siteurl=https://example.com --server=default-mcp-server`
+
+Flow summary:
+
+1. The CLI checks `/wp-json/acrossai-mcp-manager/v1/health`
+2. The CLI starts auth with `/wp-json/acrossai-mcp-manager/v1/auth/start`
+3. WordPress returns an `auth_code` and frontend `auth_url`
+4. The CLI opens the frontend approval page at `/acrossai-mcp-manager/`
+5. If needed, the user signs in through normal WordPress login
+6. The signed-in user approves access in the browser
+7. The CLI polls `/auth/status` until the request is approved
+8. The CLI fetches the approved user's accessible servers from `/servers`
+9. The CLI exchanges the approved code at `/auth/exchange`
+10. WordPress creates a one-time Application Password and the CLI writes the MCP client config
+
+Terminology:
+
+* **Sign in / Log in** = WordPress account authentication
+* **Connect** = starting the CLI-to-site linking flow
+* **Authorize / Approve access** = granting the CLI permission in the browser
+
+Important notes:
+
+* The frontend authorization page must never be cached
+* Auth codes are single-use
+* `/servers` and `/auth/exchange` respect per-server access control
+* User-facing copy should say **CLI Connections** rather than **npm Login**
+* Generated remote MCP configs use Application Passwords and explicitly disable OAuth discovery in `@automattic/mcp-wordpress-remote`
+
+= Experimental Direct Claude Connectors =
+
+An optional **Claude Connectors Screen (Experimental)** setting can enable a direct OAuth flow for Claude's hosted connectors.
+
+When the global feature toggle is enabled and a specific server is configured in its **Claude Connector** tab, the plugin exposes:
+
+* `/.well-known/oauth-authorization-server`
+* `/.well-known/oauth-protected-resource?resource=<mcp-url>`
+* `/acrossai-mcp-connectors/oauth/authorize/`
+* `/wp-json/acrossai-mcp-manager/v1/connector/oauth/token`
+
+Important notes:
+
+* Disabled by default
+* The Application Password flow remains available and supported
+* The master experimental toggle is global, but OAuth client settings are stored per server
+* Direct connector approval signs Claude in as a WordPress user
+* Per-server Access Control still applies to every MCP request after OAuth
+* Public HTTPS is recommended for hosted connector usage
+
+= Provider Configuration Paths =
+
+* **VS Code**: ~/.config/Code/User/globalStorage/Copilot.copilot-chat/mcp.json (top-level key: "servers")
+* **Claude**: ~/Library/Application Support/Claude/claude_desktop_config.json (top-level key: "mcpServers")
+* **GitHub Copilot**: ~/.gh-copilot/config.json (top-level key: "servers")
+* **OpenAI ChatGPT**: ~/.config/chatgpt/config.json (top-level key: "servers")
+* **Custom**: ./your-project/.mcp/config.json (top-level key: configurable)
+
+= Requirements =
+
+* WordPress 5.9 or higher
+* PHP 7.4 or higher
+* WordPress Application Passwords support (built-in since WP 5.6)
 
 == Installation ==
 
-This section describes how to install the plugin and get it working.
+1. Upload the plugin directory to `/wp-content/plugins/`
+2. Activate the plugin through the 'Plugins' menu in WordPress
+3. Navigate to Settings → MCP Manager to configure
 
-e.g.
+Or:
 
-1. Upload `acrossai-mcp-manager.php` to the `/wp-content/plugins/` directory
-1. Activate the plugin through the 'Plugins' menu in WordPress
-1. Place `<?php do_action('plugin_name_hook'); ?>` in your templates
+1. Go to Admin → Plugins → Add New
+2. Search for "MCP Manager"
+3. Click "Install Now" then "Activate"
 
 == Frequently Asked Questions ==
 
-= A question that someone might have =
+= Is my password secure? =
 
-An answer to that question.
+Yes! MCP Manager uses WordPress's native Application Passwords system. Each password is:
+- Generated using WordPress's secure methods
+- Associated with your user account
+- Visible in your profile for management
+- Revocable at any time
 
-= What about foo bar? =
+= Can I use this with multiple MCP clients? =
 
-Answer to foo bar dilemma.
+Yes! You can generate separate passwords for each client (VS Code, Claude, GitHub Copilot, ChatGPT, and any custom client).
+
+= Where are my application passwords saved? =
+
+All application passwords are managed through WordPress's native Application Passwords system. View and manage them at:
+User Profile → Account Management → Application Passwords
+
+= What MCP clients are supported? =
+
+- Visual Studio Code (with Copilot)
+- Anthropic Claude Desktop App
+- GitHub Copilot
+- OpenAI ChatGPT Codex
+- Any custom MCP client supporting the standard format
+
+= Can I revoke a password? =
+
+Yes! You can revoke any application password from your profile page under Account Management → Application Passwords.
+
+= Is this compatible with multisite? =
+
+Yes! MCP Manager works with WordPress multisite installations. Each site can be configured independently.
+
+= Do I need to install additional software? =
+
+No additional software is needed on the WordPress side. Your MCP clients (VS Code extension, Claude app, etc.) handle the integration.
 
 == Screenshots ==
 
-1. This screen shot description corresponds to screenshot-1.(png|jpg|jpeg|gif). Note that the screenshot is taken from
-the /assets directory or the directory that contains the stable readme.txt (tags or trunk). Screenshots in the /assets
-directory take precedence. For example, `/assets/screenshot-1.png` would win over `/tags/4.3/screenshot-1.png`
-(or jpg, jpeg, gif).
-2. This is the second screen shot
+1. Settings page with client tabs for easy configuration
+2. Copy-paste ready JSON configuration
+3. One-click password generation
+4. Per-provider configuration file locations and top-level keys
 
 == Changelog ==
 
-= Unreleased =
+= 0.0.6 =
 * Migrated the four internal DB modules (MCP Servers, CLI Auth Log, OAuth Tokens, OAuth Audit) to BerlinDB Core 3.0. Fresh installs create tables with BerlinDB-derived schemas; the phantom-version guard on every Table subclass silently self-heals a stamped-but-missing table on the next activation. This release ships to zero live installs — no data migration path is provided; sites with pre-migration schema must be recreated from scratch.
 * Added an "MCP" tab to the shared AcrossAI Settings page (?page=acrossai-settings) with three operator toggles: enable CLI connections (acrossai_mcp_npm_login_enabled), enable direct Claude Connectors mode (acrossai_mcp_claude_connectors_enabled), and Delete all data on uninstall (acrossai_mcp_uninstall_delete_data). Sibling to acrossai-abilities-manager's Abilities tab.
 * BEHAVIOR CHANGE: uninstall.php now preserves ALL plugin data by default. The pre-Feature-012 build dropped acrossai_mcp_oauth_tokens + acrossai_mcp_oauth_audit unconditionally; this build preserves every wp_acrossai_mcp_* table and every acrossai_mcp_* option unless the operator explicitly ticks the "Delete all data on uninstall" checkbox on the MCP settings tab and saves. Sites that expected the pre-Feature-012 OAuth-table wipe on uninstall must tick the new checkbox before uninstall.
@@ -107,33 +222,31 @@ directory take precedence. For example, `/assets/screenshot-1.png` would win ove
 * Admin UI with client tabs
 * Copy-to-clipboard functionality
 
-== Arbitrary section ==
+== Support & Contribution ==
 
-You may provide arbitrary sections, in the same format as the ones above.  This may be of use for extremely complicated
-plugins where more information needs to be conveyed that doesn't fit into the categories of "description" or
-"installation."  Arbitrary sections will be shown below the built-in sections outlined above.
+For issues, feature requests, or contributions, visit the plugin repository.
 
-== A brief Markdown Example ==
+Questions? Check the FAQ section or look for documentation in the plugin settings page.
 
-Ordered list:
+== Development ==
 
-1. Some feature
-1. Another feature
-1. Something else about the plugin
+This plugin follows WordPress coding standards and best practices:
+- PHP 7.4+ compatible
+- Full object-oriented architecture
+- Secure nonce verification
+- Proper capability checks
+- Sanitized input validation
+- Escaped output
 
-Unordered list:
+== License ==
 
-* something
-* something else
-* third thing
+This plugin is licensed under the GPL-2.0-or-later license. See LICENSE file for details.
 
-Here's a link to [WordPress](http://wordpress.org/ "Your favorite software") and one to [Markdown's Syntax Documentation][markdown syntax].
-Titles are optional, naturally.
+== Credits ==
 
-[markdown syntax]: http://daringfireball.net/projects/markdown/syntax
-            "Markdown is what the parser uses to process much of the readme file"
+MCP Manager is built with:
+- WordPress native APIs
+- Automattic's MCP WordPress Remote package
+- WordPress Application Passwords system
 
-Markdown uses email style notation for blockquotes and I've been told:
-> Asterisks for *emphasis*. Double it up  for **strong**.
-
-`<?php code(); // goes in backticks ?>`
+Developed with ❤️ for the WordPress community.

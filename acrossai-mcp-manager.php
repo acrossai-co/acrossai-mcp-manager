@@ -20,18 +20,20 @@ namespace AcrossAI_MCP_Manager;
  * @package           AcrossAI_MCP_Manager
  *
  * @wordpress-plugin
- * Plugin Name:       AcrossAI MCP Manager
- * Plugin URI:        https://github.com/WPBoilerplate/acrossai-mcp-manager
- * Description:       AcrossAI MCP Manager by WPBoilerplate
- * Version:           0.0.6
- * Requires at least: 6.9
- * Requires PHP:      8.1
- * Author:            WPBoilerplate
- * Author URI:        https://github.com/WPBoilerplate/acrossai-mcp-manager
- * License:           GPL-2.0+
- * License URI:       http://www.gnu.org/licenses/gpl-2.0.txt
- * Text Domain:       acrossai-mcp-manager
- * Domain Path:       /languages
+ * Plugin Name: AcrossAI MCP Manager
+ * Plugin URI: https://acrossai.co/
+ * Description: Enable/Disable MCP Adapter Integration for WordPress
+ * Version: 0.0.7
+ * Author: raftaar1191
+ * Author URI: https://profiles.wordpress.org/raftaar1191/
+ * License: GPL-2.0-or-later
+ * License URI: https://www.gnu.org/licenses/gpl-2.0.html
+ * Text Domain: acrossai-mcp-manager
+ * Domain Path: /languages
+ * Requires PHP: 8.1
+ * Requires WP: 7.0
+ *
+ * @package AcrossAI_MCP_Manager
  */
 
 // If this file is called directly, abort.
