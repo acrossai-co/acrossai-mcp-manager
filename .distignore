@@ -2,23 +2,73 @@
 
 /.git
 /.github
+/.gitmodules
+/.gitattributes
+/.gitignore
+
+/.agents
+/.specify
+/.claude
+/.codex
+/.cursor
+/.gemini
+/.antigravity
+/.windsurf
+/.opencode
+/.junie
+/.idea
+/.vscode
+/.phpunit.cache
+/.sass-cache
 
 /node_modules
 
 /src
+/specs
+/docs
+/tests
+/scripts
+/coverage
+/packages
+/screenshots
+/logs
+/tmp
+/nbproject
 
-.gitattributes
 .distignore
-.gitignore
+.editorconfig
+.eslintrc
+.eslintignore
+.nvmrc
+.prettierignore
+.wp-env.json
+.wp-env.override.json
+.travis.yml
+.env
+.mcp.json
+.phpunit.result.cache
+.buildpath
+.project
+.sublimelinterrc
+.DS_Store
+Thumbs.db
+opencode.json
+*.log
+*.sublime-project
+*.sublime-workspace
 
-composer.json
+AGENTS.md
+CLAUDE.md
+README.md
+LICENSE.md
+
 composer.lock
 
 package.json
 package-lock.json
 
-README.md
-
 webpack.config.js
-
-.travis.yml
+eslint.config.js
+phpcs.xml.dist
+phpstan.neon.dist
+phpunit.xml.dist

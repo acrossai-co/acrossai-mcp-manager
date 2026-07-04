@@ -19,10 +19,9 @@ none
 .DS_Store
 Thumbs.db
 .idea
+.vscode
 *.sublime-project
 *.sublime-workspace
-# PHPUnit (per-developer test cache; declared in phpunit.xml.dist)
-.phpunit.cache/
 # Log files
 *.log
 /logs
@@ -71,3 +70,4 @@ CLAUDE.md
 opencode.json
 .junie/mcp/
 .junie/skills
+.mcp.json
