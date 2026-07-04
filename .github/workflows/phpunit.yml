@@ -35,5 +35,5 @@ jobs:
 
       - run: composer install --prefer-dist --no-progress
 
-      - name: Run PHPUnit
-        run: vendor/bin/phpunit
+      - name: Run PHPUnit (mcpclients — pure service classes, no WP bootstrap)
+        run: vendor/bin/phpunit --testsuite mcpclients
