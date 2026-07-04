@@ -4,20 +4,20 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "ef1e1d2fbd1f04774056c47537c535ec",
+    "content-hash": "0d468038faba2b1e6d480891f576ce0c",
     "packages": [
         {
             "name": "acrossai-co/main-menu",
-            "version": "0.0.10",
+            "version": "0.0.11",
             "source": {
                 "type": "git",
                 "url": "https://github.com/acrossai-co/main-menu.git",
-                "reference": "5173abbfa8ae090d1c8e34920870b63cf3ed5d27"
+                "reference": "ed6d21b3760d7066b2ade409379868ba14bbc355"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/acrossai-co/main-menu/zipball/5173abbfa8ae090d1c8e34920870b63cf3ed5d27",
-                "reference": "5173abbfa8ae090d1c8e34920870b63cf3ed5d27",
+                "url": "https://api.github.com/repos/acrossai-co/main-menu/zipball/ed6d21b3760d7066b2ade409379868ba14bbc355",
+                "reference": "ed6d21b3760d7066b2ade409379868ba14bbc355",
                 "shasum": ""
             },
             "require": {
@@ -43,9 +43,9 @@
             "description": "AcrossAI Admin Dashboard — parent menu, shared Settings page (Settings API), manager submenu slots, and an Add-ons page with Freemius integration.",
             "support": {
                 "issues": "https://github.com/acrossai-co/main-menu/issues",
-                "source": "https://github.com/acrossai-co/main-menu/tree/0.0.10"
+                "source": "https://github.com/acrossai-co/main-menu/tree/0.0.11"
             },
-            "time": "2026-07-02T10:14:38+00:00"
+            "time": "2026-07-04T01:01:24+00:00"
         },
         {
             "name": "automattic/jetpack-autoloader",
@@ -1029,8 +1029,8 @@
             "version": "2.2.x-dev",
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/phpstan/phpstan/zipball/735a6c1867ac816052ce586be841e617339accad",
-                "reference": "735a6c1867ac816052ce586be841e617339accad",
+                "url": "https://api.github.com/repos/phpstan/phpstan/zipball/097b2423361226c62512f2bea749277e0b843a60",
+                "reference": "097b2423361226c62512f2bea749277e0b843a60",
                 "shasum": ""
             },
             "require": {
@@ -1087,7 +1087,7 @@
                     "type": "github"
                 }
             ],
-            "time": "2026-07-02T09:45:18+00:00"
+            "time": "2026-07-03T19:52:30+00:00"
         },
         {
             "name": "phpunit/php-code-coverage",

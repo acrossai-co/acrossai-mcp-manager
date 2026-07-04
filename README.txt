@@ -4,7 +4,7 @@ Tags: mcp, ai, copilot, vscode, claude
 Requires at least: 7.0
 Requires PHP: 8.1
 Tested up to: 7.0
-Stable tag: 0.0.7
+Stable tag: 0.0.8
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -180,6 +180,17 @@ No additional software is needed on the WordPress side. Your MCP clients (VS Cod
 4. Per-provider configuration file locations and top-level keys
 
 == Changelog ==
+
+= 0.0.8 =
+* Dependencies: bump `acrossai-co/main-menu` to `0.0.11`.
+
+= 0.0.7 =
+* Docs: rewrite README.txt from the canonical baseline (proper Description, FAQ, Screenshots, install steps).
+* Docs: fix wp.org import warnings — real Contributors (`raftaar1191`), plugin-relevant Tags (`mcp, ai, copilot, vscode, claude`), and a Short Description tagline.
+* Header: refresh plugin header — Plugin URI `https://acrossai.co/`, Author `raftaar1191`, wp.org profile Author URI, License normalized to `GPL-2.0-or-later`.
+* Build: expand `.distignore` to exclude tooling / config / docs / tests / editor dirs from the wp.org build. `.gitignore` cleaned up.
+* CI: add GitHub Actions workflows for PHPStan, PHPCompatibility, PHPUnit (mcpclients suite), PHPCS, build-zip, and wp.org deploy.
+* Requirements: bump minimums to WordPress 7.0 / PHP 8.1.
 
 = 0.0.6 =
 * Migrated the four internal DB modules (MCP Servers, CLI Auth Log, OAuth Tokens, OAuth Audit) to BerlinDB Core 3.0. Fresh installs create tables with BerlinDB-derived schemas; the phantom-version guard on every Table subclass silently self-heals a stamped-but-missing table on the next activation. This release ships to zero live installs — no data migration path is provided; sites with pre-migration schema must be recreated from scratch.
