@@ -11,18 +11,17 @@ namespace AcrossAI_MCP_Manager\Includes\MCPClients;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Produces a shell-command STRING (not an array) — Claude Code uses
- * its CLI's `claude mcp add` command to register servers, idiomatic
- * per Anthropic's CLI MCP docs.
+ * Produces a `~/.claude.json`-shaped snippet.
  *
- * Shape:
- *   claude mcp add '<server-key>' \
- *     --env WP_API_URL='<url>' \
- *     --env WP_API_USERNAME='<username>' \
- *     --env WP_API_PASSWORD='<token>' \
- *     -- npx -y '@automattic/mcp-wordpress-remote@latest'
+ * Target file: `~/.claude.json`
+ * Top-level key: `mcpServers`
  *
- * Shell metacharacters in URL/token are escape-safe via escapeshellarg().
+ * OAUTH_ENABLED is pinned to "false" — the WordPress MCP server the user
+ * targets from Claude Code authenticates via Application Passwords (HTTP
+ * Basic), and the `@automattic/mcp-wordpress-remote` client's OAuth path
+ * expects a token endpoint we don't expose. Setting it explicitly here
+ * keeps the client from falling into its OAuth branch when a future
+ * default flip happens upstream.
  */
 final class ClaudeCodeClient extends AbstractMCPClient {
 
@@ -46,20 +45,22 @@ final class ClaudeCodeClient extends AbstractMCPClient {
 	 * @param string $server_url Already-sanitised server URL.
 	 * @param string $auth_token Already-issued Application Password (may be empty).
 	 *
-	 * @return string Shell-command snippet for `claude mcp add`.
+	 * @return array<string, mixed>
 	 */
-	public function get_config_snippet( string $server_url, string $auth_token ): string {
-		$key      = $this->derive_server_key( $server_url );
-		$token    = $this->safe_token( $auth_token );
-		$username = $this->current_username();
-
-		return sprintf(
-			'claude mcp add %s --env WP_API_URL=%s --env WP_API_USERNAME=%s --env WP_API_PASSWORD=%s -- npx -y %s',
-			escapeshellarg( $key ),
-			escapeshellarg( $server_url ),
-			escapeshellarg( $username ),
-			escapeshellarg( $token ),
-			escapeshellarg( '@automattic/mcp-wordpress-remote@latest' )
+	public function get_config_snippet( string $server_url, string $auth_token ): array {
+		return array(
+			'mcpServers' => array(
+				$this->derive_server_key( $server_url ) => array(
+					'command' => 'npx',
+					'args'    => array( '-y', '@automattic/mcp-wordpress-remote@latest' ),
+					'env'     => array(
+						'OAUTH_ENABLED'   => 'false',
+						'WP_API_URL'      => $server_url,
+						'WP_API_USERNAME' => $this->current_username(),
+						'WP_API_PASSWORD' => $this->safe_token( $auth_token ),
+					),
+				),
+			),
 		);
 	}
 }

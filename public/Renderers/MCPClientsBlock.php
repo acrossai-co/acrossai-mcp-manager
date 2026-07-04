@@ -62,9 +62,9 @@ final class MCPClientsBlock extends AbstractClientRenderer {
 		'claude-code'    => array(
 			'emoji'         => '📄',
 			'description'   => 'Anthropic Claude Code CLI',
-			'config_file'   => '~/.claude/mcp_servers.json',
+			'config_file'   => '~/.claude.json',
 			'top_level_key' => 'mcpServers',
-			'instructions'  => 'Generate a password → copy the JSON → run `claude mcp add-json` with the block, or paste into ~/.claude/mcp_servers.json under mcpServers → restart Claude Code.',
+			'instructions'  => 'Generate a password → copy the JSON → open the config file path above → paste under the top-level key → restart Claude Code.',
 		),
 		'vscode'         => array(
 			'emoji'         => '▤',
