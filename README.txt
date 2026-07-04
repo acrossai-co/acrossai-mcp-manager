@@ -4,7 +4,7 @@ Tags: mcp, ai, copilot, vscode, claude
 Requires at least: 7.0
 Requires PHP: 8.1
 Tested up to: 7.0
-Stable tag: 0.0.8
+Stable tag: 0.0.9
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -180,6 +180,11 @@ No additional software is needed on the WordPress side. Your MCP clients (VS Cod
 4. Per-provider configuration file locations and top-level keys
 
 == Changelog ==
+
+= 0.0.9 =
+* **Fix: Claude Code MCP Clients tab now shows a JSON config block instead of a `claude mcp add` shell command.** The `~/.claude.json` config file path is displayed correctly (was incorrectly listed as `~/.claude/mcp_servers.json`), the snippet renders as a copy-pasteable `mcpServers` block with `command`/`args`/`env`, and the env now pins `OAUTH_ENABLED: "false"` alongside `WP_API_URL` / `WP_API_USERNAME` / `WP_API_PASSWORD` to keep the `@automattic/mcp-wordpress-remote` client from falling into an OAuth branch it can't complete against an Application Password server. Instructions on the tab updated to match ("paste under the top-level key" — no more `claude mcp add-json`).
+* **Internal: `ACROSSAI_MCP_MANAGER_VERSION` constant now tracks the plugin header.** It had drifted at `0.0.6` across the 0.0.7 and 0.0.8 releases; this release resyncs it to `0.0.9`. Consumers reading the constant to key cache entries or telemetry will see a version bump even though there are no functional changes since 0.0.8 beyond the Claude Code tab fix above.
+* **Tests: repair 14 stale JSON fixtures.** The `ConcreteClientsTest` golden fixtures for `claude-desktop`, `vscode`, `github-copilot`, `codex`, `cursor`, and `custom` were missing the `WP_API_USERNAME` env field that all 6 clients have emitted since Feature 004. Adding the field brings fixtures back in sync with the code — 49/49 tests now pass (was 35/49).
 
 = 0.0.8 =
 * Dependencies: bump `acrossai-co/main-menu` to `0.0.11`.

@@ -8,6 +8,7 @@
             ],
             "env": {
                 "WP_API_URL": "https://example.com/wp-json/mcp/test-server",
+                "WP_API_USERNAME": "",
                 "WP_API_PASSWORD": "(paste generated password here)"
             }
         }

@@ -1,5 +1,4 @@
 {
-    "_comment": "Adapt the top-level key to match your MCP tool (e.g. mcp.servers, tools, etc.).",
     "mcpServers": {
         "test-server": {
             "command": "npx",
@@ -8,6 +7,7 @@
                 "@automattic/mcp-wordpress-remote@latest"
             ],
             "env": {
+                "OAUTH_ENABLED": "false",
                 "WP_API_URL": "https://example.com/wp-json/mcp/test-server",
                 "WP_API_USERNAME": "",
                 "WP_API_PASSWORD": "(paste generated password here)"
