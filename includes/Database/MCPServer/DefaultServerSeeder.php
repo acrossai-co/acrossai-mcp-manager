@@ -48,19 +48,16 @@ final class DefaultServerSeeder {
 		$wpdb->insert(
 			$table,
 			array(
-				'server_name'                    => 'Default MCP Server',
-				'server_slug'                    => self::SLUG,
-				'description'                    => __( 'Default MCP server registered by the plugin.', 'acrossai-mcp-manager' ),
-				'is_enabled'                     => 0,
-				'registered_from'                => 'plugin',
-				'server_route_namespace'         => 'mcp',
-				'server_route'                   => self::SLUG,
-				'server_version'                 => 'v1.0.0',
-				'claude_connector_client_id'     => '',
-				'claude_connector_client_secret' => '',
-				'claude_connector_redirect_uri'  => '',
+				'server_name'            => 'Default MCP Server',
+				'server_slug'            => self::SLUG,
+				'description'            => __( 'Default MCP server registered by the plugin.', 'acrossai-mcp-manager' ),
+				'is_enabled'             => 0,
+				'registered_from'        => 'plugin',
+				'server_route_namespace' => 'mcp',
+				'server_route'           => self::SLUG,
+				'server_version'         => 'v1.0.0',
 			),
-			array( '%s', '%s', '%s', '%d', '%s', '%s', '%s', '%s', '%s', '%s', '%s' )
+			array( '%s', '%s', '%s', '%d', '%s', '%s', '%s', '%s' )
 		);
 
 		wp_cache_delete( 'all_servers', 'acrossai_mcp' );

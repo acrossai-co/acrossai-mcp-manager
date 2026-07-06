@@ -65,10 +65,10 @@ class Notices {
 			'server_deleted'   => array( 'success', __( 'Server deleted.', 'acrossai-mcp-manager' ) ),
 			'server_toggled'   => array( 'success', __( 'Server status toggled.', 'acrossai-mcp-manager' ) ),
 			'bulk_completed'   => array( 'success', __( 'Bulk action completed.', 'acrossai-mcp-manager' ) ),
-			'slug_exists'      => array( 'error',   __( 'Slug already in use.', 'acrossai-mcp-manager' ) ),
-			'empty_name'       => array( 'error',   __( 'Server name is required.', 'acrossai-mcp-manager' ) ),
-			'db_error'         => array( 'error',   __( 'Database write failed.', 'acrossai-mcp-manager' ) ),
-			'server_not_found' => array( 'error',   __( 'Server not found.', 'acrossai-mcp-manager' ) ),
+			'slug_exists'      => array( 'error', __( 'Slug already in use.', 'acrossai-mcp-manager' ) ),
+			'empty_name'       => array( 'error', __( 'Server name is required.', 'acrossai-mcp-manager' ) ),
+			'db_error'         => array( 'error', __( 'Database write failed.', 'acrossai-mcp-manager' ) ),
+			'server_not_found' => array( 'error', __( 'Server not found.', 'acrossai-mcp-manager' ) ),
 		);
 
 		if ( ! isset( $messages[ $notice ] ) ) {

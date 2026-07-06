@@ -14,7 +14,6 @@ declare( strict_types = 1 );
 namespace AcrossAI_MCP_Manager\Tests\PHPUnit\Database;
 
 use AcrossAI_MCP_Manager\Includes\Database\CliAuthLog\Schema as CliAuthLogSchema;
-use AcrossAI_MCP_Manager\Includes\Database\OAuthToken\Schema as OAuthTokenSchema;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -52,9 +51,8 @@ class ColumnWidthInvariantTest extends TestCase {
 	 */
 	public static function provideCryptographicColumns(): array {
 		return array(
-			'CliAuthLog auth_code_hash (SHA-256)'    => array( CliAuthLogSchema::class, 'auth_code_hash', 'char', '64' ),
-			'CliAuthLog code_challenge (PKCE S256)'  => array( CliAuthLogSchema::class, 'code_challenge', 'char', '43' ),
-			'OAuthToken access_token_hash (SHA-256)' => array( OAuthTokenSchema::class, 'access_token_hash', 'char', '64' ),
+			'CliAuthLog auth_code_hash (SHA-256)'   => array( CliAuthLogSchema::class, 'auth_code_hash', 'char', '64' ),
+			'CliAuthLog code_challenge (PKCE S256)' => array( CliAuthLogSchema::class, 'code_challenge', 'char', '43' ),
 		);
 	}
 }

@@ -204,8 +204,6 @@ final class Main {
 	private function bootstrap_database_tables() {
 		\AcrossAI_MCP_Manager\Includes\Database\MCPServer\Table::instance();
 		\AcrossAI_MCP_Manager\Includes\Database\CliAuthLog\Table::instance();
-		\AcrossAI_MCP_Manager\Includes\Database\OAuthToken\Table::instance();
-		\AcrossAI_MCP_Manager\Includes\Database\OAuthAudit\Table::instance();
 	}
 
 	/**
@@ -245,12 +243,6 @@ final class Main {
 	private function load_dependencies() {
 
 		$this->loader = Loader::instance();
-
-		// Phase 5 — WP-CLI command for the OAuth cleanup sweep. Only
-		// registered when running under WP-CLI; guarded inside the helper.
-		if ( defined( 'WP_CLI' ) && \WP_CLI ) {
-			\AcrossAI_MCP_Manager\Includes\OAuth\CliCommand::register();
-		}
 	}
 
 	/**
@@ -416,19 +408,6 @@ final class Main {
 		// TODO (phase 5): wire REST\CliController.
 		// $cli_controller = \AcrossAI_MCP_Manager\Includes\REST\CliController::instance();
 		// $this->loader->add_action( 'rest_api_init', $cli_controller, 'register_routes' );
-
-		// TODO (phase 6): wire Includes\OAuth\ClaudeConnectors (10 hooks).
-		// $claude_connectors = \AcrossAI_MCP_Manager\Includes\OAuth\ClaudeConnectors::instance();
-		// $this->loader->add_action( 'init', $claude_connectors, 'register_rewrite_rules' );
-		// $this->loader->add_action( 'init', $claude_connectors, 'maybe_flush_rewrite_rules', 20 );
-		// $this->loader->add_filter( 'query_vars', $claude_connectors, 'add_query_vars' );
-		// $this->loader->add_filter( 'redirect_canonical', $claude_connectors, 'disable_canonical_redirects', 10, 2 );
-		// $this->loader->add_action( 'wp_enqueue_scripts', $claude_connectors, 'enqueue_assets' );
-		// $this->loader->add_action( 'template_redirect', $claude_connectors, 'handle_frontend_request' );
-		// $this->loader->add_action( 'rest_api_init', $claude_connectors, 'register_rest_routes' );
-		// $this->loader->add_filter( 'determine_current_user', $claude_connectors, 'determine_current_user_from_bearer', 20 );
-		// $this->loader->add_filter( 'rest_post_dispatch', $claude_connectors, 'decorate_mcp_response', 10, 3 );
-		// $this->loader->add_action( 'acrossai_mcp_access_denied', $claude_connectors, 'log_access_denied_event', 10, 4 );
 	}
 
 	/**
@@ -439,30 +418,6 @@ final class Main {
 	 * @access   private
 	 */
 	private function define_public_hooks() {
-
-		$plugin_public = \AcrossAI_MCP_Manager\Public\Main::instance();
-
-		$this->loader->add_action( 'wp_enqueue_scripts', $plugin_public, 'enqueue_styles' );
-
-		$this->loader->add_action( 'wp_enqueue_scripts', $plugin_public, 'enqueue_scripts' );
-
-		/**
-		 * Phase 5 — OAuth / Claude Connectors wiring (FR-021 / A1).
-		 *
-		 * Every OAuth hook trace MUST be in this method — feature classes
-		 * never call add_action / add_filter themselves.
-		 */
-		$claude_connectors = \AcrossAI_MCP_Manager\Includes\OAuth\ClaudeConnectors::instance();
-		$this->loader->add_action( 'init', $claude_connectors, 'register_rewrite_rules' );
-		$this->loader->add_filter( 'query_vars', $claude_connectors, 'add_query_var' );
-		$this->loader->add_action( 'template_redirect', $claude_connectors, 'serve_discovery_or_authorize', 9 );
-		$this->loader->add_action( 'acrossai_mcp_oauth_cleanup', $claude_connectors, 'handle_cleanup_event' );
-
-		$token_controller = \AcrossAI_MCP_Manager\Includes\OAuth\TokenController::instance();
-		$this->loader->add_action( 'rest_api_init', $token_controller, 'register_routes' );
-
-		$bearer_auth = \AcrossAI_MCP_Manager\Includes\OAuth\BearerAuth::instance();
-		$this->loader->add_filter( 'determine_current_user', $bearer_auth, 'resolve_bearer_token', 20 );
 
 		/**
 		 * Phase 6 — REST CLI Authentication Controller + Phase 6.0 FrontendAuth.
@@ -482,8 +437,8 @@ final class Main {
 		/**
 		 * Feature 013 — Public Renderer layer.
 		 *
-		 * Wires the REST endpoint + 3 shortcodes for the public client-config
-		 * renderers (NpmClientBlock, MCPClientsBlock, ClaudeConnectorBlock).
+		 * Wires the REST endpoint + 2 shortcodes for the public client-config
+		 * renderers (NpmClientBlock, MCPClientsBlock).
 		 * Third-party plugins (BuddyBoss, WooCommerce, etc.) consume via:
 		 *   - do_action( 'acrossai_mcp_render_client_block', $slug, $server_id, $context )
 		 *   - apply_filters( 'acrossai_mcp_client_block_context', $context, $slug, $server_id )

@@ -20,17 +20,6 @@
         </testsuite>
 
         <!--
-            OAuth (Phase 5.0 per D11): tests need WordPress for nonces,
-            sessions, wp_set_current_user, register_rest_route, etc.
-            Bootstrap is tests/bootstrap-wp.php (loads WP-PHPUnit). Run with
-            the oauth testsuite name and override the bootstrap path via
-            phpunit CLI flags when running the suite in isolation.
-        -->
-        <testsuite name="oauth">
-            <directory>tests/phpunit/OAuth</directory>
-        </testsuite>
-
-        <!--
             CLI REST (Phase 6): tests need WP for transients, nonces,
             wp_set_current_user, register_rest_route, WP_Application_Passwords.
             Reuses Phase 5.0 bootstrap-wp.php (no new harness work). Covers

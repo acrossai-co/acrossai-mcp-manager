@@ -61,9 +61,7 @@ final class Registry {
 	/**
 	 * Returns the ordered list of tab instances.
 	 *
-	 * TASK-2 (US5) registers the 4 existing tabs. TASK-4/5 (US2/US1) add
-	 * NpmTab + ClientsTab + WpCliTab + ToolsTab + McpTrackerTab + AbilitiesTab.
-	 * TASK-7 (US1) adds UpdateServerTab + DangerZoneTab to reach 11 total.
+	 * Post-Feature 016 the tab count is 10.
 	 *
 	 * @since 0.0.6
 	 * @return AbstractServerTab[]
@@ -73,7 +71,6 @@ final class Registry {
 			new OverviewTab(),
 			new NpmTab(),
 			new ClientsTab(),
-			new ClaudeConnectorTab(),
 			new WpCliTab(),
 			new ToolsTab(),
 			new AbilitiesTab(),

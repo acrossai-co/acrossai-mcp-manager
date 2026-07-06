@@ -104,30 +104,6 @@ class Schema extends \BerlinDB\Database\Kern\Schema {
 			'default' => 'v1.0.0',
 		),
 
-		// Claude connector OAuth client ID.
-		array(
-			'name'    => 'claude_connector_client_id',
-			'type'    => 'varchar',
-			'length'  => '255',
-			'default' => '',
-		),
-
-		// Claude connector OAuth client secret.
-		array(
-			'name'    => 'claude_connector_client_secret',
-			'type'    => 'varchar',
-			'length'  => '255',
-			'default' => '',
-		),
-
-		// Claude connector OAuth redirect URI.
-		array(
-			'name'    => 'claude_connector_redirect_uri',
-			'type'    => 'varchar',
-			'length'  => '500',
-			'default' => '',
-		),
-
 		// Audit timestamp — no explicit default; BerlinDB uses '0000-00-00 00:00:00'
 		// for datetime columns. 'created' flag handles auto-timestamping at the
 		// application layer (CURRENT_TIMESTAMP quoted by BerlinDB is invalid DDL).

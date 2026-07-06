@@ -29,12 +29,12 @@ description: "Task list — Feature 016 Remove Claude Connectors"
 
 **Purpose**: Capture the pre-flight grep baseline before any deletions land — this is the reference against which the FR-015 final audit compares.
 
-- [ ] T001 Capture pre-flight grep baseline. Run from plugin root:
+- [X] T001 Capture pre-flight grep baseline. Run from plugin root:
   ```
   grep -rEn '(claude[_-]connector|ClaudeConnector|OAuth\\\\(Storage|AuditLog|TokenController|BearerAuth|PKCE|CliCommand)|OAuthToken|OAuthAudit|acrossai_mcp_claude_connectors_enabled|acrossai_mcp_oauth_cleanup|frontend-oauth)' --include='*.php' --include='*.js' --include='*.scss' --include='*.css' --include='*.json' includes/ admin/ public/ src/ tests/ webpack.config.js uninstall.php acrossai-mcp-manager.php > specs/016-remove-claude-connectors/pre-flight-callers.txt
   ```
   Commit `pre-flight-callers.txt` as a reference artifact.
-- [ ] T002 [P] Verify B15 grep-hygiene guard works. Create scratch file `/tmp/scratch-b15.php` with `<?php use \AcrossAI_MCP_Manager\Includes\OAuth\Storage;` and `new \AcrossAI_MCP_Manager\Includes\OAuth\Storage();`. Copy into `includes/` temporarily. Run the T001 grep. Confirm 2 hits appear (proves ERE `\\?` alternation matches both bare-`use` and leading-`\` FQN forms). Delete the scratch file. If the grep misses one form, the FR-015 audit at T031 will produce false PASS on that form and must be fixed before proceeding.
+- [X] T002 [P] Verify B15 grep-hygiene guard works. Create scratch file `/tmp/scratch-b15.php` with `<?php use \AcrossAI_MCP_Manager\Includes\OAuth\Storage;` and `new \AcrossAI_MCP_Manager\Includes\OAuth\Storage();`. Copy into `includes/` temporarily. Run the T001 grep. Confirm 2 hits appear (proves ERE `\\?` alternation matches both bare-`use` and leading-`\` FQN forms). Delete the scratch file. If the grep misses one form, the FR-015 audit at T031 will produce false PASS on that form and must be fixed before proceeding.
 
 ---
 
@@ -52,16 +52,16 @@ description: "Task list — Feature 016 Remove Claude Connectors"
 
 **Independent Test**: On an install with the previous plugin version, apply this phase's edits, reactivate, confirm server-edit page renders 10 tabs (was 11) and Settings → MCP has no "Claude Connectors" section. Insert `[acrossai_mcp_claude_connector_block server=1]` on a test page — renders as literal shortcode text.
 
-- [ ] T003 [P] [US1] Delete `admin/Partials/ServerTabs/ClaudeConnectorTab.php` (entire file).
-- [ ] T004 [P] [US1] Delete `admin/Partials/ConnectorAuditLogListTable.php` (entire file).
-- [ ] T005 [P] [US1] Delete `public/Renderers/ClaudeConnectorBlock.php` (entire file).
-- [ ] T006 [US1] Modify `admin/Partials/ServerTabs/Registry.php` — remove the `new ClaudeConnectorTab()` entry from `all_tabs()` (should leave exactly 10 tab instances) and remove the `use AcrossAI_MCP_Manager\Admin\Partials\ServerTabs\ClaudeConnectorTab;` import at the top.
-- [ ] T007 [US1] Modify `admin/Partials/Settings.php` — (a) remove `'save_claude_connector'` from the allowed-actions whitelist in `handle_actions()`; (b) delete the entire `if ( 'save_claude_connector' === $action ) { ... }` handler branch; (c) delete the `handle_save_claude_connector()` private method in its entirety.
-- [ ] T008 [US1] Modify `admin/Partials/SettingsMenu.php` — delete (a) the `register_setting( 'acrossai-settings', 'acrossai_mcp_claude_connectors_enabled', ... )` call; (b) the `add_settings_section()` + `add_settings_field()` calls for the "Claude Connectors" section; (c) the `render_claude_connectors_section_description()` method.
-- [ ] T009 [US1] Modify `includes/REST/ClientRendererController.php` — delete (a) the `add_shortcode( 'acrossai_mcp_claude_connector_block', ... )` registration inside `register_shortcodes_and_actions()`; (b) the `'claude-connector' => ClaudeConnectorBlock::class` entry in the dispatch map inside `dispatch_render_action()`; (c) the `use AcrossAI_MCP_Manager\Public\Renderers\ClaudeConnectorBlock;` import at the top.
-- [ ] T010 [P] [US1] Modify `tests/phpunit/Admin/ServerTabs/RegistryTest.php` — remove `'claude-connector'` from the expected-tabs slug list; update tab-count assertion from 11 to 10.
-- [ ] T011 [P] [US1] Modify `tests/phpunit/Admin/SettingsMenuTest.php` — remove any assertion about `acrossai_mcp_claude_connectors_enabled` registration and any "Claude Connectors" section presence check.
-- [ ] T012 [P] [US1] Handle `tests/phpunit/Public/Renderers/PublicApiTest.php`. Read the file first. If EVERY test method targets `ClaudeConnectorBlock`, delete the entire file. Otherwise, remove only the connector-specific test methods + fixtures; keep the file with the residual assertions.
+- [X] T003 [P] [US1] Delete `admin/Partials/ServerTabs/ClaudeConnectorTab.php` (entire file).
+- [X] T004 [P] [US1] Delete `admin/Partials/ConnectorAuditLogListTable.php` (entire file).
+- [X] T005 [P] [US1] Delete `public/Renderers/ClaudeConnectorBlock.php` (entire file).
+- [X] T006 [US1] Modify `admin/Partials/ServerTabs/Registry.php` — remove the `new ClaudeConnectorTab()` entry from `all_tabs()` (should leave exactly 10 tab instances) and remove the `use AcrossAI_MCP_Manager\Admin\Partials\ServerTabs\ClaudeConnectorTab;` import at the top.
+- [X] T007 [US1] Modify `admin/Partials/Settings.php` — (a) remove `'save_claude_connector'` from the allowed-actions whitelist in `handle_actions()`; (b) delete the entire `if ( 'save_claude_connector' === $action ) { ... }` handler branch; (c) delete the `handle_save_claude_connector()` private method in its entirety.
+- [X] T008 [US1] Modify `admin/Partials/SettingsMenu.php` — delete (a) the `register_setting( 'acrossai-settings', 'acrossai_mcp_claude_connectors_enabled', ... )` call; (b) the `add_settings_section()` + `add_settings_field()` calls for the "Claude Connectors" section; (c) the `render_claude_connectors_section_description()` method.
+- [X] T009 [US1] Modify `includes/REST/ClientRendererController.php` — delete (a) the `add_shortcode( 'acrossai_mcp_claude_connector_block', ... )` registration inside `register_shortcodes_and_actions()`; (b) the `'claude-connector' => ClaudeConnectorBlock::class` entry in the dispatch map inside `dispatch_render_action()`; (c) the `use AcrossAI_MCP_Manager\Public\Renderers\ClaudeConnectorBlock;` import at the top.
+- [X] T010 [P] [US1] Modify `tests/phpunit/Admin/ServerTabs/RegistryTest.php` — remove `'claude-connector'` from the expected-tabs slug list; update tab-count assertion from 11 to 10.
+- [X] T011 [P] [US1] Modify `tests/phpunit/Admin/SettingsMenuTest.php` — remove any assertion about `acrossai_mcp_claude_connectors_enabled` registration and any "Claude Connectors" section presence check.
+- [X] T012 [P] [US1] Handle `tests/phpunit/Public/Renderers/PublicApiTest.php`. Read the file first. If EVERY test method targets `ClaudeConnectorBlock`, delete the entire file. Otherwise, remove only the connector-specific test methods + fixtures; keep the file with the residual assertions.
 
 **Checkpoint**: US1 complete. Admin surface has no Claude Connectors references. Manual smoke test per Independent Test above.
 
@@ -73,17 +73,17 @@ description: "Task list — Feature 016 Remove Claude Connectors"
 
 **Independent Test**: On an install with pre-Feature-016 data (13-column MCPServer, 2 OAuth tables, scheduled cron), run the operator's manual recipe (`spec.md` §User Story 2), reactivate the plugin, verify reactivation completes without fatal, `SHOW WARNINGS` empty, `wp cron event list` shows no `acrossai_mcp_oauth_cleanup`.
 
-- [ ] T013 [P] [US2] Delete `includes/OAuth/` directory in its entirety — 7 files: `ClaudeConnectors.php`, `Storage.php`, `AuditLog.php`, `TokenController.php`, `BearerAuth.php`, `PKCE.php`, `CliCommand.php`. Directory should not exist after this task.
-- [ ] T014 [P] [US2] Delete `includes/Database/OAuthToken/` directory in its entirety — 4 files: `Table.php`, `Schema.php`, `Query.php`, `Row.php`. Directory should not exist after this task.
-- [ ] T015 [P] [US2] Delete `includes/Database/OAuthAudit/` directory in its entirety — 4 files: `Table.php`, `Schema.php`, `Query.php`, `Row.php`. Directory should not exist after this task.
-- [ ] T016 [US2] Modify `includes/Main.php` — delete (a) the `$claude_connectors = ClaudeConnectors::instance();` block and its four hook registrations (`init` → `register_rewrite_rules`, `query_vars` filter → `add_query_var`, `template_redirect` priority 9 → `serve_discovery_or_authorize`, `acrossai_mcp_oauth_cleanup` action → `handle_cleanup_event`) in `define_public_hooks()`; (b) the `$token_controller = TokenController::instance(); ... rest_api_init` block; (c) the `$bearer_auth = BearerAuth::instance(); ... determine_current_user` block; (d) the `wp_enqueue_scripts` hook registrations for `Public\Main::enqueue_styles` and `Public\Main::enqueue_scripts`; (e) the two `Table::instance()` calls for `OAuthToken\Table` + `OAuthAudit\Table` in `bootstrap_database_tables()`; (f) all associated `use` imports at the top of the file. Preserve `MCPServer\Table::instance()` and `CliAuthLog\Table::instance()` boot calls verbatim.
-- [ ] T017 [US2] Modify `includes/Activator.php` — delete (a) the `class_exists( ClaudeConnectors::class ) { ClaudeConnectors::instance()->register_rewrite_rules(); }` block; (b) the `if ( ! wp_next_scheduled( 'acrossai_mcp_oauth_cleanup' ) ) { wp_schedule_event(...) }` block; (c) the two `Table::instance()->maybe_upgrade()` calls for `OAuthToken\Table` + `OAuthAudit\Table` and their `use` imports. Preserve the existing final `flush_rewrite_rules()` call, `MCPServerTable::instance()->maybe_upgrade()`, `CliAuthLogTable::instance()->maybe_upgrade()`, and `DefaultServerSeeder::seed()` calls verbatim. Do NOT add any new destructive SQL or `delete_option` cleanup — operator handles that manually per spec §User Story 2.
-- [ ] T018 [US2] Modify `includes/Deactivator.php` — delete the `wp_clear_scheduled_hook( 'acrossai_mcp_oauth_cleanup' )` line entirely. String is retired by FR-015; operator unschedules manually via `wp cron event unschedule acrossai_mcp_oauth_cleanup`.
-- [ ] T019 [P] [US2] Modify `includes/Database/MCPServer/Schema.php` — delete the three column definitions: `claude_connector_client_id` (varchar 255 default ''), `claude_connector_client_secret` (varchar 255 default ''), `claude_connector_redirect_uri` (varchar 500 default ''). Preserve the other 10 columns' type/length/default/sortable/searchable metadata byte-for-byte. Do NOT bump `MCPServer/Table.php::$version` (fresh-install-only stance).
-- [ ] T020 [P] [US2] Modify `includes/Database/MCPServer/Row.php` — delete the three `public $claude_connector_client_id`, `public $claude_connector_client_secret`, `public $claude_connector_redirect_uri` property declarations AND their three matching entries in the `to_array()` method's return array. Preserve all other properties and to_array entries verbatim.
-- [ ] T021 [P] [US2] Modify `includes/Database/MCPServer/DefaultServerSeeder.php` — delete the three `'claude_connector_*' => ''` entries from the insert `$data` array AND the three matching `%s` format specifiers from the format array. Confirm the resulting seed insert compiles cleanly and matches the 10-column shape.
-- [ ] T022 [P] [US2] Delete `tests/phpunit/OAuth/` directory in its entirety — 22 files including `fixtures/` subdirectory. Directory should not exist after this task.
-- [ ] T023 [P] [US2] Delete `tests/phpunit/Public/MainEnqueueTest.php` — targets the deleted `Public\Main::enqueue_styles/scripts` methods; no reason to keep.
+- [X] T013 [P] [US2] Delete `includes/OAuth/` directory in its entirety — 7 files: `ClaudeConnectors.php`, `Storage.php`, `AuditLog.php`, `TokenController.php`, `BearerAuth.php`, `PKCE.php`, `CliCommand.php`. Directory should not exist after this task.
+- [X] T014 [P] [US2] Delete `includes/Database/OAuthToken/` directory in its entirety — 4 files: `Table.php`, `Schema.php`, `Query.php`, `Row.php`. Directory should not exist after this task.
+- [X] T015 [P] [US2] Delete `includes/Database/OAuthAudit/` directory in its entirety — 4 files: `Table.php`, `Schema.php`, `Query.php`, `Row.php`. Directory should not exist after this task.
+- [X] T016 [US2] Modify `includes/Main.php` — delete (a) the `$claude_connectors = ClaudeConnectors::instance();` block and its four hook registrations (`init` → `register_rewrite_rules`, `query_vars` filter → `add_query_var`, `template_redirect` priority 9 → `serve_discovery_or_authorize`, `acrossai_mcp_oauth_cleanup` action → `handle_cleanup_event`) in `define_public_hooks()`; (b) the `$token_controller = TokenController::instance(); ... rest_api_init` block; (c) the `$bearer_auth = BearerAuth::instance(); ... determine_current_user` block; (d) the `wp_enqueue_scripts` hook registrations for `Public\Main::enqueue_styles` and `Public\Main::enqueue_scripts`; (e) the two `Table::instance()` calls for `OAuthToken\Table` + `OAuthAudit\Table` in `bootstrap_database_tables()`; (f) all associated `use` imports at the top of the file. Preserve `MCPServer\Table::instance()` and `CliAuthLog\Table::instance()` boot calls verbatim.
+- [X] T017 [US2] Modify `includes/Activator.php` — delete (a) the `class_exists( ClaudeConnectors::class ) { ClaudeConnectors::instance()->register_rewrite_rules(); }` block; (b) the `if ( ! wp_next_scheduled( 'acrossai_mcp_oauth_cleanup' ) ) { wp_schedule_event(...) }` block; (c) the two `Table::instance()->maybe_upgrade()` calls for `OAuthToken\Table` + `OAuthAudit\Table` and their `use` imports. Preserve the existing final `flush_rewrite_rules()` call, `MCPServerTable::instance()->maybe_upgrade()`, `CliAuthLogTable::instance()->maybe_upgrade()`, and `DefaultServerSeeder::seed()` calls verbatim. Do NOT add any new destructive SQL or `delete_option` cleanup — operator handles that manually per spec §User Story 2.
+- [X] T018 [US2] Modify `includes/Deactivator.php` — delete the `wp_clear_scheduled_hook( 'acrossai_mcp_oauth_cleanup' )` line entirely. String is retired by FR-015; operator unschedules manually via `wp cron event unschedule acrossai_mcp_oauth_cleanup`.
+- [X] T019 [P] [US2] Modify `includes/Database/MCPServer/Schema.php` — delete the three column definitions: `claude_connector_client_id` (varchar 255 default ''), `claude_connector_client_secret` (varchar 255 default ''), `claude_connector_redirect_uri` (varchar 500 default ''). Preserve the other 10 columns' type/length/default/sortable/searchable metadata byte-for-byte. Do NOT bump `MCPServer/Table.php::$version` (fresh-install-only stance).
+- [X] T020 [P] [US2] Modify `includes/Database/MCPServer/Row.php` — delete the three `public $claude_connector_client_id`, `public $claude_connector_client_secret`, `public $claude_connector_redirect_uri` property declarations AND their three matching entries in the `to_array()` method's return array. Preserve all other properties and to_array entries verbatim.
+- [X] T021 [P] [US2] Modify `includes/Database/MCPServer/DefaultServerSeeder.php` — delete the three `'claude_connector_*' => ''` entries from the insert `$data` array AND the three matching `%s` format specifiers from the format array. Confirm the resulting seed insert compiles cleanly and matches the 10-column shape.
+- [X] T022 [P] [US2] Delete `tests/phpunit/OAuth/` directory in its entirety — 22 files including `fixtures/` subdirectory. Directory should not exist after this task.
+- [X] T023 [P] [US2] Delete `tests/phpunit/Public/MainEnqueueTest.php` — targets the deleted `Public\Main::enqueue_styles/scripts` methods; no reason to keep.
 
 **Checkpoint**: US2 complete. All OAuth-code deletions landed. Plugin has no runtime references to retired OAuth infrastructure. Manual smoke: apply operator recipe on a pre-016 install, reactivate, verify no fatal + `SHOW WARNINGS` empty.
 
@@ -95,11 +95,11 @@ description: "Task list — Feature 016 Remove Claude Connectors"
 
 **Independent Test**: On a fresh WP install with no prior AcrossAI plugin, activate the plugin. Verify `SHOW TABLES LIKE 'wp_acrossai_mcp_%'` returns 2 rows, `DESCRIBE wp_acrossai_mcp_servers` returns 10 columns, `wp cron event list` shows no OAuth cron, no `acrossai-mcp-frontend-oauth` enqueue.
 
-- [ ] T024 [P] [US3] Modify `public/Main.php` — delete (a) the `enqueue_styles()` method in its entirety; (b) the `enqueue_scripts()` method in its entirety; (c) the `OAUTH_STYLE_HANDLE` constant declaration; (d) the `use AcrossAI_MCP_Manager\Includes\OAuth\ClaudeConnectors;` import at the top of the file. Confirm no remaining method body references `ClaudeConnectors::is_authorize_page()`.
-- [ ] T025 [P] [US3] Delete `src/scss/frontend-oauth.scss` (entire file). Source SCSS is gone; the build step in T028 regenerates `build/` naturally.
-- [ ] T026 [P] [US3] Modify `webpack.config.js` — remove the `'css/frontend-oauth': path.resolve( process.cwd(), 'src/scss', 'frontend-oauth.scss' )` entry from the `entry` object (currently lines 97–101). Preserve every other entry (`css/frontend`, `css/backend`, `js/frontend`, `js/backend`, `js/access-control`, block entries, etc.) verbatim.
-- [ ] T027 [P] [US3] Delete `build/css/frontend-oauth.css`, `build/css/frontend-oauth-rtl.css`, and `build/css/frontend-oauth.asset.php` if they exist. (T028's `npm run build` regenerates the build dir cleanly, so this step is optional but keeps the intermediate state clean.)
-- [ ] T028 [US3] Run `npm run build` from plugin root. Verify: (a) exit code 0; (b) no error/warning output referencing frontend-oauth; (c) no `build/css/frontend-oauth*` files exist in the output.
+- [X] T024 [P] [US3] Modify `public/Main.php` — delete (a) the `enqueue_styles()` method in its entirety; (b) the `enqueue_scripts()` method in its entirety; (c) the `OAUTH_STYLE_HANDLE` constant declaration; (d) the `use AcrossAI_MCP_Manager\Includes\OAuth\ClaudeConnectors;` import at the top of the file. Confirm no remaining method body references `ClaudeConnectors::is_authorize_page()`.
+- [X] T025 [P] [US3] Delete `src/scss/frontend-oauth.scss` (entire file). Source SCSS is gone; the build step in T028 regenerates `build/` naturally.
+- [X] T026 [P] [US3] Modify `webpack.config.js` — remove the `'css/frontend-oauth': path.resolve( process.cwd(), 'src/scss', 'frontend-oauth.scss' )` entry from the `entry` object (currently lines 97–101). Preserve every other entry (`css/frontend`, `css/backend`, `js/frontend`, `js/backend`, `js/access-control`, block entries, etc.) verbatim.
+- [X] T027 [P] [US3] Delete `build/css/frontend-oauth.css`, `build/css/frontend-oauth-rtl.css`, and `build/css/frontend-oauth.asset.php` if they exist. (T028's `npm run build` regenerates the build dir cleanly, so this step is optional but keeps the intermediate state clean.)
+- [X] T028 [US3] Run `npm run build` from plugin root. Verify: (a) exit code 0; (b) no error/warning output referencing frontend-oauth; (c) no `build/css/frontend-oauth*` files exist in the output.
 
 **Checkpoint**: US3 complete. Fresh install path is lean. Manual smoke on a disposable WP install: activate, run `wp db query "SHOW TABLES LIKE 'wp_acrossai_mcp_%'"` (expect 2 rows) + `wp db query "DESCRIBE wp_acrossai_mcp_servers"` (expect 10 rows).
 
@@ -111,8 +111,8 @@ description: "Task list — Feature 016 Remove Claude Connectors"
 
 **Independent Test**: On any install after Phases 3–5 land, initiate a WP-CLI-driven auth handshake, complete the browser approval, verify App Password is issued in `wp_usermeta` + row in `wp_acrossai_mcp_cli_auth_logs`, and confirm `Authorization: Bearer` headers no longer elevate users.
 
-- [ ] T029 [P] [US4] Verify CLI auth stack files are untouched by the retirement. Run: `git diff --name-only main -- 'public/Partials/FrontendAuth.php' 'includes/REST/CliController.php' 'includes/Database/CliAuthLog/**' 'src/scss/frontend.scss' 'build/css/frontend*.css'`. Expected output: EMPTY. Any file listed here indicates accidental over-deletion — investigate and revert before proceeding.
-- [ ] T030 [US4] Manual smoke on the Local site: (a) initiate the CLI auth flow (invoke whichever WP-CLI-driven client the plugin's canonical flow uses — see `docs/planings-tasks/phase-cli-auth.md`); (b) confirm the browser approval page loads with `acrossai-mcp-frontend` stylesheet enqueued (View Source); (c) approve the request in-browser; (d) run `wp db query "SELECT status, server_id, user_id FROM wp_acrossai_mcp_cli_auth_logs ORDER BY id DESC LIMIT 1"` — expect status='approved'; (e) run `curl -H "Authorization: Bearer 0123456789abcdef" https://LOCAL/wp-json/wp/v2/users/me` — expect 401 `rest_not_logged_in`.
+- [X] T029 [P] [US4] Verify CLI auth stack files are untouched by the retirement. Run: `git diff --name-only main -- 'public/Partials/FrontendAuth.php' 'includes/REST/CliController.php' 'includes/Database/CliAuthLog/**' 'src/scss/frontend.scss' 'build/css/frontend*.css'`. Expected output: EMPTY. Any file listed here indicates accidental over-deletion — investigate and revert before proceeding.
+- [ ] T030 [US4] **AWAITING OPERATOR SMOKE TEST** (deferred from autonomous run per C2 in `/speckit-analyze` 2026-07-07). Manual smoke on the Local site: (a) initiate the CLI auth flow (invoke whichever WP-CLI-driven client the plugin's canonical flow uses — see `docs/planings-tasks/phase-cli-auth.md`); (b) confirm the browser approval page loads with `acrossai-mcp-frontend` stylesheet enqueued (View Source); (c) approve the request in-browser; (d) run `wp db query "SELECT status, server_id, user_id FROM wp_acrossai_mcp_cli_auth_logs ORDER BY id DESC LIMIT 1"` — expect status='approved'; (e) run `curl -H "Authorization: Bearer 0123456789abcdef" https://LOCAL/wp-json/wp/v2/users/me` — expect 401 `rest_not_logged_in`. When complete, mark `[X]` and paste evidence (curl output + query result) inline below this task.
 
 **Checkpoint**: US4 complete. CLI auth still works. Bearer-header trust path retired.
 
@@ -122,27 +122,33 @@ description: "Task list — Feature 016 Remove Claude Connectors"
 
 **Purpose**: Quality gates, grep audit, documentation, and memory-hygiene follow-ups.
 
-- [ ] T031 Run the final FR-015 grep audit from plugin root:
+- [X] T031 Run the final FR-015 grep audit from plugin root:
   ```
   grep -rEn '(claude[_-]connector|ClaudeConnector|acrossai_mcp_claude_connectors_enabled|acrossai_mcp_oauth_cleanup|frontend-oauth|OAuthToken|OAuthAudit|OAuth\\\\(Storage|AuditLog|TokenController|BearerAuth|PKCE|CliCommand))' --include='*.php' --include='*.js' --include='*.scss' --include='*.css' --include='*.json' includes/ admin/ public/ src/ tests/ webpack.config.js uninstall.php acrossai-mcp-manager.php
   ```
   **Expected**: zero matches. If any hit surfaces, fix the missing deletion in the referenced file before proceeding. Diff against T001's baseline capture — expect every baseline hit is gone.
-- [ ] T032 [P] Run `composer run phpcs` from plugin root — zero errors, zero warnings across all remaining files.
-- [ ] T033 [P] Run `composer run phpstan` — zero errors at level 8 across all remaining files.
-- [ ] T034 [P] Run `composer test` (PHPUnit) — all remaining tests pass. Suite is smaller (T022 removed 22 files, T023 removed 1, T010–T012 pruned 3) but should be green end-to-end.
-- [ ] T035 [P] Run `npm run validate-packages` — zero warnings.
-- [ ] T036 Update `README.txt` — add an Unreleased changelog block. Content:
+- [X] T032 [P] Run `composer run phpcs` from plugin root — zero errors, zero warnings across all remaining files.
+- [X] T033 [P] Run `composer run phpstan` — zero errors at level 8 across all remaining files.
+- [X] T034 [P] Run `composer test` (PHPUnit) — all remaining tests pass. Suite is smaller (T022 removed 22 files, T023 removed 1, T010–T012 pruned 3) but should be green end-to-end.
+- [X] T035 [P] Run `npm run validate-packages` — zero warnings.
+- [X] T036 Update `README.txt` — add an Unreleased changelog block. Content:
   - Feature 016: Removed the Claude Connectors integration (OAuth 2.1 authorization server, admin tab, per-server audit log, settings toggle, three `claude_connector_*` MCPServer columns, two OAuth tables). The feature never worked with claude.ai's hosted Connectors UI on local installs and has been retired.
   - **Operator action required for pre-016 installs**: run the manual retirement recipe from `docs/planings-tasks/016-remove-claude-connectors.md` (DROP TABLE + ALTER TABLE + DELETE FROM wp_options + `wp cron event unschedule`) before reactivating the plugin. Include the pre-DROP secure-discard step from SEC-001: `UPDATE wp_acrossai_mcp_servers SET claude_connector_client_secret = '', claude_connector_redirect_uri = '';` BEFORE the `ALTER TABLE ... DROP COLUMN`.
   - **Behavior change (SEC-003)**: The plugin no longer accepts `Authorization: Bearer <token>` headers for user resolution. Integrators depending on that path should migrate to WordPress Application Passwords via the CLI auth flow (`public/Partials/FrontendAuth`).
   - **Operator advisory (SEC-002)**: If any active claude.ai connector tokens exist on your install, revoke them from claude.ai's Connectors UI BEFORE running the manual retirement SQL. The retirement drops the audit log with no recovery.
-- [ ] T037 Queue post-implementation memory-hygiene follow-ups. This task is a REMINDER, not a code edit. After the PR merges, run `/speckit-memory-md-capture-from-diff` to propose these annotations:
+- [X] T037 Post-implementation memory-hygiene follow-ups (EXECUTED 2026-07-07 via `/speckit-memory-md-capture-from-diff` — 3 NEW entries added: WORKLOG F016 milestone, B20 plaintext-secret bug pattern, D21 fresh-install-only retirement pattern; 4 ANNOTATIONS applied to existing entries: S7 no-active-consumers, DEC-CLIENT-RENDERER-PUBLIC-API surface shrink 3→2, A13 no-active-consumers, Constitution Principle I Rationale + Directory Layout stale-reference removal). Original queue below preserved for reference:
   - `docs/memory/PROJECT_CONTEXT.md` — annotate `S7` ("OAuth token endpoint `__return_true` exception") with "no consumers post-F016; token endpoint retired".
   - `docs/memory/DECISIONS.md` — annotate `DEC-CLIENT-RENDERER-PUBLIC-API` (F013) with "post-F016: dispatch map shrinks to 2 entries (`npm`, `clients`); shortcode surface shrinks to 2 (`acrossai_mcp_npm_block`, `acrossai_mcp_clients_block`)".
   - `docs/memory/ARCHITECTURE.md` — annotate `A13` ("RFC-prescribed forms exempted from A4 DataForm") with "no active consumers post-F016; still valid for future RFC-prescribed forms".
   - `.specify/memory/constitution.md` — annotate Principle I Rationale (remove `OAuth / Claude Connectors` from the 5-active-area list) and Architecture Directory Layout (remove `includes/OAuth/` line).
+- [X] T038 Verify FR-011 `uninstall.php` OAuth entries survive AFTER `DEC-UNINSTALL-OPT-IN-GATE` (added post-`/speckit-analyze` 2026-07-07 to close C1 coverage gap). Run from plugin root:
+  ```
+  awk '/acrossai_mcp_uninstall_delete_data/{gate=NR} /acrossai_mcp_oauth_tokens|acrossai_mcp_oauth_audit/{print NR" "$0; if(NR<gate) exit 1}' uninstall.php
+  ```
+  **Expected**: Two lines emit (one per OAuth table), both with line numbers GREATER than the opt-in gate's line number. If awk exits non-zero, the entries are BEFORE the gate (SEC violation of `DEC-UNINSTALL-OPT-IN-GATE`) — fix by moving them below.
+- [X] T039 Add `composer.json` `scripts` block aliasing `phpcs`, `phpstan`, `test` (added post-`/speckit-analyze` 2026-07-07 to close I1 drift so `composer run phpcs` / `composer run phpstan` / `composer test` in T032–T034 actually resolve).
 
-**Checkpoint**: All quality gates green, grep audit clean, README updated, memory-hygiene queued.
+**Checkpoint**: All quality gates green, grep audit clean, README updated, memory-hygiene queued, C1 + I1 closed.
 
 ---
 

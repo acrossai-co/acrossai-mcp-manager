@@ -4,9 +4,9 @@
  *
  * Feature 013 introduces the public/Renderers/ layer so third-party plugins
  * (BuddyBoss, WooCommerce, other AcrossAI-family plugins) can embed the
- * three client-configuration UIs (npm, MCP Clients, Claude Connector) with
- * zero code duplication. Admin tab classes and third-party consumers all
- * invoke Block::render( $server_id, $context ).
+ * client-configuration UIs (npm, MCP Clients) with zero code duplication.
+ * Admin tab classes and third-party consumers all invoke
+ * Block::render( $server_id, $context ).
  *
  * @package    AcrossAI_MCP_Manager
  * @subpackage Public/Renderers
@@ -37,7 +37,7 @@ defined( 'ABSPATH' ) || exit;
 abstract class AbstractClientRenderer {
 
 	/**
-	 * Returns the block's slug (e.g. 'npm', 'clients', 'claude-connector').
+	 * Returns the block's slug (e.g. 'npm', 'clients').
 	 *
 	 * @since 0.0.6
 	 * @return string
@@ -142,7 +142,7 @@ abstract class AbstractClientRenderer {
 		$nonce         = wp_create_nonce( 'wp_rest' );
 		// Sub-clients (e.g. MCP Clients Block's per-client tabs) split on
 		// $context['sub_client']; fall back to the block's slug otherwise.
-		$client_slug   = '' !== (string) ( $context['sub_client'] ?? '' )
+		$client_slug = '' !== (string) ( $context['sub_client'] ?? '' )
 			? sanitize_key( (string) $context['sub_client'] )
 			: sanitize_key( $this->slug() );
 		printf(
@@ -217,8 +217,8 @@ abstract class AbstractClientRenderer {
 
 	/**
 	 * Renders the "feature currently disabled" notice with a link back to
-	 * the MCP settings tab. Used by NpmClientBlock and ClaudeConnectorBlock
-	 * when their F012 toggle is off. (SEC-013-005)
+	 * the MCP settings tab. Used by NpmClientBlock when its F012 toggle is
+	 * off. (SEC-013-005)
 	 *
 	 * @since 0.0.6
 	 * @experimental May change without notice before 1.0.0.

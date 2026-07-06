@@ -181,10 +181,6 @@ final class ClientRendererController {
 			'acrossai_mcp_clients_block',
 			array( \AcrossAI_MCP_Manager\Public\Renderers\MCPClientsBlock::class, 'shortcode' )
 		);
-		add_shortcode(
-			'acrossai_mcp_claude_connector_block',
-			array( \AcrossAI_MCP_Manager\Public\Renderers\ClaudeConnectorBlock::class, 'shortcode' )
-		);
 		add_action(
 			'acrossai_mcp_render_client_block',
 			array( $this, 'dispatch_render_action' ),
@@ -203,16 +199,15 @@ final class ClientRendererController {
 	 * @since 0.0.6
 	 * @experimental May change without notice before 1.0.0.
 	 *
-	 * @param string $renderer_slug Renderer slug: 'npm', 'clients', 'claude-connector'.
+	 * @param string $renderer_slug Renderer slug: 'npm', 'clients'.
 	 * @param int    $server_id     MCP server row ID.
 	 * @param array  $context       Optional context array.
 	 * @return void
 	 */
 	public function dispatch_render_action( string $renderer_slug, int $server_id, array $context = array() ): void {
 		$map  = array(
-			'npm'              => \AcrossAI_MCP_Manager\Public\Renderers\NpmClientBlock::class,
-			'clients'          => \AcrossAI_MCP_Manager\Public\Renderers\MCPClientsBlock::class,
-			'claude-connector' => \AcrossAI_MCP_Manager\Public\Renderers\ClaudeConnectorBlock::class,
+			'npm'     => \AcrossAI_MCP_Manager\Public\Renderers\NpmClientBlock::class,
+			'clients' => \AcrossAI_MCP_Manager\Public\Renderers\MCPClientsBlock::class,
 		);
 		$slug = sanitize_key( $renderer_slug );
 		if ( ! isset( $map[ $slug ] ) ) {

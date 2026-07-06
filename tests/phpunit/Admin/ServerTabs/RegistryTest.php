@@ -28,8 +28,7 @@ final class RegistryTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Verifies all_tabs() returns all 12 registered tabs in canonical order
-	 * (11 declared + Tokens gate — Tokens is post-Access Control per menu).
+	 * Verifies all_tabs() returns the 10 registered tabs in canonical order.
 	 */
 	public function test_slug_ordering_final(): void {
 		$slugs = array_map(
@@ -41,7 +40,6 @@ final class RegistryTest extends WP_UnitTestCase {
 		$this->assertContains( 'overview', $slugs );
 		$this->assertContains( 'npm', $slugs );
 		$this->assertContains( 'clients', $slugs );
-		$this->assertContains( 'claude-connector', $slugs );
 		$this->assertContains( 'wp-cli', $slugs );
 		$this->assertContains( 'tools', $slugs );
 		$this->assertContains( 'abilities', $slugs );
@@ -49,6 +47,7 @@ final class RegistryTest extends WP_UnitTestCase {
 		$this->assertContains( 'mcp-tracker', $slugs );
 		$this->assertContains( 'update-server', $slugs );
 		$this->assertContains( 'danger-zone', $slugs );
+		$this->assertCount( 10, $slugs );
 	}
 
 	/**

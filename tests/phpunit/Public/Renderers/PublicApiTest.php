@@ -17,7 +17,6 @@ declare(strict_types=1);
 namespace AcrossAI_MCP_Manager\Tests\Public\Renderers;
 
 use AcrossAI_MCP_Manager\Includes\REST\ClientRendererController;
-use AcrossAI_MCP_Manager\Public\Renderers\ClaudeConnectorBlock;
 use AcrossAI_MCP_Manager\Public\Renderers\MCPClientsBlock;
 use AcrossAI_MCP_Manager\Public\Renderers\NpmClientBlock;
 use WP_REST_Request;
@@ -44,23 +43,6 @@ final class PublicApiTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * SEC-013-005 — ClaudeConnectorBlock renders disabled notice when option is false.
-	 */
-	public function test_claude_gate_disabled_shows_notice_hides_form(): void {
-		$admin_id = self::factory()->user->create( array( 'role' => 'administrator' ) );
-		wp_set_current_user( $admin_id );
-
-		update_option( 'acrossai_mcp_claude_connectors_enabled', false );
-
-		ob_start();
-		ClaudeConnectorBlock::instance()->render( 1, array( 'context' => 'admin' ) );
-		$output = (string) ob_get_clean();
-
-		$this->assertStringContainsString( 'currently disabled', $output );
-		$this->assertStringNotContainsString( 'save_claude_connector', $output );
-	}
-
-	/**
 	 * FR-019 — MCPClientsBlock is NOT gated by F012 toggles.
 	 */
 	public function test_mcp_clients_not_gated_by_f012_options(): void {
@@ -68,7 +50,6 @@ final class PublicApiTest extends WP_UnitTestCase {
 		wp_set_current_user( $admin_id );
 
 		update_option( 'acrossai_mcp_npm_login_enabled', false );
-		update_option( 'acrossai_mcp_claude_connectors_enabled', false );
 
 		ob_start();
 		MCPClientsBlock::instance()->render( 1, array( 'context' => 'admin' ) );

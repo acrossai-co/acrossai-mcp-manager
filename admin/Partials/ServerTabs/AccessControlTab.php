@@ -4,9 +4,9 @@
  *
  * Feature 015 — converts the F013 shape-only shell to a thin delegate to
  * `public/Renderers/AccessControlBlock.php`, matching the F013
- * NpmTab/ClientsTab/ClaudeConnectorTab delegate pattern per
- * DEC-CLIENT-RENDERER-PUBLIC-API. The v1-API singleton call at the old line 65
- * is deleted (was fatal in v2 — see F015 US2 + FR-016 grep gate).
+ * NpmTab/ClientsTab delegate pattern per DEC-CLIENT-RENDERER-PUBLIC-API.
+ * The v1-API singleton call at the old line 65 is deleted (was fatal in v2
+ * — see F015 US2 + FR-016 grep gate).
  *
  * @package    AcrossAI_MCP_Manager
  * @subpackage Admin/Partials/ServerTabs

@@ -20,7 +20,7 @@ defined( 'ABSPATH' ) || exit;
  * Responsibilities (populated over Phase 2 user stories):
  *   - US2 (here): handle_actions dispatcher for toggle/delete/bulk/create;
  *                 render_list_page (dispatcher: list | create form | edit page)
- *   - US3 (here): edit page tabs, update + claude_connector handlers
+ *   - US3 (here): edit page tabs, update handler
  *   - Notices (FR-015 + FR-016): extracted to Admin\Partials\Notices per RT-2
  *
  * Constitution: singleton + private __construct + zero add_action/add_filter in body.
@@ -87,10 +87,10 @@ class Settings {
 		// phpcs:enable WordPress.Security.NonceVerification.Recommended
 
 		// US2: toggle_status, delete (single), create (POST), bulk.
-		// US3: update (General-tab save), save_claude_connector.
+		// US3: update (General-tab save).
 		// F015 (post-Q4): access-control saves are owned by the vendor React
 		// component via vendor REST — no plugin-owned action handler.
-		if ( ! in_array( $action, array( 'toggle_status', 'delete', 'create', 'update', 'save_claude_connector' ), true )
+		if ( ! in_array( $action, array( 'toggle_status', 'delete', 'create', 'update' ), true )
 			&& ! $this->is_bulk_request()
 		) {
 			return;
@@ -149,13 +149,6 @@ class Settings {
 			$server_id = isset( $_GET['server'] ) ? absint( $_GET['server'] ) : 0; // phpcs:ignore WordPress.Security.NonceVerification
 			check_admin_referer( 'acrossai_mcp_update_' . $server_id );
 			$this->handle_update_server( $server_id );
-		}
-
-		// ── Claude Connector tab save (POST) — US3 / FR-012 / FR-013 ──────────
-		if ( 'save_claude_connector' === $action && $this->is_post_request() ) {
-			$server_id = isset( $_GET['server'] ) ? absint( $_GET['server'] ) : 0; // phpcs:ignore WordPress.Security.NonceVerification
-			check_admin_referer( 'acrossai_mcp_claude_connector_' . $server_id );
-			$this->handle_claude_connector_update( $server_id );
 		}
 
 		// F015 note (post-Q4): access-control saves are owned by the vendor
@@ -384,55 +377,6 @@ class Settings {
 		$this->redirect_to_edit( $server_id, 'update-server', 'server_saved' );
 	}
 
-	/**
-	 * Claude Connector tab save handler. FR-012 / FR-013.
-	 *
-	 * Notable: when the Secret field receives only the masked placeholder
-	 * (the dots we render for re-display), we KEEP the existing stored value
-	 * — don't overwrite with placeholder. This prevents a UX surprise where
-	 * a user re-saves the form without re-entering the secret.
-	 */
-	private function handle_claude_connector_update( int $server_id ): void {
-		$query = Query::instance();
-		$rows  = $query->query(
-			array(
-				'id'     => $server_id,
-				'number' => 1,
-			)
-		);
-		if ( empty( $rows ) ) {
-			$this->redirect_to_list( 'server_not_found' );
-		}
-		$row = $rows[0];
-
-		// phpcs:disable WordPress.Security.NonceVerification.Recommended
-		$client_id     = isset( $_POST['claude_connector_client_id'] ) ? sanitize_text_field( wp_unslash( $_POST['claude_connector_client_id'] ) ) : '';
-		$client_secret = isset( $_POST['claude_connector_client_secret'] ) ? sanitize_text_field( wp_unslash( $_POST['claude_connector_client_secret'] ) ) : '';
-		$redirect_uri  = isset( $_POST['claude_connector_redirect_uri'] ) ? esc_url_raw( wp_unslash( $_POST['claude_connector_redirect_uri'] ) ) : '';
-		// phpcs:enable WordPress.Security.NonceVerification.Recommended
-
-		// Preserve existing secret if the user submitted only the mask.
-		if ( $this->is_secret_placeholder( $client_secret ) ) {
-			$client_secret = $row->claude_connector_client_secret;
-		}
-
-		$query->update_item(
-			$server_id,
-			array(
-				'claude_connector_client_id'     => $client_id,
-				'claude_connector_client_secret' => $client_secret,
-				'claude_connector_redirect_uri'  => $redirect_uri,
-			)
-		);
-
-		$this->redirect_to_edit( $server_id, 'claude-connector', 'server_saved' );
-	}
-
-	private function is_secret_placeholder( string $value ): bool {
-		// Mask we render is 12 bullet characters; treat any all-bullet input as placeholder.
-		return '' !== $value && '' === preg_replace( '/[•\*]/u', '', $value );
-	}
-
 	// ─────────────────────────────────────────────────────────────────────────
 	// Page render — wired as the menu callback by Menu::register_menu().
 	// ─────────────────────────────────────────────────────────────────────────
@@ -544,7 +488,7 @@ class Settings {
 	 * Four-tab edit page. FR-008 / FR-014.
 	 *
 	 * URL: ?page=acrossai_mcp_manager&action=edit&server=ID&tab=<slug>
-	 * Tabs: general (default), tokens, access_control, claude_connector.
+	 * Tabs: general (default), tokens, access_control.
 	 */
 	private function render_edit_page(): void {
 		// phpcs:disable WordPress.Security.NonceVerification.Recommended
@@ -554,9 +498,8 @@ class Settings {
 
 		// Feature 013 — legacy tab slug back-compat (pre-F013 bookmarks/links).
 		$legacy_slug_map = array(
-			'general'          => 'overview',
-			'access_control'   => 'access-control',
-			'claude_connector' => 'claude-connector',
+			'general'        => 'overview',
+			'access_control' => 'access-control',
 		);
 		if ( isset( $legacy_slug_map[ $tab ] ) ) {
 			$tab = $legacy_slug_map[ $tab ];

@@ -608,3 +608,34 @@ WordPress Application Passwords authenticate via HTTP Basic (`Authorization: Bas
 
 **Where to look next**
 When a plugin generates client-facing WP-API auth configs, ship `WP_API_USERNAME` (from `wp_get_current_user()->user_login`) as a peer of `WP_API_PASSWORD`. Add a helper method on the abstract config generator (e.g. `AbstractMCPClient::current_username()`) so no subclass forgets it. Verify by grepping every concrete generator: `grep -L 'WP_API_USERNAME' includes/MCPClients/*.php` should return zero files. Applies to any plugin family generating MCP/HTTP client configs, wp-json REST curl examples, or WP-CLI login snippets that depend on Application Passwords.
+
+---
+
+### 2026-07-07 - B20 — Plaintext OAuth secret in `varchar(255)` column (S3 constitution violation)
+
+**Status**
+Active — retroactively closed by F016 for `claude_connector_client_secret`. Prevention pattern durable.
+
+**Why this is durable**
+Constitution §III S3 says "OAuth tokens and Application Passwords MUST be stored hashed (SHA-256 minimum) — never plaintext". A `char(64)` column paired with `hash('sha256', $secret)` in the write path enforces this at both the DDL layer (column can't hold anything but a fixed-width digest) and the code layer (the hash call is the only sane thing to write). A `varchar(255) default ''` column paired with `sanitize_text_field()` does NOT — it silently accepts and stores the plaintext secret. Static analysis (PHPCS/PHPStan) is blind to this because both the column definition and the sanitizer call are individually well-formed. Grep is the only reliable detection.
+
+**Symptom**
+A BerlinDB `Schema.php` column definition like:
+```php
+array( 'name' => 'foo_client_secret', 'type' => 'varchar', 'length' => '255', 'default' => '' ),
+```
+paired with an admin form handler that writes `sanitize_text_field($_POST['foo_client_secret'])` directly into that column via `$query->update_item()`. The plaintext secret is now stored on disk (`.ibd` tablespace), in the MySQL binary log, in every backup, and potentially in slow-query / general-query logs.
+
+**Evidence**
+- **Manifestation**: `admin/Partials/Settings.php::handle_claude_connector_update` (deleted in F016 2026-07-07) wrote `sanitize_text_field($_POST['claude_connector_client_secret'])` into `wp_acrossai_mcp_servers.claude_connector_client_secret varchar(255) default ''`. The column existed for ~5 months before the S3 violation was surfaced during F016 security review SEC-STAGED-001.
+- **Retroactive fix**: F016 (a) deleted the write path (`handle_claude_connector_update` + `handle_actions()` allow-list entry); (b) published a manual retirement recipe including a pre-DROP `UPDATE wp_acrossai_mcp_servers SET claude_connector_client_secret = ''` step to force InnoDB tablespace overwrite before column drop; (c) dropped the three `claude_connector_*` columns via operator-run `ALTER TABLE ... DROP COLUMN` (per DEC-FRESH-INSTALL-ONLY-RETIREMENT / D21 pattern).
+- **Static analysis blindspot**: PHPCS + PHPStan both green through the entire ~5-month window. Neither tool inspects Schema column type/length against write-path helpers.
+
+**Where to look next**
+Every future custom-DB table introducing a `_secret`, `_token`, `_password`, or `_key` column MUST use `char(64)` (SHA-256) or `char(*)` (larger digest, e.g. `char(128)` for SHA-512). `varchar` on a secret/token column is a review-time hard-fail. Reviewer grep-gate:
+```
+grep -rEn "'name' *=> *'[^']*_(secret|token|password|key)'" includes/Database/
+```
+Every hit MUST have `'type' => 'char'` with `length >= 64` on the next 1-3 lines. If `'type' => 'varchar'` or shorter length appears, either (a) reject the PR, or (b) confirm the column is intentionally storing a non-secret (e.g. a public identifier, an opaque request ID) and add an inline comment justifying it.
+
+Retroactive-fix pattern (F016 canonical): (1) delete the write path (admin form handler + REST controller); (2) pre-DROP `UPDATE table SET secret_col = ''` to overwrite InnoDB pages; (3) `ALTER TABLE ... DROP COLUMN`; (4) update `Schema.php`, `Row.php`, `DefaultServerSeeder.php` to remove the field entirely. Applies to any custom-DB plugin storing OAuth secrets, API keys, or session tokens.

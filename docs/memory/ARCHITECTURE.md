@@ -346,6 +346,8 @@ Forms whose shape is prescribed by an external RFC or W3C spec (not by project U
 
 Each invocation MUST cite the standard section verbatim (e.g., "RFC 6749 §4.1.1") in the rendering class's docblock.
 
+**Post-F016 (2026-07-07): NO active consumers.** The sole implementer (`includes/OAuth/ClaudeConnectors::render_consent_form`) was retired with the whole `includes/OAuth/` directory. Constraint REMAINS VALID for any future RFC-prescribed form (device-grant consent, PKCE authorize surface, WebAuthn enrollment, OpenID Connect logout) but currently has zero live consumers. Any future implementer MUST independently cite the exact RFC/W3C section per rule 2 above; this row is not a live-invocation-precedent to lean on.
+
 **Tradeoffs**
 Gained: standards-conformance without UI-framework ceremony; OAuth/WebAuthn flows match what users see on every other site.
 Reconsider: if WP core ever ships a `DataForm` variant explicitly designed for OAuth/RFC-style consent pages, retire the carve-out.
@@ -354,7 +356,7 @@ Reconsider: if WP core ever ships a `DataForm` variant explicitly designed for O
 Don't wrap RFC-prescribed forms in DataForm "for consistency" — it breaks the canonical shape OAuth/OIDC clients expect, and review will reject the wrapping anyway.
 
 **Evidence**
-- `includes/OAuth/ClaudeConnectors.php::render_consent_form` (Phase 5)
+- `includes/OAuth/ClaudeConnectors.php::render_consent_form` (Phase 5, retired F016 2026-07-07)
 - `specs/005-oauth-connectors/spec.md` §Admin UI Requirements (3 rationales)
 - `specs/005-oauth-connectors/contracts/authorize-page.md` cites RFC 6749 §4.1.1
 
