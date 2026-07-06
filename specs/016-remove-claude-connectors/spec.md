@@ -24,21 +24,42 @@ A site administrator managing MCP servers no longer sees any Claude Connectors s
 
 ---
 
-### User Story 2 — Existing install self-heals on reactivation (Priority: P1)
+### User Story 2 — Operator retires prior schema manually (Priority: P1)
 
-A site running the previous plugin version has the three `claude_connector_*` columns on `wp_acrossai_mcp_servers` and two OAuth tables populated with historical data. After the plugin is updated and reactivated, both OAuth tables and their two `db_version` options are removed, the three connector columns are dropped from the MCP Servers table, and the surviving MCP server data (server_name, server_slug, is_enabled, etc.) is preserved intact.
+A site running the previous plugin version has the three `claude_connector_*` columns on `wp_acrossai_mcp_servers` and two OAuth tables (`wp_acrossai_mcp_oauth_tokens`, `wp_acrossai_mcp_oauth_audit`) present. Per user directive 2026-07-07, the plugin does NOT ship self-heal / migration code. The site operator manually drops the two OAuth tables and the three MCPServer columns, then deactivates + reactivates the plugin. On reactivation the plugin is happy (no code path references the retired schema), the cron event is unscheduled by Deactivator, and the OAuth rewrite rules disappear from the rewrite table on the next `flush_rewrite_rules()` call.
 
-**Why this priority**: A retirement that leaves stale schema behind is worse than the feature being present — it clutters the database, breaks fresh backups/migrations, and misleads future maintainers. Users must trust reactivation to be a clean self-healing step.
+**Why this priority**: This is the deployment path for the plugin author's own development site. Without a clean manual migration recipe, the operator can't confidently retire pre-Feature-016 physical data.
 
-**Independent Test**: Take a WordPress install with the previous plugin version and populated MCP server data. Note `SELECT COUNT(*) FROM wp_acrossai_mcp_servers`. Deactivate → update → reactivate the plugin. Confirm the OAuth tables are gone, the three connector columns are gone, `SELECT COUNT(*)` on MCP Servers returns the same number, and `SHOW WARNINGS` after reactivation is empty.
+**Independent Test**: On an install with pre-Feature-016 data, execute the retirement SQL (below), deactivate + reactivate the plugin, then verify no fatal, `SHOW WARNINGS` is empty, and the plugin admin surface renders cleanly.
+
+**Retirement SQL** (operator runs manually before reactivation):
+
+```sql
+DROP TABLE IF EXISTS wp_acrossai_mcp_oauth_tokens;
+DROP TABLE IF EXISTS wp_acrossai_mcp_oauth_audit;
+ALTER TABLE wp_acrossai_mcp_servers
+    DROP COLUMN claude_connector_client_id,
+    DROP COLUMN claude_connector_client_secret,
+    DROP COLUMN claude_connector_redirect_uri;
+DELETE FROM wp_options WHERE option_name IN (
+    'acrossai_mcp_oauth_tokens_db_version',
+    'acrossai_mcp_oauth_audit_db_version',
+    'acrossai_mcp_claude_connectors_enabled'
+);
+```
+
+And one companion WP-CLI step to unschedule the retired daily cron:
+
+```
+wp cron event unschedule acrossai_mcp_oauth_cleanup
+```
 
 **Acceptance Scenarios**:
 
-1. **Given** an install with `wp_acrossai_mcp_oauth_tokens` and `wp_acrossai_mcp_oauth_audit` tables present, **When** the plugin is reactivated on the new version, **Then** both tables are dropped and the two matching `db_version` WordPress options (`acrossai_mcp_oauth_tokens_db_version`, `acrossai_mcp_oauth_audit_db_version`) are deleted.
-2. **Given** an install where `wp_acrossai_mcp_servers` has 13 columns, **When** the plugin is reactivated on the new version, **Then** `DESCRIBE wp_acrossai_mcp_servers` returns 10 rows and the three `claude_connector_*` columns are absent.
-3. **Given** the MCPServer table had N rows before reactivation, **When** the plugin is reactivated, **Then** `SELECT COUNT(*) FROM wp_acrossai_mcp_servers` still returns N and the surviving columns retain their pre-migration values.
-4. **Given** the `acrossai_mcp_oauth_cleanup` daily cron event is scheduled and 3 OAuth rewrite rules are registered on the install, **When** the plugin is reactivated, **Then** `wp cron event list` shows no `acrossai_mcp_oauth_cleanup` event and the OAuth well-known URLs (`/.well-known/oauth-authorization-server/*`, `/.well-known/oauth-protected-resource/*`) return 404.
-5. **Given** the reactivation runs, **When** `wp option get acrossai_mcp_claude_connectors_enabled` is checked, **Then** the option is not set.
+1. **Given** the operator has manually executed the retirement SQL above AND the plugin is running the Feature 016 build, **When** the plugin is deactivated and reactivated, **Then** activation completes without fatal, no PHP notice/warning in debug.log, `SHOW WARNINGS` after reactivation is empty.
+2. **Given** the `acrossai_mcp_oauth_cleanup` daily cron event was scheduled pre-016 AND the operator has run `wp cron event unschedule acrossai_mcp_oauth_cleanup` from the manual recipe above, **When** the plugin is reactivated, **Then** `wp cron event list` shows no such event. (Note: the plugin's `Deactivator::deactivate()` no longer references this cron — that string was removed to satisfy the FR-015 grep audit.)
+3. **Given** three OAuth rewrite rules were registered pre-016, **When** the plugin is reactivated, **Then** the existing `flush_rewrite_rules()` call at the end of `Activator::activate()` rebuilds the rewrite table from the currently-registered rule set (which no longer contains the OAuth rules), and the OAuth well-known URLs return 404.
+4. **Given** the operator forgot the manual `DELETE FROM wp_options`, **When** the plugin is reactivated, **Then** the residual options (`acrossai_mcp_claude_connectors_enabled`, `acrossai_mcp_oauth_*_db_version`) remain in `wp_options` — this is acceptable dead data with no runtime impact (no code reads them post-016).
 
 ---
 
@@ -99,17 +120,17 @@ The existing CLI auth flow (browser approval page + WordPress App Password issua
 - **FR-005**: The plugin MUST no longer register the `POST /wp-json/acrossai-mcp/v1/token` REST route; a request to that route MUST return 404.
 - **FR-006**: The plugin MUST no longer register a bearer-token resolver on the `determine_current_user` filter; an `Authorization: Bearer <token>` header MUST NOT elevate the current user.
 - **FR-007**: The plugin MUST no longer register the three OAuth rewrite rules or the `acrossai_mcp_oauth_cleanup` daily cron event; `wp_next_scheduled('acrossai_mcp_oauth_cleanup')` MUST return false after activation.
-- **FR-008**: On reactivation, the plugin MUST idempotently drop `wp_acrossai_mcp_oauth_tokens` and `wp_acrossai_mcp_oauth_audit` if they exist, delete the two matching `db_version` options, and delete the `acrossai_mcp_claude_connectors_enabled` option.
-- **FR-009**: On reactivation, the plugin MUST drop the three columns `claude_connector_client_id`, `claude_connector_client_secret`, `claude_connector_redirect_uri` from `wp_acrossai_mcp_servers`, either via BerlinDB's `maybe_upgrade()` diff engine on a `$version` bump from `0.0.1` to `0.0.2`, or via an idempotent gated `ALTER TABLE … DROP COLUMN` fallback in the Activator.
-- **FR-010**: On reactivation, the plugin MUST preserve every non-connector row and column value in `wp_acrossai_mcp_servers`; `SELECT COUNT(*)` and the surviving 10 columns' `CREATE TABLE` DDL MUST match the pre-migration state byte-for-byte (except for the three deletions).
-- **FR-011**: The plugin's uninstall path MUST include `wp_acrossai_mcp_oauth_tokens`, `wp_acrossai_mcp_oauth_audit`, and the options `acrossai_mcp_oauth_tokens_db_version`, `acrossai_mcp_oauth_audit_db_version`, `acrossai_mcp_claude_connectors_enabled` in its drop/delete lists, so installs that skip the Feature 016 upgrade path are still cleaned up.
+- **FR-008**: The plugin MUST NOT ship any code that references `wp_acrossai_mcp_oauth_tokens`, `wp_acrossai_mcp_oauth_audit`, the two matching `db_version` options, or the `acrossai_mcp_claude_connectors_enabled` option at runtime. Physical retirement of pre-016 data is the operator's responsibility (see spec §User Story 2 for the manual SQL recipe). The plugin adds NO idempotent DROP TABLE / delete_option code to `Activator::activate()`.
+- **FR-009**: The plugin's `MCPServer\Schema.php`, `MCPServer\Row.php`, and `MCPServer\DefaultServerSeeder.php` MUST NOT reference `claude_connector_client_id`, `claude_connector_client_secret`, or `claude_connector_redirect_uri`. `MCPServer\Table.php::$version` is NOT bumped (fresh-install-only stance — no runtime schema-migration path).
+- **FR-010**: On a fresh install, the plugin MUST create `wp_acrossai_mcp_servers` with exactly 10 columns whose types/defaults match the pre-Feature-016 definitions of those columns byte-for-byte. No incidental drift.
+- **FR-011**: The plugin's `uninstall.php` MUST include `wp_acrossai_mcp_oauth_tokens` and `wp_acrossai_mcp_oauth_audit` in its `DROP TABLE IF EXISTS` list AFTER the `DEC-UNINSTALL-OPT-IN-GATE` short-circuit — as an idempotent safety net for operators who forgot the manual retirement SQL. The two `db_version` options and `acrossai_mcp_claude_connectors_enabled` MUST also appear in the options-delete list.
 - **FR-012**: The plugin build output MUST NOT contain `build/css/frontend-oauth.css`, `build/css/frontend-oauth-rtl.css`, or `build/css/frontend-oauth.asset.php`; no page load MUST enqueue the `acrossai-mcp-frontend-oauth` stylesheet handle.
 - **FR-013**: The plugin MUST preserve the CLI auth stack in its entirety: `FrontendAuth`, `CliController`, `wp_acrossai_mcp_cli_auth_logs`, `includes/Database/CliAuthLog/`, and the `acrossai-mcp-frontend` stylesheet handle MUST all continue to function.
 - **FR-014**: The plugin MUST preserve `NpmClientBlock` and `MCPClientsBlock` renderers, their two shortcodes (`acrossai_mcp_npm_block`, `acrossai_mcp_clients_block`), and their base class `AbstractClientRenderer`.
 - **FR-015**: A repository-wide grep for the retired symbols (`claude_connector`, `ClaudeConnector`, `acrossai_mcp_claude_connectors_enabled`, `acrossai_mcp_oauth_cleanup`, `frontend-oauth`, `OAuthToken`, `OAuthAudit`, and the seven deleted `Includes\OAuth\*` class names) MUST return zero matches under `includes/`, `admin/`, `public/`, `src/`, `tests/`, `webpack.config.js`, `uninstall.php`, and `acrossai-mcp-manager.php`. References in `docs/` are permitted (historical archaeology).
 - **FR-016**: The plugin MUST NOT rename any surviving table or option key.
 - **FR-017**: The plugin MUST NOT add data-migration steps that copy retired OAuth data into other tables; retired OAuth data is discarded.
-- **FR-018**: On reactivation, the plugin MUST call `flush_rewrite_rules()` after the OAuth-column drop so the rewrite table is rebuilt without the three retired connector rewrite rules.
+- **FR-018**: The plugin's existing `flush_rewrite_rules()` call at the end of `Activator::activate()` MUST remain in place. On next reactivation it rebuilds the rewrite table from the currently-registered rule set (which no longer contains the three retired OAuth rewrite rules, because their registering method is gone). No new flush is added.
 - **FR-019**: The plugin MUST update memory hygiene documents: any `DEC-CLAUDE-CONNECTOR-*`, `DEC-OAUTH-*` (connector-flavored), or `DEC-FRONTEND-OAUTH-STYLESHEET-*` entries in `docs/memory/DECISIONS.md` MUST be marked "Superseded (Feature 016)" with the original body preserved; CLI-auth-flavored entries (`DEC-CLI-AUTH-*`, `DEC-FRONTEND-AUTH-*`) MUST NOT be superseded.
 
 ### WordPress Requirements

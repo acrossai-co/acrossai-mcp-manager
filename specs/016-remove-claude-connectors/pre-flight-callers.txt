@@ -1,0 +1,370 @@
+includes/Deactivator.php:38:		wp_clear_scheduled_hook( 'acrossai_mcp_oauth_cleanup' );
+includes/Activator.php:8:use AcrossAI_MCP_Manager\Includes\Database\OAuthToken\Table as OAuthTokenTable;
+includes/Activator.php:9:use AcrossAI_MCP_Manager\Includes\Database\OAuthAudit\Table as OAuthAuditTable;
+includes/Activator.php:10:use AcrossAI_MCP_Manager\Includes\OAuth\ClaudeConnectors;
+includes/Activator.php:42:		OAuthTokenTable::instance()->maybe_upgrade();
+includes/Activator.php:43:		OAuthAuditTable::instance()->maybe_upgrade();
+includes/Activator.php:77:		// OAuth rewrite rules — Phase 5 delegates to ClaudeConnectors so the
+includes/Activator.php:79:		if ( class_exists( ClaudeConnectors::class ) ) {
+includes/Activator.php:80:			ClaudeConnectors::instance()->register_rewrite_rules();
+includes/Activator.php:86:		if ( ! wp_next_scheduled( 'acrossai_mcp_oauth_cleanup' ) ) {
+includes/Activator.php:87:			wp_schedule_event( time() + HOUR_IN_SECONDS, 'daily', 'acrossai_mcp_oauth_cleanup' );
+includes/Main.php:207:		\AcrossAI_MCP_Manager\Includes\Database\OAuthToken\Table::instance();
+includes/Main.php:208:		\AcrossAI_MCP_Manager\Includes\Database\OAuthAudit\Table::instance();
+includes/Main.php:252:			\AcrossAI_MCP_Manager\Includes\OAuth\CliCommand::register();
+includes/Main.php:420:		// TODO (phase 6): wire Includes\OAuth\ClaudeConnectors (10 hooks).
+includes/Main.php:421:		// $claude_connectors = \AcrossAI_MCP_Manager\Includes\OAuth\ClaudeConnectors::instance();
+includes/Main.php:422:		// $this->loader->add_action( 'init', $claude_connectors, 'register_rewrite_rules' );
+includes/Main.php:423:		// $this->loader->add_action( 'init', $claude_connectors, 'maybe_flush_rewrite_rules', 20 );
+includes/Main.php:424:		// $this->loader->add_filter( 'query_vars', $claude_connectors, 'add_query_vars' );
+includes/Main.php:425:		// $this->loader->add_filter( 'redirect_canonical', $claude_connectors, 'disable_canonical_redirects', 10, 2 );
+includes/Main.php:426:		// $this->loader->add_action( 'wp_enqueue_scripts', $claude_connectors, 'enqueue_assets' );
+includes/Main.php:427:		// $this->loader->add_action( 'template_redirect', $claude_connectors, 'handle_frontend_request' );
+includes/Main.php:428:		// $this->loader->add_action( 'rest_api_init', $claude_connectors, 'register_rest_routes' );
+includes/Main.php:429:		// $this->loader->add_filter( 'determine_current_user', $claude_connectors, 'determine_current_user_from_bearer', 20 );
+includes/Main.php:430:		// $this->loader->add_filter( 'rest_post_dispatch', $claude_connectors, 'decorate_mcp_response', 10, 3 );
+includes/Main.php:431:		// $this->loader->add_action( 'acrossai_mcp_access_denied', $claude_connectors, 'log_access_denied_event', 10, 4 );
+includes/Main.php:455:		$claude_connectors = \AcrossAI_MCP_Manager\Includes\OAuth\ClaudeConnectors::instance();
+includes/Main.php:456:		$this->loader->add_action( 'init', $claude_connectors, 'register_rewrite_rules' );
+includes/Main.php:457:		$this->loader->add_filter( 'query_vars', $claude_connectors, 'add_query_var' );
+includes/Main.php:458:		$this->loader->add_action( 'template_redirect', $claude_connectors, 'serve_discovery_or_authorize', 9 );
+includes/Main.php:459:		$this->loader->add_action( 'acrossai_mcp_oauth_cleanup', $claude_connectors, 'handle_cleanup_event' );
+includes/Main.php:461:		$token_controller = \AcrossAI_MCP_Manager\Includes\OAuth\TokenController::instance();
+includes/Main.php:464:		$bearer_auth = \AcrossAI_MCP_Manager\Includes\OAuth\BearerAuth::instance();
+includes/Main.php:486:		 * renderers (NpmClientBlock, MCPClientsBlock, ClaudeConnectorBlock).
+includes/Database/OAuthToken/Row.php:3: * BerlinDB Row for a single OAuthToken record.
+includes/Database/OAuthToken/Row.php:6: * @subpackage Includes\Database\OAuthToken
+includes/Database/OAuthToken/Row.php:11:namespace AcrossAI_MCP_Manager\Includes\Database\OAuthToken;
+includes/Database/OAuthToken/Row.php:16: * Represents a single row from the OAuthToken module's table.
+includes/Database/OAuthToken/Table.php:3: * BerlinDB Table subclass for the OAuthToken module.
+includes/Database/OAuthToken/Table.php:6: * @subpackage Includes\Database\OAuthToken
+includes/Database/OAuthToken/Table.php:11:namespace AcrossAI_MCP_Manager\Includes\Database\OAuthToken;
+includes/Database/OAuthToken/Table.php:16: * Manages database table creation and upgrades for the OAuthToken module.
+includes/Database/OAuthToken/Query.php:3: * BerlinDB Query for the OAuthToken module.
+includes/Database/OAuthToken/Query.php:6: * @subpackage Includes\Database\OAuthToken
+includes/Database/OAuthToken/Query.php:11:namespace AcrossAI_MCP_Manager\Includes\Database\OAuthToken;
+includes/Database/OAuthToken/Schema.php:3: * BerlinDB Schema for the OAuthToken module.
+includes/Database/OAuthToken/Schema.php:5: * 9 columns per Feature 011 plan §Concrete column decisions OAuthToken.
+includes/Database/OAuthToken/Schema.php:9: * @subpackage Includes\Database\OAuthToken
+includes/Database/OAuthToken/Schema.php:14:namespace AcrossAI_MCP_Manager\Includes\Database\OAuthToken;
+includes/Database/OAuthAudit/Schema.php:3: * BerlinDB Schema for the OAuthAudit module.
+includes/Database/OAuthAudit/Schema.php:5: * 9 columns per Feature 011 plan §Concrete column decisions OAuthAudit.
+includes/Database/OAuthAudit/Schema.php:9: * @subpackage Includes\Database\OAuthAudit
+includes/Database/OAuthAudit/Schema.php:14:namespace AcrossAI_MCP_Manager\Includes\Database\OAuthAudit;
+includes/Database/OAuthAudit/Table.php:3: * BerlinDB Table subclass for the OAuthAudit module.
+includes/Database/OAuthAudit/Table.php:6: * @subpackage Includes\Database\OAuthAudit
+includes/Database/OAuthAudit/Table.php:11:namespace AcrossAI_MCP_Manager\Includes\Database\OAuthAudit;
+includes/Database/OAuthAudit/Table.php:16: * Manages database table creation and upgrades for the OAuthAudit module.
+includes/Database/OAuthAudit/Query.php:3: * BerlinDB Query for the OAuthAudit module.
+includes/Database/OAuthAudit/Query.php:11: * @subpackage Includes\Database\OAuthAudit
+includes/Database/OAuthAudit/Query.php:17:namespace AcrossAI_MCP_Manager\Includes\Database\OAuthAudit;
+includes/Database/OAuthAudit/Row.php:3: * BerlinDB Row for a single OAuthAudit record.
+includes/Database/OAuthAudit/Row.php:6: * @subpackage Includes\Database\OAuthAudit
+includes/Database/OAuthAudit/Row.php:11:namespace AcrossAI_MCP_Manager\Includes\Database\OAuthAudit;
+includes/Database/OAuthAudit/Row.php:16: * Represents a single row from the OAuthAudit module's table.
+includes/Database/MCPServer/DefaultServerSeeder.php:59:				'claude_connector_client_id'     => '',
+includes/Database/MCPServer/DefaultServerSeeder.php:60:				'claude_connector_client_secret' => '',
+includes/Database/MCPServer/DefaultServerSeeder.php:61:				'claude_connector_redirect_uri'  => '',
+includes/Database/MCPServer/Row.php:31:	/** @var string */ public $claude_connector_client_id     = '';
+includes/Database/MCPServer/Row.php:32:	/** @var string */ public $claude_connector_client_secret = '';
+includes/Database/MCPServer/Row.php:33:	/** @var string */ public $claude_connector_redirect_uri  = '';
+includes/Database/MCPServer/Row.php:62:			'claude_connector_client_id'     => $this->claude_connector_client_id,
+includes/Database/MCPServer/Row.php:63:			'claude_connector_client_secret' => $this->claude_connector_client_secret,
+includes/Database/MCPServer/Row.php:64:			'claude_connector_redirect_uri'  => $this->claude_connector_redirect_uri,
+includes/OAuth/BearerAuth.php:16:use AcrossAI_MCP_Manager\Includes\Database\OAuthToken\Query as OAuthTokenQuery;
+includes/OAuth/BearerAuth.php:72:		$rows = OAuthTokenQuery::instance()->query(
+includes/OAuth/BearerAuth.php:99:		$any = OAuthTokenQuery::instance()->query(
+includes/OAuth/ClaudeConnectors.php:19:final class ClaudeConnectors {
+includes/OAuth/ClaudeConnectors.php:223:		if ( ! hash_equals( (string) $server->claude_connector_redirect_uri, $redirect_uri ) ) {
+includes/OAuth/ClaudeConnectors.php:230:						'expected_redirect' => $server->claude_connector_redirect_uri,
+includes/OAuth/ClaudeConnectors.php:334:	 * Wired via Loader on `acrossai_mcp_oauth_cleanup`.
+includes/OAuth/ClaudeConnectors.php:345:	 * Resolve an MCP server row by its `claude_connector_client_id` value.
+includes/OAuth/ClaudeConnectors.php:356:				'claude_connector_client_id' => $client_id,
+includes/OAuth/Storage.php:14:use AcrossAI_MCP_Manager\Includes\Database\OAuthToken\Query as OAuthTokenQuery;
+includes/OAuth/Storage.php:15:use AcrossAI_MCP_Manager\Includes\Database\OAuthAudit\Query as OAuthAuditQuery;
+includes/OAuth/Storage.php:158:		$query = OAuthTokenQuery::instance();
+includes/OAuth/Storage.php:185:		$query = OAuthTokenQuery::instance();
+includes/OAuth/Storage.php:249:		$audit_query  = OAuthAuditQuery::instance();
+includes/OAuth/Storage.php:250:		$tokens_table = \AcrossAI_MCP_Manager\Includes\Database\OAuthToken\Table::instance()->get_table_name();
+includes/Database/MCPServer/Schema.php:109:			'name'    => 'claude_connector_client_id',
+includes/Database/MCPServer/Schema.php:117:			'name'    => 'claude_connector_client_secret',
+includes/Database/MCPServer/Schema.php:125:			'name'    => 'claude_connector_redirect_uri',
+includes/OAuth/TokenController.php:126:		if ( ! hash_equals( (string) $server->claude_connector_client_secret, (string) $request->get_param( 'client_secret' ) ) ) {
+includes/OAuth/TokenController.php:264:	 * Resolve an MCP server row by its `claude_connector_client_id` value.
+includes/OAuth/TokenController.php:274:				'claude_connector_client_id' => $client_id,
+includes/OAuth/AuditLog.php:13:use AcrossAI_MCP_Manager\Includes\Database\OAuthAudit\Query as OAuthAuditQuery;
+includes/OAuth/AuditLog.php:64:		$query = OAuthAuditQuery::instance();
+includes/REST/ClientRendererController.php:185:			'acrossai_mcp_claude_connector_block',
+includes/REST/ClientRendererController.php:186:			array( \AcrossAI_MCP_Manager\Public\Renderers\ClaudeConnectorBlock::class, 'shortcode' )
+includes/REST/ClientRendererController.php:206:	 * @param string $renderer_slug Renderer slug: 'npm', 'clients', 'claude-connector'.
+includes/REST/ClientRendererController.php:215:			'claude-connector' => \AcrossAI_MCP_Manager\Public\Renderers\ClaudeConnectorBlock::class,
+admin/Partials/Settings.php:23: *   - US3 (here): edit page tabs, update + claude_connector handlers
+admin/Partials/Settings.php:90:		// US3: update (General-tab save), save_claude_connector.
+admin/Partials/Settings.php:93:		if ( ! in_array( $action, array( 'toggle_status', 'delete', 'create', 'update', 'save_claude_connector' ), true )
+admin/Partials/Settings.php:155:		if ( 'save_claude_connector' === $action && $this->is_post_request() ) {
+admin/Partials/Settings.php:157:			check_admin_referer( 'acrossai_mcp_claude_connector_' . $server_id );
+admin/Partials/Settings.php:158:			$this->handle_claude_connector_update( $server_id );
+admin/Partials/Settings.php:395:	private function handle_claude_connector_update( int $server_id ): void {
+admin/Partials/Settings.php:409:		$client_id     = isset( $_POST['claude_connector_client_id'] ) ? sanitize_text_field( wp_unslash( $_POST['claude_connector_client_id'] ) ) : '';
+admin/Partials/Settings.php:410:		$client_secret = isset( $_POST['claude_connector_client_secret'] ) ? sanitize_text_field( wp_unslash( $_POST['claude_connector_client_secret'] ) ) : '';
+admin/Partials/Settings.php:411:		$redirect_uri  = isset( $_POST['claude_connector_redirect_uri'] ) ? esc_url_raw( wp_unslash( $_POST['claude_connector_redirect_uri'] ) ) : '';
+admin/Partials/Settings.php:416:			$client_secret = $row->claude_connector_client_secret;
+admin/Partials/Settings.php:422:				'claude_connector_client_id'     => $client_id,
+admin/Partials/Settings.php:423:				'claude_connector_client_secret' => $client_secret,
+admin/Partials/Settings.php:424:				'claude_connector_redirect_uri'  => $redirect_uri,
+admin/Partials/Settings.php:428:		$this->redirect_to_edit( $server_id, 'claude-connector', 'server_saved' );
+admin/Partials/Settings.php:547:	 * Tabs: general (default), tokens, access_control, claude_connector.
+admin/Partials/Settings.php:559:			'claude_connector' => 'claude-connector',
+admin/Partials/ConnectorAuditLogListTable.php:6: * Instantiated ONLY from within ClaudeConnectorBlock::render_connector_audit_log().
+admin/Partials/ConnectorAuditLogListTable.php:15:use AcrossAI_MCP_Manager\Includes\Database\OAuthAudit\Query as OAuthAuditQuery;
+admin/Partials/ConnectorAuditLogListTable.php:99:		$query = OAuthAuditQuery::instance();
+admin/Partials/SettingsMenu.php:128:			'acrossai_mcp_claude_connectors_enabled',
+admin/Partials/SettingsMenu.php:163:			'acrossai_mcp_claude_connectors_section',
+admin/Partials/SettingsMenu.php:165:			array( $this, 'render_claude_connectors_section_description' ),
+admin/Partials/SettingsMenu.php:170:			'acrossai_mcp_claude_connectors_enabled',
+admin/Partials/SettingsMenu.php:172:			array( $this, 'render_claude_connectors_enabled_field' ),
+admin/Partials/SettingsMenu.php:174:			'acrossai_mcp_claude_connectors_section'
+admin/Partials/SettingsMenu.php:235:	 * fallbacks pending promotion to static helpers on ClaudeConnectors.
+admin/Partials/SettingsMenu.php:240:	public function render_claude_connectors_section_description(): void {
+admin/Partials/SettingsMenu.php:282:	public function render_claude_connectors_enabled_field(): void {
+admin/Partials/SettingsMenu.php:283:		$checked = (bool) get_option( 'acrossai_mcp_claude_connectors_enabled', false );
+admin/Partials/SettingsMenu.php:285:			'<label><input type="checkbox" id="acrossai_mcp_claude_connectors_enabled" name="acrossai_mcp_claude_connectors_enabled" value="1" %s /> %s</label><p class="description">%s</p>',
+admin/Partials/ServerTabs/AccessControlTab.php:7: * NpmTab/ClientsTab/ClaudeConnectorTab delegate pattern per
+admin/Partials/ServerTabs/Registry.php:76:			new ClaudeConnectorTab(),
+admin/Partials/ServerTabs/ClaudeConnectorTab.php:3: * Claude Connector tab — thin delegate to ClaudeConnectorBlock.
+admin/Partials/ServerTabs/ClaudeConnectorTab.php:7: * ClaudeConnectorBlock so third-party plugins can embed the same UI.
+admin/Partials/ServerTabs/ClaudeConnectorTab.php:16:use AcrossAI_MCP_Manager\Public\Renderers\ClaudeConnectorBlock;
+admin/Partials/ServerTabs/ClaudeConnectorTab.php:22: * The Claude Connector tab — thin delegate to ClaudeConnectorBlock.
+admin/Partials/ServerTabs/ClaudeConnectorTab.php:28:final class ClaudeConnectorTab extends AbstractServerTab {
+admin/Partials/ServerTabs/ClaudeConnectorTab.php:37:		return 'claude-connector';
+admin/Partials/ServerTabs/ClaudeConnectorTab.php:51:	 * Delegates render to ClaudeConnectorBlock.
+admin/Partials/ServerTabs/ClaudeConnectorTab.php:58:		ClaudeConnectorBlock::instance()->render(
+admin/Partials/ServerTabs/ClaudeConnectorTab.php:63:				'submit_target_url' => $this->server_edit_url( $server, 'claude-connector' ),
+admin/Partials/ServerTabs/ClaudeConnectorTab.php:64:				'nonce_action'      => 'acrossai_mcp_claude_connector_' . (int) $server['id'],
+public/Main.php:17: *     `ClaudeConnectors::is_authorize_page()` predicate (R1 research).
+public/Main.php:28:use AcrossAI_MCP_Manager\Includes\OAuth\ClaudeConnectors;
+public/Main.php:45:	const OAUTH_STYLE_HANDLE = 'acrossai-mcp-frontend-oauth';
+public/Main.php:74:	 * page. Reads version + dependencies from `build/css/frontend-oauth.asset.php`
+public/Main.php:81:		if ( ! ClaudeConnectors::is_authorize_page() ) {
+public/Main.php:85:		$asset = $this->read_asset_manifest( 'frontend-oauth', 'css' );
+public/Main.php:89:			\plugins_url( 'build/css/frontend-oauth.css', \ACROSSAI_MCP_MANAGER_PLUGIN_FILE ),
+public/Main.php:94:		// FR-021 — WP auto-substitutes `build/css/frontend-oauth-rtl.css` when
+public/Main.php:103:	 * The v0.0.4 `assets/frontend-oauth.css` had no companion JS, and the
+public/Main.php:104:	 * OAuth consent form (`ClaudeConnectors::render_consent_form`) is a plain
+public/Main.php:112:		if ( ! ClaudeConnectors::is_authorize_page() ) {
+public/Main.php:130:	 * @param string $handle_stem Manifest basename without extension (e.g. `'frontend-oauth'`).
+admin/Partials/ServerTabs/AbstractServerTab.php:236:	 * ClaudeConnectorTab).
+public/Renderers/AbstractClientRenderer.php:40:	 * Returns the block's slug (e.g. 'npm', 'clients', 'claude-connector').
+public/Renderers/AbstractClientRenderer.php:220:	 * the MCP settings tab. Used by NpmClientBlock and ClaudeConnectorBlock
+public/Renderers/ClaudeConnectorBlock.php:6: * render so admin tab (ClaudeConnectorTab) AND third-party plugins consume
+public/Renderers/ClaudeConnectorBlock.php:9: * Ported from reference plugin's render_claude_connector_tab
+public/Renderers/ClaudeConnectorBlock.php:14: * F012 gate: acrossai_mcp_claude_connectors_enabled option. When disabled,
+public/Renderers/ClaudeConnectorBlock.php:41:final class ClaudeConnectorBlock extends AbstractClientRenderer {
+public/Renderers/ClaudeConnectorBlock.php:47:	 * @var ClaudeConnectorBlock|null
+public/Renderers/ClaudeConnectorBlock.php:78:		return 'claude-connector';
+public/Renderers/ClaudeConnectorBlock.php:82:	 * Renders the block body. Gated on F012 acrossai_mcp_claude_connectors_enabled.
+public/Renderers/ClaudeConnectorBlock.php:94:		$enabled = (bool) get_option( 'acrossai_mcp_claude_connectors_enabled', false );
+public/Renderers/ClaudeConnectorBlock.php:172:		return ! empty( $server['claude_connector_client_id'] )
+public/Renderers/ClaudeConnectorBlock.php:173:			&& ! empty( $server['claude_connector_redirect_uri'] );
+public/Renderers/ClaudeConnectorBlock.php:186:		$oauth_client_id = (string) ( $server['claude_connector_client_id'] ?? '' );
+public/Renderers/ClaudeConnectorBlock.php:187:		$oauth_secret    = (string) ( $server['claude_connector_client_secret'] ?? '' );
+public/Renderers/ClaudeConnectorBlock.php:188:		$redirect_uri    = (string) ( $server['claude_connector_redirect_uri'] ?? '' );
+public/Renderers/ClaudeConnectorBlock.php:203:		echo '<input type="hidden" name="action" value="save_claude_connector" />';
+public/Renderers/ClaudeConnectorBlock.php:212:			'claude_connector_client_id_input_' . $server_id,
+public/Renderers/ClaudeConnectorBlock.php:213:			'claude_connector_client_id',
+public/Renderers/ClaudeConnectorBlock.php:223:			'claude_connector_client_secret_input_' . $server_id,
+public/Renderers/ClaudeConnectorBlock.php:224:			'claude_connector_client_secret',
+public/Renderers/ClaudeConnectorBlock.php:234:			'claude_connector_redirect_uri_input_' . $server_id,
+public/Renderers/ClaudeConnectorBlock.php:235:			'claude_connector_redirect_uri',
+public/Renderers/ClaudeConnectorBlock.php:355:		$name_id = 'claude_connector_name_' . $server_id;
+public/Renderers/ClaudeConnectorBlock.php:366:		$url_id = 'claude_connector_url_' . $server_id;
+public/Renderers/ClaudeConnectorBlock.php:441:		echo '<input type="hidden" name="tab" value="claude-connector" />';
+src/scss/frontend-oauth.scss:4: * Ported verbatim from v0.0.4 SOURCE `acrossai-mcp-manager/assets/frontend-oauth.css`
+tests/phpunit/Database/ColumnWidthInvariantTest.php:17:use AcrossAI_MCP_Manager\Includes\Database\OAuthToken\Schema as OAuthTokenSchema;
+tests/phpunit/Database/ColumnWidthInvariantTest.php:57:			'OAuthToken access_token_hash (SHA-256)' => array( OAuthTokenSchema::class, 'access_token_hash', 'char', '64' ),
+tests/phpunit/Database/PhantomVersionGuardTest.php:18:use AcrossAI_MCP_Manager\Includes\Database\OAuthToken\Table as OAuthTokenTable;
+tests/phpunit/Database/PhantomVersionGuardTest.php:19:use AcrossAI_MCP_Manager\Includes\Database\OAuthAudit\Table as OAuthAuditTable;
+tests/phpunit/Database/PhantomVersionGuardTest.php:65:			'OAuthToken' => array( OAuthTokenTable::class, 'acrossai_mcp_oauth_tokens', 'acrossai_mcp_oauth_tokens_db_version', '1.0.0' ),
+tests/phpunit/Database/PhantomVersionGuardTest.php:66:			'OAuthAudit' => array( OAuthAuditTable::class, 'acrossai_mcp_oauth_audit', 'acrossai_mcp_oauth_audit_db_version', '1.0.0' ),
+tests/phpunit/OAuth/TokenControllerErrorPathsTest.php:14:use AcrossAI_MCP_Manager\Includes\Database\OAuthAudit\Query as OAuthAuditQuery;
+tests/phpunit/OAuth/TokenControllerErrorPathsTest.php:15:use AcrossAI_MCP_Manager\Includes\Database\OAuthToken\Query as OAuthTokenQuery;
+tests/phpunit/OAuth/TokenControllerErrorPathsTest.php:16:use AcrossAI_MCP_Manager\Includes\OAuth\PKCE;
+tests/phpunit/OAuth/TokenControllerErrorPathsTest.php:17:use AcrossAI_MCP_Manager\Includes\OAuth\Storage;
+tests/phpunit/OAuth/TokenControllerErrorPathsTest.php:18:use AcrossAI_MCP_Manager\Includes\OAuth\TokenController;
+tests/phpunit/OAuth/TokenControllerErrorPathsTest.php:32:		OAuthTokenQuery::maybe_create_table();
+tests/phpunit/OAuth/TokenControllerErrorPathsTest.php:33:		OAuthAuditQuery::maybe_create_table();
+tests/phpunit/OAuth/TokenControllerErrorPathsTest.php:41:				'claude_connector_client_id'     => 'client-A',
+tests/phpunit/OAuth/TokenControllerErrorPathsTest.php:42:				'claude_connector_client_secret' => 'secret-A',
+tests/phpunit/OAuth/TokenControllerErrorPathsTest.php:43:				'claude_connector_redirect_uri'  => 'https://app.example/cb',
+tests/phpunit/OAuth/ConsentSubmitTest.php:13:use AcrossAI_MCP_Manager\Includes\Database\OAuthAudit\Query as OAuthAuditQuery;
+tests/phpunit/OAuth/ConsentSubmitTest.php:14:use AcrossAI_MCP_Manager\Includes\OAuth\AuditLog;
+tests/phpunit/OAuth/ConsentSubmitTest.php:15:use AcrossAI_MCP_Manager\Includes\OAuth\ClaudeConnectors;
+tests/phpunit/OAuth/ConsentSubmitTest.php:26:		OAuthAuditQuery::maybe_create_table();
+tests/phpunit/OAuth/ConsentSubmitTest.php:34:				'claude_connector_client_id'     => 'client-A',
+tests/phpunit/OAuth/ConsentSubmitTest.php:35:				'claude_connector_client_secret' => 'secret-A',
+tests/phpunit/OAuth/ConsentSubmitTest.php:36:				'claude_connector_redirect_uri'  => 'https://app.example/cb',
+tests/phpunit/OAuth/ConsentSubmitTest.php:58:			ClaudeConnectors::instance()->handle_consent_submit();
+tests/phpunit/OAuth/ConsentSubmitTest.php:65:		$rows = ( new OAuthAuditQuery() )->query(
+tests/phpunit/OAuth/ConsentSubmitTest.php:86:			ClaudeConnectors::instance()->handle_consent_submit();
+tests/phpunit/OAuth/ConsentSubmitTest.php:92:		$rows = ( new OAuthAuditQuery() )->query(
+tests/phpunit/OAuth/ConsentSubmitTest.php:111:		ClaudeConnectors::instance()->handle_consent_submit();
+tests/phpunit/Database/ActiveOnlyFilterTest.php:3: * Regression test for OAuthToken active_only PHP-side filter (FR-008 / Clarification Q3).
+tests/phpunit/Database/ActiveOnlyFilterTest.php:13:use AcrossAI_MCP_Manager\Includes\Database\OAuthToken\Query as OAuthTokenQuery;
+tests/phpunit/Database/ActiveOnlyFilterTest.php:40:		$active = OAuthTokenQuery::instance()->query(
+tests/phpunit/Database/ActiveOnlyFilterTest.php:46:		$all    = OAuthTokenQuery::instance()->query( array( 'number' => 0 ) );
+tests/phpunit/Database/ActiveOnlyFilterTest.php:58:		$result = OAuthTokenQuery::instance()->query(
+tests/phpunit/Database/ActiveOnlyFilterTest.php:68:	 * Seed one OAuthToken row with the given metadata.
+tests/phpunit/OAuth/BearerExpiredTokenTest.php:11:use AcrossAI_MCP_Manager\Includes\Database\OAuthAudit\Query as OAuthAuditQuery;
+tests/phpunit/OAuth/BearerExpiredTokenTest.php:12:use AcrossAI_MCP_Manager\Includes\Database\OAuthToken\Query as OAuthTokenQuery;
+tests/phpunit/OAuth/BearerExpiredTokenTest.php:13:use AcrossAI_MCP_Manager\Includes\OAuth\BearerAuth;
+tests/phpunit/OAuth/BearerExpiredTokenTest.php:14:use AcrossAI_MCP_Manager\Includes\OAuth\Storage;
+tests/phpunit/OAuth/BearerExpiredTokenTest.php:21:		OAuthTokenQuery::maybe_create_table();
+tests/phpunit/OAuth/BearerExpiredTokenTest.php:22:		OAuthAuditQuery::maybe_create_table();
+tests/phpunit/OAuth/BearerExpiredTokenTest.php:42:		$rows_before = ( new OAuthAuditQuery() )->query( array() );
+tests/phpunit/OAuth/BearerExpiredTokenTest.php:48:		$rows_after = ( new OAuthAuditQuery() )->query( array() );
+tests/phpunit/OAuth/OAuthTokenQueryTest.php:10:use AcrossAI_MCP_Manager\Includes\Database\OAuthToken\Query as OAuthTokenQuery;
+tests/phpunit/OAuth/OAuthTokenQueryTest.php:11:use AcrossAI_MCP_Manager\Includes\Database\OAuthToken\Row as OAuthTokenRow;
+tests/phpunit/OAuth/OAuthTokenQueryTest.php:14:class OAuthTokenQueryTest extends WP_UnitTestCase {
+tests/phpunit/OAuth/OAuthTokenQueryTest.php:18:		OAuthTokenQuery::maybe_create_table();
+tests/phpunit/OAuth/OAuthTokenQueryTest.php:22:		$q    = new OAuthTokenQuery();
+tests/phpunit/OAuth/OAuthTokenQueryTest.php:39:		$this->assertInstanceOf( OAuthTokenRow::class, $rows[0] );
+tests/phpunit/OAuth/OAuthTokenQueryTest.php:47:		$q    = new OAuthTokenQuery();
+tests/phpunit/OAuth/OAuthTokenQueryTest.php:63:		$q = new OAuthTokenQuery();
+tests/phpunit/OAuth/OAuthTokenQueryTest.php:84:		$ids    = array_map( static fn ( OAuthTokenRow $r ) => $r->id, $active );
+tests/phpunit/OAuth/OAuthAuditQueryTest.php:11:use AcrossAI_MCP_Manager\Includes\Database\OAuthAudit\Query as OAuthAuditQuery;
+tests/phpunit/OAuth/OAuthAuditQueryTest.php:12:use AcrossAI_MCP_Manager\Includes\OAuth\AuditLog;
+tests/phpunit/OAuth/OAuthAuditQueryTest.php:15:class OAuthAuditQueryTest extends WP_UnitTestCase {
+tests/phpunit/OAuth/OAuthAuditQueryTest.php:19:		OAuthAuditQuery::maybe_create_table();
+tests/phpunit/OAuth/OAuthAuditQueryTest.php:23:		$q = new OAuthAuditQuery();
+tests/phpunit/OAuth/OAuthAuditQueryTest.php:37:		$q       = new OAuthAuditQuery();
+tests/phpunit/OAuth/OAuthAuditQueryTest.php:53:		$q   = new OAuthAuditQuery();
+tests/phpunit/OAuth/AntiReplayTest.php:13:use AcrossAI_MCP_Manager\Includes\Database\OAuthAudit\Query as OAuthAuditQuery;
+tests/phpunit/OAuth/AntiReplayTest.php:14:use AcrossAI_MCP_Manager\Includes\Database\OAuthToken\Query as OAuthTokenQuery;
+tests/phpunit/OAuth/AntiReplayTest.php:15:use AcrossAI_MCP_Manager\Includes\OAuth\AuditLog;
+tests/phpunit/OAuth/AntiReplayTest.php:16:use AcrossAI_MCP_Manager\Includes\OAuth\PKCE;
+tests/phpunit/OAuth/AntiReplayTest.php:17:use AcrossAI_MCP_Manager\Includes\OAuth\Storage;
+tests/phpunit/OAuth/AntiReplayTest.php:18:use AcrossAI_MCP_Manager\Includes\OAuth\TokenController;
+tests/phpunit/OAuth/AntiReplayTest.php:27:		OAuthTokenQuery::maybe_create_table();
+tests/phpunit/OAuth/AntiReplayTest.php:28:		OAuthAuditQuery::maybe_create_table();
+tests/phpunit/OAuth/AntiReplayTest.php:35:				'claude_connector_client_id'     => 'client-Z',
+tests/phpunit/OAuth/AntiReplayTest.php:36:				'claude_connector_client_secret' => 'secret-Z',
+tests/phpunit/OAuth/AntiReplayTest.php:37:				'claude_connector_redirect_uri'  => 'https://app.example/cb',
+tests/phpunit/OAuth/AntiReplayTest.php:52:		$rows = ( new OAuthAuditQuery() )->query( array( 'event_type' => AuditLog::EVENT_FAILED_REPLAY_ATTEMPT ) );
+tests/phpunit/OAuth/PKCETest.php:10:use AcrossAI_MCP_Manager\Includes\OAuth\PKCE;
+tests/phpunit/OAuth/RateLimitTest.php:11:use AcrossAI_MCP_Manager\Includes\Database\OAuthAudit\Query as OAuthAuditQuery;
+tests/phpunit/OAuth/RateLimitTest.php:12:use AcrossAI_MCP_Manager\Includes\Database\OAuthToken\Query as OAuthTokenQuery;
+tests/phpunit/OAuth/RateLimitTest.php:14:use AcrossAI_MCP_Manager\Includes\OAuth\Storage;
+tests/phpunit/OAuth/RateLimitTest.php:15:use AcrossAI_MCP_Manager\Includes\OAuth\TokenController;
+tests/phpunit/OAuth/RateLimitTest.php:25:		OAuthTokenQuery::maybe_create_table();
+tests/phpunit/OAuth/RateLimitTest.php:26:		OAuthAuditQuery::maybe_create_table();
+tests/phpunit/OAuth/RateLimitTest.php:35:				'claude_connector_client_id'     => 'client-RL',
+tests/phpunit/OAuth/RateLimitTest.php:36:				'claude_connector_client_secret' => 'secret-RL',
+tests/phpunit/OAuth/RateLimitTest.php:37:				'claude_connector_redirect_uri'  => 'https://x/cb',
+tests/phpunit/OAuth/BearerCrossServerRejectionTest.php:12:use AcrossAI_MCP_Manager\Includes\Database\OAuthAudit\Query as OAuthAuditQuery;
+tests/phpunit/OAuth/BearerCrossServerRejectionTest.php:13:use AcrossAI_MCP_Manager\Includes\Database\OAuthToken\Query as OAuthTokenQuery;
+tests/phpunit/OAuth/BearerCrossServerRejectionTest.php:14:use AcrossAI_MCP_Manager\Includes\OAuth\AuditLog;
+tests/phpunit/OAuth/BearerCrossServerRejectionTest.php:15:use AcrossAI_MCP_Manager\Includes\OAuth\BearerAuth;
+tests/phpunit/OAuth/BearerCrossServerRejectionTest.php:16:use AcrossAI_MCP_Manager\Includes\OAuth\Storage;
+tests/phpunit/OAuth/BearerCrossServerRejectionTest.php:23:		OAuthTokenQuery::maybe_create_table();
+tests/phpunit/OAuth/BearerCrossServerRejectionTest.php:24:		OAuthAuditQuery::maybe_create_table();
+tests/phpunit/OAuth/BearerCrossServerRejectionTest.php:42:		$rows = ( new OAuthAuditQuery() )->query(
+tests/phpunit/OAuth/RewriteRuleEscapeTest.php:11:use AcrossAI_MCP_Manager\Includes\OAuth\ClaudeConnectors;
+tests/phpunit/OAuth/RewriteRuleEscapeTest.php:17:		ClaudeConnectors::instance()->register_rewrite_rules();
+tests/phpunit/OAuth/RewriteRuleEscapeTest.php:43:		ClaudeConnectors::instance()->register_rewrite_rules();
+tests/phpunit/OAuth/CleanupCronTest.php:13:use AcrossAI_MCP_Manager\Includes\Database\OAuthAudit\Query as OAuthAuditQuery;
+tests/phpunit/OAuth/CleanupCronTest.php:14:use AcrossAI_MCP_Manager\Includes\Database\OAuthToken\Query as OAuthTokenQuery;
+tests/phpunit/OAuth/CleanupCronTest.php:15:use AcrossAI_MCP_Manager\Includes\OAuth\AuditLog;
+tests/phpunit/OAuth/CleanupCronTest.php:16:use AcrossAI_MCP_Manager\Includes\OAuth\ClaudeConnectors;
+tests/phpunit/OAuth/CleanupCronTest.php:25:		OAuthTokenQuery::maybe_create_table();
+tests/phpunit/OAuth/CleanupCronTest.php:26:		OAuthAuditQuery::maybe_create_table();
+tests/phpunit/OAuth/CleanupCronTest.php:45:		$tok = new OAuthTokenQuery();
+tests/phpunit/OAuth/CleanupCronTest.php:57:		$audit = new OAuthAuditQuery();
+tests/phpunit/OAuth/CleanupCronTest.php:65:		ClaudeConnectors::instance()->handle_cleanup_event();
+tests/phpunit/OAuth/AuthorizePageTest.php:19:use AcrossAI_MCP_Manager\Includes\Database\OAuthAudit\Query as OAuthAuditQuery;
+tests/phpunit/OAuth/AuthorizePageTest.php:20:use AcrossAI_MCP_Manager\Includes\OAuth\AuditLog;
+tests/phpunit/OAuth/AuthorizePageTest.php:21:use AcrossAI_MCP_Manager\Includes\OAuth\ClaudeConnectors;
+tests/phpunit/OAuth/AuthorizePageTest.php:31:		OAuthAuditQuery::maybe_create_table();
+tests/phpunit/OAuth/AuthorizePageTest.php:40:				'claude_connector_client_id'     => 'client-A',
+tests/phpunit/OAuth/AuthorizePageTest.php:41:				'claude_connector_client_secret' => 'secret-A',
+tests/phpunit/OAuth/AuthorizePageTest.php:42:				'claude_connector_redirect_uri'  => 'https://app.example/cb',
+tests/phpunit/OAuth/AuthorizePageTest.php:66:		$rows = ( new OAuthAuditQuery() )->query(
+tests/phpunit/OAuth/AuthorizePageTest.php:76:		$rows = ( new OAuthAuditQuery() )->query(
+tests/phpunit/OAuth/AuthorizePageTest.php:109:			ClaudeConnectors::instance()->render_authorize_page();
+tests/phpunit/OAuth/BearerNoOverrideTest.php:12:use AcrossAI_MCP_Manager\Includes\Database\OAuthToken\Query as OAuthTokenQuery;
+tests/phpunit/OAuth/BearerNoOverrideTest.php:13:use AcrossAI_MCP_Manager\Includes\OAuth\BearerAuth;
+tests/phpunit/OAuth/BearerNoOverrideTest.php:14:use AcrossAI_MCP_Manager\Includes\OAuth\Storage;
+tests/phpunit/OAuth/BearerNoOverrideTest.php:21:		OAuthTokenQuery::maybe_create_table();
+tests/phpunit/OAuth/CleanupIdempotencyTest.php:12:use AcrossAI_MCP_Manager\Includes\Database\OAuthAudit\Query as OAuthAuditQuery;
+tests/phpunit/OAuth/CleanupIdempotencyTest.php:13:use AcrossAI_MCP_Manager\Includes\Database\OAuthToken\Query as OAuthTokenQuery;
+tests/phpunit/OAuth/CleanupIdempotencyTest.php:14:use AcrossAI_MCP_Manager\Includes\OAuth\AuditLog;
+tests/phpunit/OAuth/CleanupIdempotencyTest.php:15:use AcrossAI_MCP_Manager\Includes\OAuth\ClaudeConnectors;
+tests/phpunit/OAuth/CleanupIdempotencyTest.php:22:		OAuthTokenQuery::maybe_create_table();
+tests/phpunit/OAuth/CleanupIdempotencyTest.php:23:		OAuthAuditQuery::maybe_create_table();
+tests/phpunit/OAuth/CleanupIdempotencyTest.php:26:		ClaudeConnectors::instance()->handle_cleanup_event();
+tests/phpunit/OAuth/CleanupIdempotencyTest.php:28:		ClaudeConnectors::instance()->handle_cleanup_event();
+tests/phpunit/OAuth/CleanupIdempotencyTest.php:31:		$runs = ( new OAuthAuditQuery() )->query( array( 'event_type' => AuditLog::EVENT_CLEANUP_RUN ) );
+tests/phpunit/OAuth/BearerAuthSuccessTest.php:12:use AcrossAI_MCP_Manager\Includes\Database\OAuthAudit\Query as OAuthAuditQuery;
+tests/phpunit/OAuth/BearerAuthSuccessTest.php:13:use AcrossAI_MCP_Manager\Includes\Database\OAuthToken\Query as OAuthTokenQuery;
+tests/phpunit/OAuth/BearerAuthSuccessTest.php:14:use AcrossAI_MCP_Manager\Includes\OAuth\AuditLog;
+tests/phpunit/OAuth/BearerAuthSuccessTest.php:15:use AcrossAI_MCP_Manager\Includes\OAuth\BearerAuth;
+tests/phpunit/OAuth/BearerAuthSuccessTest.php:16:use AcrossAI_MCP_Manager\Includes\OAuth\Storage;
+tests/phpunit/OAuth/BearerAuthSuccessTest.php:23:		OAuthTokenQuery::maybe_create_table();
+tests/phpunit/OAuth/BearerAuthSuccessTest.php:24:		OAuthAuditQuery::maybe_create_table();
+tests/phpunit/OAuth/BearerAuthSuccessTest.php:45:		$rows = ( new OAuthAuditQuery() )->query(
+tests/phpunit/OAuth/LoaderContractTest.php:31:		$this->assertNotFalse( has_action( 'acrossai_mcp_oauth_cleanup' ), 'cleanup cron action not registered.' );
+tests/phpunit/OAuth/ConcurrentRedeemRaceTest.php:30:use AcrossAI_MCP_Manager\Includes\Database\OAuthAudit\Query as OAuthAuditQuery;
+tests/phpunit/OAuth/ConcurrentRedeemRaceTest.php:31:use AcrossAI_MCP_Manager\Includes\Database\OAuthToken\Query as OAuthTokenQuery;
+tests/phpunit/OAuth/ConcurrentRedeemRaceTest.php:32:use AcrossAI_MCP_Manager\Includes\OAuth\AuditLog;
+tests/phpunit/OAuth/ConcurrentRedeemRaceTest.php:33:use AcrossAI_MCP_Manager\Includes\OAuth\PKCE;
+tests/phpunit/OAuth/ConcurrentRedeemRaceTest.php:34:use AcrossAI_MCP_Manager\Includes\OAuth\Storage;
+tests/phpunit/OAuth/ConcurrentRedeemRaceTest.php:35:use AcrossAI_MCP_Manager\Includes\OAuth\TokenController;
+tests/phpunit/OAuth/ConcurrentRedeemRaceTest.php:49:		OAuthTokenQuery::maybe_create_table();
+tests/phpunit/OAuth/ConcurrentRedeemRaceTest.php:50:		OAuthAuditQuery::maybe_create_table();
+tests/phpunit/OAuth/ConcurrentRedeemRaceTest.php:58:				'claude_connector_client_id'     => 'client-A',
+tests/phpunit/OAuth/ConcurrentRedeemRaceTest.php:59:				'claude_connector_client_secret' => 'secret-A',
+tests/phpunit/OAuth/ConcurrentRedeemRaceTest.php:60:				'claude_connector_redirect_uri'  => 'https://app.example/cb',
+tests/phpunit/OAuth/ConcurrentRedeemRaceTest.php:90:		$token_rows_before = ( new OAuthTokenQuery() )->query( array( 'server_id' => $this->server_id ) );
+tests/phpunit/OAuth/ConcurrentRedeemRaceTest.php:100:		$token_rows_after = ( new OAuthTokenQuery() )->query( array( 'server_id' => $this->server_id ) );
+tests/phpunit/OAuth/ConcurrentRedeemRaceTest.php:105:		$replay = ( new OAuthAuditQuery() )->query( array( 'event_type' => AuditLog::EVENT_FAILED_REPLAY_ATTEMPT ) );
+tests/phpunit/OAuth/ConcurrentRedeemRaceTest.php:107:		$revoked = ( new OAuthAuditQuery() )->query( array( 'event_type' => AuditLog::EVENT_TOKEN_REVOKED ) );
+tests/phpunit/OAuth/AuditLogTest.php:11:use AcrossAI_MCP_Manager\Includes\Database\OAuthAudit\Query as OAuthAuditQuery;
+tests/phpunit/OAuth/AuditLogTest.php:12:use AcrossAI_MCP_Manager\Includes\OAuth\AuditLog;
+tests/phpunit/OAuth/AuditLogTest.php:19:		OAuthAuditQuery::maybe_create_table();
+tests/phpunit/OAuth/AuditLogTest.php:28:		$rows = ( new OAuthAuditQuery() )->query(
+tests/phpunit/OAuth/AuditLogTest.php:44:		$rows = ( new OAuthAuditQuery() )->query(
+tests/phpunit/OAuth/AuditLogTest.php:57:		$rows = ( new OAuthAuditQuery() )->query(
+tests/phpunit/OAuth/BearerHeaderParsingTest.php:12:use AcrossAI_MCP_Manager\Includes\Database\OAuthToken\Query as OAuthTokenQuery;
+tests/phpunit/OAuth/BearerHeaderParsingTest.php:13:use AcrossAI_MCP_Manager\Includes\OAuth\BearerAuth;
+tests/phpunit/OAuth/BearerHeaderParsingTest.php:14:use AcrossAI_MCP_Manager\Includes\OAuth\Storage;
+tests/phpunit/OAuth/BearerHeaderParsingTest.php:22:		OAuthTokenQuery::maybe_create_table();
+tests/phpunit/OAuth/ClaudeConnectorsDiscoveryTest.php:10:use AcrossAI_MCP_Manager\Includes\OAuth\ClaudeConnectors;
+tests/phpunit/OAuth/ClaudeConnectorsDiscoveryTest.php:13:class ClaudeConnectorsDiscoveryTest extends WP_UnitTestCase {
+tests/phpunit/OAuth/ClaudeConnectorsDiscoveryTest.php:57:			ClaudeConnectors::instance()->{$method}();
+tests/phpunit/OAuth/TokenControllerHappyPathTest.php:13:use AcrossAI_MCP_Manager\Includes\Database\OAuthAudit\Query as OAuthAuditQuery;
+tests/phpunit/OAuth/TokenControllerHappyPathTest.php:14:use AcrossAI_MCP_Manager\Includes\Database\OAuthToken\Query as OAuthTokenQuery;
+tests/phpunit/OAuth/TokenControllerHappyPathTest.php:15:use AcrossAI_MCP_Manager\Includes\OAuth\PKCE;
+tests/phpunit/OAuth/TokenControllerHappyPathTest.php:16:use AcrossAI_MCP_Manager\Includes\OAuth\Storage;
+tests/phpunit/OAuth/TokenControllerHappyPathTest.php:17:use AcrossAI_MCP_Manager\Includes\OAuth\TokenController;
+tests/phpunit/OAuth/TokenControllerHappyPathTest.php:29:		OAuthTokenQuery::maybe_create_table();
+tests/phpunit/OAuth/TokenControllerHappyPathTest.php:30:		OAuthAuditQuery::maybe_create_table();
+tests/phpunit/OAuth/TokenControllerHappyPathTest.php:37:				'claude_connector_client_id'     => 'client-A',
+tests/phpunit/OAuth/TokenControllerHappyPathTest.php:38:				'claude_connector_client_secret' => 'secret-A',
+tests/phpunit/OAuth/TokenControllerHappyPathTest.php:39:				'claude_connector_redirect_uri'  => 'https://app.example/cb',
+tests/phpunit/OAuth/TokenControllerHappyPathTest.php:77:		$token_rows = ( new OAuthTokenQuery() )->query( array( 'server_id' => $this->server_id, 'number' => 1 ) );
+tests/phpunit/Admin/SettingsMenuTest.php:83:		$this->assertArrayHasKey( 'acrossai_mcp_claude_connectors_enabled', $wp_registered_settings );
+tests/phpunit/Admin/SettingsMenuTest.php:86:			$wp_registered_settings['acrossai_mcp_claude_connectors_enabled']['sanitize_callback']
+tests/phpunit/Admin/SettingsMenuTest.php:88:		$this->assertFalse( $wp_registered_settings['acrossai_mcp_claude_connectors_enabled']['default'] );
+tests/phpunit/Admin/ServerTabs/RegistryTest.php:44:		$this->assertContains( 'claude-connector', $slugs );
+tests/phpunit/Public/MainEnqueueTest.php:7: *  - the SEC-008-002 handle rename to `acrossai-mcp-frontend-oauth`
+tests/phpunit/Public/MainEnqueueTest.php:9: *  - the B11 defensive read fallback when `frontend-oauth.asset.php` is missing
+tests/phpunit/Public/MainEnqueueTest.php:63:			'/build/css/frontend-oauth.css',
+tests/phpunit/Public/MainEnqueueTest.php:99:		// `frontend-oauth.asset.php` manifest may or may not exist depending on
+tests/phpunit/Public/Renderers/PublicApiTest.php:20:use AcrossAI_MCP_Manager\Public\Renderers\ClaudeConnectorBlock;
+tests/phpunit/Public/Renderers/PublicApiTest.php:47:	 * SEC-013-005 — ClaudeConnectorBlock renders disabled notice when option is false.
+tests/phpunit/Public/Renderers/PublicApiTest.php:53:		update_option( 'acrossai_mcp_claude_connectors_enabled', false );
+tests/phpunit/Public/Renderers/PublicApiTest.php:56:		ClaudeConnectorBlock::instance()->render( 1, array( 'context' => 'admin' ) );
+tests/phpunit/Public/Renderers/PublicApiTest.php:60:		$this->assertStringNotContainsString( 'save_claude_connector', $output );
+tests/phpunit/Public/Renderers/PublicApiTest.php:71:		update_option( 'acrossai_mcp_claude_connectors_enabled', false );
+webpack.config.js:97:		'css/frontend-oauth': path.resolve(
+webpack.config.js:100:			'frontend-oauth.scss'
+uninstall.php:83:wp_clear_scheduled_hook( 'acrossai_mcp_oauth_cleanup' );
