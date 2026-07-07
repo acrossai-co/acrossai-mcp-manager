@@ -80,13 +80,6 @@ final class SettingsMenuTest extends WP_UnitTestCase {
 		);
 		$this->assertFalse( $wp_registered_settings['acrossai_mcp_npm_login_enabled']['default'] );
 
-		$this->assertArrayHasKey( 'acrossai_mcp_claude_connectors_enabled', $wp_registered_settings );
-		$this->assertSame(
-			'rest_sanitize_boolean',
-			$wp_registered_settings['acrossai_mcp_claude_connectors_enabled']['sanitize_callback']
-		);
-		$this->assertFalse( $wp_registered_settings['acrossai_mcp_claude_connectors_enabled']['default'] );
-
 		$this->assertArrayHasKey( 'acrossai_mcp_uninstall_delete_data', $wp_registered_settings );
 		$this->assertIsCallable(
 			$wp_registered_settings['acrossai_mcp_uninstall_delete_data']['sanitize_callback']

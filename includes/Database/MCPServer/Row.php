@@ -19,19 +19,16 @@ defined( 'ABSPATH' ) || exit;
  */
 class Row extends \BerlinDB\Database\Kern\Row {
 
-	/** @var int */    public $id                             = 0;
-	/** @var string */ public $server_name                    = '';
-	/** @var string */ public $server_slug                    = '';
-	/** @var string */ public $description                    = '';
-	/** @var int */    public $is_enabled                     = 0;
-	/** @var string */ public $registered_from                = 'plugin';
-	/** @var string */ public $server_route_namespace         = 'mcp';
-	/** @var string */ public $server_route                   = '';
-	/** @var string */ public $server_version                 = 'v1.0.0';
-	/** @var string */ public $claude_connector_client_id     = '';
-	/** @var string */ public $claude_connector_client_secret = '';
-	/** @var string */ public $claude_connector_redirect_uri  = '';
-	/** @var string */ public $created_at                     = '';
+	/** @var int */    public $id                     = 0;
+	/** @var string */ public $server_name            = '';
+	/** @var string */ public $server_slug            = '';
+	/** @var string */ public $description            = '';
+	/** @var int */    public $is_enabled             = 0;
+	/** @var string */ public $registered_from        = 'plugin';
+	/** @var string */ public $server_route_namespace = 'mcp';
+	/** @var string */ public $server_route           = '';
+	/** @var string */ public $server_version         = 'v1.0.0';
+	/** @var string */ public $created_at             = '';
 
 	/**
 	 * Constructor — casts primitive types.
@@ -50,19 +47,16 @@ class Row extends \BerlinDB\Database\Kern\Row {
 	 */
 	public function to_array(): array {
 		return array(
-			'id'                             => $this->id,
-			'server_name'                    => $this->server_name,
-			'server_slug'                    => $this->server_slug,
-			'description'                    => $this->description,
-			'is_enabled'                     => $this->is_enabled,
-			'registered_from'                => $this->registered_from,
-			'server_route_namespace'         => $this->server_route_namespace,
-			'server_route'                   => $this->server_route,
-			'server_version'                 => $this->server_version,
-			'claude_connector_client_id'     => $this->claude_connector_client_id,
-			'claude_connector_client_secret' => $this->claude_connector_client_secret,
-			'claude_connector_redirect_uri'  => $this->claude_connector_redirect_uri,
-			'created_at'                     => $this->created_at,
+			'id'                     => $this->id,
+			'server_name'            => $this->server_name,
+			'server_slug'            => $this->server_slug,
+			'description'            => $this->description,
+			'is_enabled'             => $this->is_enabled,
+			'registered_from'        => $this->registered_from,
+			'server_route_namespace' => $this->server_route_namespace,
+			'server_route'           => $this->server_route,
+			'server_version'         => $this->server_version,
+			'created_at'             => $this->created_at,
 		);
 	}
 }

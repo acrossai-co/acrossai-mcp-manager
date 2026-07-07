@@ -48,7 +48,9 @@ No code duplication between modules is permitted under any circumstance.
 
 **Rationale**: Enables parallel development, isolated testing, and safe iteration on any single feature
 without risking regressions in others. The active feature areas (MCP Server Management, CLI Auth,
-OAuth / Claude Connectors, Frontend Auth, Access Control) MUST each map to exactly one module.
+Frontend Auth, Access Control) MUST each map to exactly one module.
+(*Historical: "OAuth / Claude Connectors" was a 5th active area prior to F016 2026-07-07;
+retired per DECISIONS.md D21 fresh-install-only retirement pattern.*)
 
 ### II. WordPress Standards Compliance
 
@@ -179,7 +181,6 @@ includes/
 ├── Utilities/      # Shared utility functions, helpers, formatters
 ├── MCP/            # MCP server boot and registration
 ├── MCPClients/     # AI client configuration generators (one class per client)
-├── OAuth/          # Claude Connectors OAuth 2.0 flow
 └── REST/           # REST API controllers (CLI auth, access control)
 public/
 └── Partials/       # Frontend-facing classes (FrontendAuth virtual page)
@@ -197,7 +198,6 @@ under the plugin root, using `AcrossAI_MCP_Manager` as the root and `\` as the s
 - `includes/Main.php` → `AcrossAI_MCP_Manager\Includes`
 - `includes/MCP/Controller.php` → `AcrossAI_MCP_Manager\Includes\MCP`
 - `includes/MCPClients/ClaudeCodeClient.php` → `AcrossAI_MCP_Manager\Includes\MCPClients`
-- `includes/OAuth/ClaudeConnectors.php` → `AcrossAI_MCP_Manager\Includes\OAuth`
 - `includes/REST/CliController.php` → `AcrossAI_MCP_Manager\Includes\REST`
 - `includes/Utilities/TokenHelper.php` → `AcrossAI_MCP_Manager\Includes\Utilities`
 - `admin/Partials/Settings.php` → `AcrossAI_MCP_Manager\Admin\Partials`

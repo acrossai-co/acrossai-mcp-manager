@@ -41,7 +41,7 @@ class SettingsRenderer {
 	public function render_tab_nav( array $tabs, string $current, int $server_id ): void {
 		echo '<h2 class="nav-tab-wrapper">';
 		foreach ( $tabs as $slug => $label ) {
-			$url = esc_url(
+			$url    = esc_url(
 				add_query_arg(
 					array(
 						'page'   => AdminPageSlugs::PARENT,

@@ -94,11 +94,6 @@ module.exports = {
 			'src/scss',
 			'backend.scss'
 		),
-		'css/frontend-oauth': path.resolve(
-			process.cwd(),
-			'src/scss',
-			'frontend-oauth.scss'
-		),
 	},
 	output: {
 		...defaultConfig.output,

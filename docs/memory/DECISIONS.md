@@ -706,12 +706,14 @@ Any future feature adding 3+ tabs to a per-record admin page: read `AbstractServ
 
 ### DEC-CLIENT-RENDERER-PUBLIC-API — Public Renderer layer for cross-context (admin + third-party) reuse
 
-**Status**: Active (Feature 013) — API is `@experimental` until 1.0.0.
+**Status**: Active (Feature 013; annotated F016 2026-07-07) — API is `@experimental` until 1.0.0.
 **Scope**: MCP client-config UI rendered from admin AND external contexts (BuddyBoss, WooCommerce, other AcrossAI plugins).
 **Tags**: public-api, renderer, cross-context, experimental, shortcode, security-critical
 
+**Post-F016 (2026-07-07)**: Renderer count shrinks from 3 to 2. Retired: `ClaudeConnectorBlock`. Surviving: `NpmClientBlock`, `MCPClientsBlock`. Dispatch map (in `ClientRendererController::dispatch_render_action`) shrinks from 3 entries to 2 (`npm`, `clients`). Shortcodes shrink from 3 to 2 (`acrossai_mcp_npm_block`, `acrossai_mcp_clients_block`). Base class (`AbstractClientRenderer`), REST endpoint (`POST /generate-app-password`), and all 4 sanctioned entry points (static call, action hook, context filter, shortcodes) remain intact — the surface merely reduces. The `@experimental` allowance until 1.0.0 covers this reduction; third-party consumers that hardcoded `'claude-connector'` see silent no-op per the dispatcher's unknown-slug guard.
+
 **Why this is durable**
-F013 introduces `public/Renderers/` — a new plugin subsystem exposing 3 client-configuration Blocks (Npm, MCPClients, ClaudeConnector) to third-party plugins with **zero code duplication** vs. admin rendering. The Renderer layer is the ONLY sanctioned integration surface — third parties never reach into `admin/Partials/`. Canonical pattern for future MCP-adjacent third-party integrations.
+F013 introduces `public/Renderers/` — a new plugin subsystem exposing client-configuration Blocks to third-party plugins with **zero code duplication** vs. admin rendering. The Renderer layer is the ONLY sanctioned integration surface — third parties never reach into `admin/Partials/`. Canonical pattern for future MCP-adjacent third-party integrations.
 
 **Decision**
 Any admin surface displaying MCP client config (JSON blocks, "Generate App Password" button, config file path) MUST render via `public/Renderers/` using ONE of four entry points:
@@ -1085,3 +1087,42 @@ F015: spec (FR-014) called for wiring 5 hooks including `add_filter( PROVIDERS_F
 
 **Where to look next**
 DEC-ACCESS-CONTROL-V2-ADOPTION — the vendor consumption pattern this DEC refines. Anytime a future feature adds a `add_filter( '<vendor>_default_<thing>', … )` wire, cross-reference D20 in the plan's Constitution Check. Applies to any Composer-installed vendor package that manages its own "defaults" collection via a filter — verify the vendor's own registration site before wiring.
+
+---
+
+### 2026-07-07 - D21 — Fresh-install-only retirement pattern
+
+**Status**
+Active (F016)
+
+**Decision**
+Retirement/teardown features MUST NOT default to shipping in-plugin schema-migration code. The default posture is:
+
+1. **Delete** the retired classes, tests, tables, columns, hooks, options, cron events from the codebase.
+2. **DO NOT** add idempotent `DROP TABLE IF EXISTS` or `delete_option()` cleanup to `Activator::activate()`.
+3. **DO NOT** bump the retiring module's BerlinDB `$version` on schema-shape changes when the operator handles the physical drop manually.
+4. **Publish** the manual retirement recipe in `README.txt` §Unreleased with concrete SQL + `wp cron event unschedule` steps + operator advisory (revoke-first for tokens, behavior-change notes for retired auth surfaces).
+5. **KEEP** defunct table names in `uninstall.php` DROP list AS AN IDEMPOTENT SAFETY NET, AFTER the `DEC-UNINSTALL-OPT-IN-GATE` short-circuit. `DROP TABLE IF EXISTS` costs nothing when the operator has already dropped the tables manually; catches installs that skip the reactivation path.
+
+**Escape hatch — when to REJECT this pattern**
+If the plugin ships to sites with live retired-feature data AND you cannot get operator attestation (public wp.org release with unknown install base, plugin family with enterprise consumers, etc.), self-healing migration IS required. Precedent for the "self-healing" alternative: F011 (2026-07-02) shipped the phantom-version guard because the migration WAS a runtime operation, not an operator recipe.
+
+**Rationale**
+- **Smaller diff** — F016 removed ~80 LOC of migration helpers relative to the initial plan (no `ConnectorColumnMigration.php`, no idempotent DROP in Activator, no `column_exists`-gated ALTER fallback).
+- **Zero test surface for migration edge cases** — no need for parametrized "does BerlinDB drop columns on version bump?" tests.
+- **Eliminates Activator destructive-SQL risk** — a maintainer misreading the plan cannot add "belt and suspenders" cleanup code that runs on every reactivation.
+- **Operator retains explicit control over destructive timing** — the SQL runs when the operator is ready, on their timeline, with their backup posture, not on plugin update.
+
+**Reconsider**
+- If operator attestation cannot be obtained (public plugin ship, wp.org install base).
+- If the retired data has legal-retention constraints that make operator-driven deletion insufficient (GDPR right-to-be-forgotten, HIPAA disposal windows).
+- If the retirement is a phased evolution where downstream consumers need a compatibility window (opposite scope from F016 — see any future "deprecation window" DEC).
+
+**Applied**
+F016 (2026-07-07) — Claude Connectors retirement.
+- Operator recipe: `README.txt` §Unreleased.
+- Attestation: `specs/016-remove-claude-connectors/spec.md` §Assumptions "Attestation of no live connector data" (raftaar1191@gmail.com, 2026-07-06).
+- Reference implementation of the retention side (uninstall.php safety net): `uninstall.php:57-58` — DROP entries live AFTER `line 33`'s opt-in gate. Verified via F016 T038 awk assertion.
+
+**Where to look next**
+Any future retirement feature: cite this DEC in the plan's Constitution Check with the operator-attestation status. If attestation exists → apply this pattern. If not → apply F011's self-healing pattern (phantom-version guard + Activator `maybe_upgrade` calls). WORKLOG.md 2026-07-07 has the milestone narrative.

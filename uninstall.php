@@ -78,6 +78,3 @@ if ( is_array( $options ) ) {
 		delete_option( $option_name );
 	}
 }
-
-// Clear the OAuth token cleanup cron hook.
-wp_clear_scheduled_hook( 'acrossai_mcp_oauth_cleanup' );

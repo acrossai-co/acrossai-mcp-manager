@@ -181,6 +181,28 @@ No additional software is needed on the WordPress side. Your MCP clients (VS Cod
 
 == Changelog ==
 
+= Unreleased =
+* **Feature 016 — Retired the Claude Connectors integration in full.** The OAuth 2.1 authorization-server surface (well-known discovery URLs, `/wp-json/acrossai-mcp/v1/token` REST route, bearer-token acceptance on the `determine_current_user` filter, daily `acrossai_mcp_oauth_cleanup` cron, per-server Claude Connector admin tab, Settings → MCP toggle, `[acrossai_mcp_claude_connector_block]` shortcode, and the `frontend-oauth` CSS bundle) is fully removed. The feature never worked with claude.ai's hosted Connectors UI on local installs and has been retired to reduce attack surface. This release is compat-breaking on Claude-Connector-owned data only; every other MCP server row and setting is preserved. Net effect: ~4,000 lines of security-sensitive code removed, one fewer REST route, one fewer `determine_current_user` filter, no more OAuth discovery endpoints.
+* **Operator action required for pre-016 installs.** The plugin ships fresh-install-only — no in-plugin schema migration. Before reactivating the updated plugin on an install that had populated Claude Connector data, run this manual retirement recipe (SEC-016-001 defense-in-depth: the pre-DROP `UPDATE` forces the InnoDB tablespace to overwrite the plaintext `client_secret` bytes before the column is dropped):
+
+    UPDATE wp_acrossai_mcp_servers SET
+        claude_connector_client_secret = '',
+        claude_connector_redirect_uri  = '';
+    DROP TABLE IF EXISTS wp_acrossai_mcp_oauth_tokens;
+    DROP TABLE IF EXISTS wp_acrossai_mcp_oauth_audit;
+    ALTER TABLE wp_acrossai_mcp_servers
+        DROP COLUMN claude_connector_client_id,
+        DROP COLUMN claude_connector_client_secret,
+        DROP COLUMN claude_connector_redirect_uri;
+    DELETE FROM wp_options WHERE option_name IN (
+        'acrossai_mcp_oauth_tokens_db_version',
+        'acrossai_mcp_oauth_audit_db_version',
+        'acrossai_mcp_claude_connectors_enabled'
+    );
+
+  And one companion WP-CLI step to clear the retired daily cron: `wp cron event unschedule acrossai_mcp_oauth_cleanup`. If your install has any active claude.ai Connector tokens, revoke them from claude.ai's Connectors UI BEFORE running the retirement SQL — the retirement drops the audit log with no recovery.
+* **Behavior change: `Authorization: Bearer` headers no longer elevate users.** The Bearer resolver on the `determine_current_user` filter has been removed. Integrators relying on the retired path should migrate to WordPress Application Passwords via the CLI auth flow (`public/Partials/FrontendAuth`), which is untouched by this release.
+
 = 0.0.9 =
 * **Fix: Claude Code MCP Clients tab now shows a JSON config block instead of a `claude mcp add` shell command.** The `~/.claude.json` config file path is displayed correctly (was incorrectly listed as `~/.claude/mcp_servers.json`), the snippet renders as a copy-pasteable `mcpServers` block with `command`/`args`/`env`, and the env now pins `OAUTH_ENABLED: "false"` alongside `WP_API_URL` / `WP_API_USERNAME` / `WP_API_PASSWORD` to keep the `@automattic/mcp-wordpress-remote` client from falling into an OAuth branch it can't complete against an Application Password server. Instructions on the tab updated to match ("paste under the top-level key" — no more `claude mcp add-json`).
 * **Internal: `ACROSSAI_MCP_MANAGER_VERSION` constant now tracks the plugin header.** It had drifted at `0.0.6` across the 0.0.7 and 0.0.8 releases; this release resyncs it to `0.0.9`. Consumers reading the constant to key cache entries or telemetry will see a version bump even though there are no functional changes since 0.0.8 beyond the Claude Code tab fix above.

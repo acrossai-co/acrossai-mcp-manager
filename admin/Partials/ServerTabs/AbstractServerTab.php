@@ -232,8 +232,7 @@ abstract class AbstractServerTab {
 	}
 
 	/**
-	 * Renders a client label + vendor pair line (used by NpmTab, ClientsTab,
-	 * ClaudeConnectorTab).
+	 * Renders a client label + vendor pair line (used by NpmTab, ClientsTab).
 	 *
 	 * @since 0.0.6
 	 * @param string $client_name Client display name.
