@@ -1192,3 +1192,87 @@ F017 (2026-07-07) — `src/js/abilities.js` mounted on the Abilities tab via `ad
 
 **Where to look next**
 `docs/planings-tasks/017-per-server-ability-selection.md` §CONSTRAINTS. F015 access-control precedent (`src/js/access-control.js`) is the sibling shape (vendor-provided React component in that case) — F017 shows the WP-provided package shape.
+
+---
+
+### DEC-TOOL-SELECTION-PRESENCE-MODEL — Presence-based storage when UX has no third state
+
+**Status**: Active (Feature 020 — 2026-07-09)
+**Scope**: Feature data-model decisions for per-resource configuration surfaces.
+**Tags**: `presence-based-storage, boolean-antipattern, ui-driven-data-model, set-membership, third-state-avoidance, generalizable`
+
+**Why this is durable**
+
+F020's Tools tab presents a two-column shuttle picker where each ability is either "in the curated list" or "not in the curated list" — no third state (no inherited/default/tri-state affordance). If the storage layer models this with a boolean column (`is_added`) matching each row, a phantom third state emerges: "row exists but `is_added = false`" — a state that has no UI representation and creates ambiguity for future consumers (does an unread row mean unset, false, or was-set-then-unset?). F020 avoided this by using **row presence** as the flag: a row for `(server_id, ability_slug)` exists ⇔ ability is added; no row means not added. The `UNIQUE(server_id, ability_slug)` constraint enforces the invariant at the DB level.
+
+**Decision**
+
+When a UI models set-membership with exactly two states, the storage MUST be presence-based:
+
+- Row exists ⇔ true state.
+- Row missing ⇔ false state.
+- Enforce with a UNIQUE constraint on the identifying tuple.
+- The "delete row" operation replaces the "set false" operation.
+- No boolean column that would introduce a third state.
+
+Contrast with F017's `wp_acrossai_mcp_server_abilities` (uses `is_exposed` boolean): F017 needs the boolean because ability exposure has a fallback path — absence of a row means "use `meta.mcp.public`", which is a legitimate third state (not-set / true-overridden / false-overridden). F017's DataViews toggle grid can represent all three states via the toggle's mixed/on/off tri-state semantics. F020 has no such fallback layer — presence is authoritative.
+
+**Decision rule (generalizable)**: model third-state presence in the UI first; if a boolean's `false` value would be indistinguishable from "no row" in the UI, drop the boolean.
+
+**Tradeoffs**
+- Gained: simpler schema; UNIQUE constraint enforces correctness at the DB level; no ExposureResolver-style fallback layer needed; delete = false operation is trivially auditable via BerlinDB's `_deleted` action hooks.
+- Made harder: features that later need a fallback layer must migrate the schema (add a boolean, backfill, update writers). Trivially reversible but a non-zero migration cost.
+- Reconsider: never for pure two-state set-membership. Reconsider when the UX evolves to include a third state (inherited/default) — at that point migrate to a boolean-with-resolver pattern (F017 shape).
+
+**Evidence**
+- `specs/020-per-server-tool-selection/data-model.md §Presence-based storage`
+- `includes/Database/MCPServerTool/Schema.php:33-89` — 5 columns, no boolean.
+- `specs/020-per-server-tool-selection/spec.md §Assumptions §Presence-based storage`.
+
+**Where to look next**
+
+Grep for new per-resource config tables: `grep -rn "'is_[a-z_]*'.*=> *'tinyint'" includes/Database/`. For each hit, verify the UI has a third state (fallback/default). If not, the boolean is a candidate for removal via a data-model refactor.
+
+---
+
+### DEC-F020-TOOL-ENFORCEMENT-PRIORITY — `mcp_adapter_pre_tool_call` slot map annotation
+
+**Status**: Active (Feature 020 — 2026-07-09; annotates D18)
+**Scope**: WordPress action/filter priorities on `mcp_adapter_pre_tool_call`.
+**Tags**: `mcp-adapter-pre-tool-call, priority-slot-map, deny-precedence, gate-stacking, f015-f017-f020, generalizable, d18-annotation`
+
+**Why this is durable**
+
+The `mcp_adapter_pre_tool_call` filter (D18) now has three registered gates in this plugin — F015 access control (priority 10), F017 ability exposure (priority 20), and F020 tool curation (priority 30). Deny-precedence layering depends on the priority ordering: each higher-priority-number callback runs LATER and must honor any prior `WP_Error` return. Future features adding gates need a stable slot assignment convention to avoid collision + surprise reordering.
+
+**Decision**
+
+The canonical priority slots for `mcp_adapter_pre_tool_call` in this plugin:
+
+| Priority | Feature | Purpose | Reference |
+|---------:|---------|---------|-----------|
+|       10 | F015    | Access-control rule evaluation | INDEX row D18 |
+|       20 | F017    | Per-server ability exposure toggle | F017 FR-030 |
+|   **30** | **F020**| **Per-server tool curation** | `contracts/enforcement.md` |
+
+Rules for future gate additions:
+
+1. New gates MUST occupy slot 40+ or explicitly re-plan the slot map with a memory-md capture that supersedes this DEC.
+2. All gates MUST honor deny-precedence: if `$args` is already `WP_Error`, propagate unchanged — never re-allow.
+3. Fail-open on unresolvable server (matches F015 D19 observability pattern).
+4. When a fourth gate is added, **consider extracting** `McpAdapterGateRegistry` (a shared service that gates register into via a filter or add-method call) so slot assignments become declarative rather than scattered across `Main.php`. F020 predates this extraction; the 3-gate cost of scattered wiring is acceptable, the 4-gate cost may not be.
+
+**Tradeoffs**
+- Gained: explicit deny-precedence semantics that operators + auditors can reason about; each feature's gate lives in its own callback with its own error code; upstream vendor changes to the filter shape are absorbed independently per gate.
+- Made harder: slot-map knowledge must be checked on every new gate feature; scattered wiring in `Main.php` grows linearly.
+- Reconsider: at 4 gates, extract a registry. Update this DEC to point at the new registry pattern.
+
+**Evidence**
+- `includes/Main.php:437-441` — F020's priority-30 wire.
+- `includes/Main.php:432-433` — F017's priority-20 wire (D18 reference implementation).
+- `includes/AccessControl/AcrossAI_MCP_Access_Control.php:249-253` — F015's priority-10 wire.
+- `specs/020-per-server-tool-selection/contracts/enforcement.md §Priority Slot Map` — canonical documentation.
+
+**Where to look next**
+
+When adding a 4th gate: verify the slot table above matches shipped code (grep `mcp_adapter_pre_tool_call` in `includes/Main.php`); pick slot 40 or higher; add a companion row to this DEC's slot table; consider whether the registry extraction is warranted (2-line PR if slot 40 is the target; multi-file PR if extracting).

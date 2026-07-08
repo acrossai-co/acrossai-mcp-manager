@@ -129,6 +129,10 @@ class Main {
 		// F017 — Abilities tab React app (@wordpress/dataviews).
 		// Scoped to the Abilities tab only — same guard shape as F015.
 		$this->maybe_enqueue_abilities_app();
+
+		// F020 — Tools tab React app (hand-rolled shuttle picker).
+		// Scoped to the Tools tab only — same guard shape as F015/F017.
+		$this->maybe_enqueue_tools_app();
 	}
 
 	/**
@@ -272,6 +276,79 @@ class Main {
 				// B17 defense — `rest_url()` returns with a trailing slash;
 				// the client concatenates `restApiRoot + '/acrossai-mcp-manager/v1/…'`
 				// so we strip the slash here to avoid `//`-doubled routes → 404.
+				'restApiRoot' => esc_url_raw( untrailingslashit( rest_url() ) ),
+				'nonce'       => wp_create_nonce( 'wp_rest' ),
+				'namespace'   => 'acrossai-mcp-manager/v1',
+			)
+		);
+	}
+
+	/**
+	 * Enqueue the F020 Tools tab React shuttle picker on the Tools tab.
+	 *
+	 * Mirrors `maybe_enqueue_abilities_app()` verbatim — `?action=edit` +
+	 * `?tab=tools` guard, silent bail on missing asset manifest (FR-019),
+	 * localize `window.acrossaiMcpTools`.
+	 *
+	 * @since 0.1.0
+	 * @return void
+	 */
+	private function maybe_enqueue_tools_app(): void {
+		// phpcs:disable WordPress.Security.NonceVerification.Recommended -- Read-only routing check.
+		$is_edit  = isset( $_GET['action'] ) && 'edit' === sanitize_key( wp_unslash( $_GET['action'] ) );
+		$is_tools = isset( $_GET['tab'] ) && 'tools' === sanitize_key( wp_unslash( $_GET['tab'] ) );
+		if ( ! $is_edit || ! $is_tools ) {
+			return;
+		}
+		// phpcs:enable
+
+		$asset = $this->read_asset_manifest( 'build/js/tools.asset.php' );
+		if ( null === $asset ) {
+			return;
+		}
+
+		$handle = $this->plugin_name . '-tools';
+		wp_enqueue_script(
+			$handle,
+			esc_url( \ACROSSAI_MCP_MANAGER_PLUGIN_URL . 'build/js/tools.js' ),
+			$asset['dependencies'],
+			$asset['version'],
+			true
+		);
+
+		// Optional CSS — auto-extracted if src/scss/tools.scss is imported.
+		$css_path = \ACROSSAI_MCP_MANAGER_PLUGIN_PATH . 'build/js/tools.css';
+		if ( file_exists( $css_path ) ) {
+			wp_enqueue_style(
+				$handle,
+				esc_url( \ACROSSAI_MCP_MANAGER_PLUGIN_URL . 'build/js/tools.css' ),
+				array(),
+				$asset['version']
+			);
+		}
+
+		// phpcs:disable WordPress.Security.NonceVerification.Recommended
+		$server_id = isset( $_GET['server'] ) ? absint( wp_unslash( $_GET['server'] ) ) : 0;
+		// phpcs:enable
+		$server_slug = '';
+		if ( $server_id > 0 ) {
+			$rows = \AcrossAI_MCP_Manager\Includes\Database\MCPServer\Query::instance()->query(
+				array(
+					'id'     => $server_id,
+					'number' => 1,
+				)
+			);
+			if ( ! empty( $rows ) ) {
+				$server_slug = (string) $rows[0]->server_slug;
+			}
+		}
+
+		wp_localize_script(
+			$handle,
+			'acrossaiMcpTools',
+			array(
+				'serverId'    => $server_id,
+				'serverSlug'  => $server_slug,
 				'restApiRoot' => esc_url_raw( untrailingslashit( rest_url() ) ),
 				'nonce'       => wp_create_nonce( 'wp_rest' ),
 				'namespace'   => 'acrossai-mcp-manager/v1',

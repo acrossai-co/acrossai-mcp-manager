@@ -1,10 +1,15 @@
 <?php
 /**
- * The Tools tab — MCP tools this server exposes to AI clients.
+ * The Tools tab — per-server curation of which registered abilities this
+ * MCP server exposes as callable MCP tools.
  *
- * Feature 013 — ported from reference plugin's render_tools_tab
- * (src/Admin/Settings.php:1893–1963). Lists the three core tools
- * defined by the wordpress/mcp-adapter package — same on every server.
+ * Feature 020 rewrites `render_body` from a static three-row reference table
+ * into a React mount div. The React app (`build/js/tools.js`) reads its own
+ * config from `window.acrossaiMcpTools` (localized by
+ * `Admin\Main::maybe_enqueue_tools_app()`).
+ *
+ * Slug, label, and priority (50 — before Abilities @ 60) are preserved so
+ * F019's `acrossai_mcp_manager_server_tabs` filter output is unchanged.
  *
  * @package    AcrossAI_MCP_Manager
  * @subpackage Admin/Partials/ServerTabs
@@ -46,7 +51,7 @@ final class ToolsTab extends AbstractServerTab {
 	}
 
 	/**
-	 * Priority slot.
+	 * Priority slot — unchanged from F013 / F019 (slot 50, before Abilities @ 60).
 	 *
 	 * @since 0.0.7
 	 * @return int
@@ -56,7 +61,7 @@ final class ToolsTab extends AbstractServerTab {
 	}
 
 	/**
-	 * Renders the MCP tools reference.
+	 * Renders the Tools tab body — React shuttle picker mount + graceful degrades.
 	 *
 	 * @since 0.0.6
 	 * @param array $server Server row data.
@@ -72,75 +77,29 @@ final class ToolsTab extends AbstractServerTab {
 			printf(
 				'<div class="notice notice-warning inline"><p><strong>%1$s</strong> %2$s</p></div>',
 				esc_html__( 'Server is disabled.', 'acrossai-mcp-manager' ),
-				esc_html__( 'Enable the server on the Overview tab to make these tools available to MCP clients.', 'acrossai-mcp-manager' )
+				esc_html__( 'Enable the server on the Overview tab to make these tools available to MCP clients. You can still curate the tool set below — your selection will take effect the moment the server is enabled.', 'acrossai-mcp-manager' )
+			);
+			// Fall through — the picker is still editable while the server is
+			// disabled so the operator can prepare the tool set in advance.
+		}
+
+		if ( ! function_exists( 'wp_get_abilities' ) ) {
+			printf(
+				'<div class="notice notice-error inline"><p><strong>%1$s</strong> %2$s</p></div>',
+				esc_html__( 'WordPress Abilities API unavailable.', 'acrossai-mcp-manager' ),
+				esc_html__( 'The Tools tab requires the WordPress Abilities API. Install or enable a plugin that provides it (e.g. the AcrossAI Core Abilities plugin).', 'acrossai-mcp-manager' )
 			);
 			echo '</div>';
 			return;
 		}
 
 		printf(
-			'<p class="description">%s</p>',
-			esc_html__( 'These are the MCP tools this server exposes to connected AI clients. Every server in this plugin provides the same three core tools backed by the WordPress Abilities API.', 'acrossai-mcp-manager' )
-		);
-
-		$this->render_tools_table( $this->get_core_tools() );
-
-		printf(
-			'<div class="notice notice-info inline" style="margin-top:16px;"><p>%s</p></div>',
-			esc_html__( 'Tools are defined by the wordpress/mcp-adapter package and are the same for all servers. They act as a bridge — AI clients call these tools to discover and execute the WordPress abilities listed in the Abilities tab.', 'acrossai-mcp-manager' )
+			'<div id="acrossai-mcp-tools-root" data-server-id="%1$d" data-server-slug="%2$s"><p class="description">%3$s</p></div>',
+			(int) $server['id'],
+			esc_attr( (string) ( $server['server_slug'] ?? '' ) ),
+			esc_html__( 'Loading tools…', 'acrossai-mcp-manager' )
 		);
 
 		echo '</div>';
-	}
-
-	/**
-	 * Returns the three built-in tools shipped by the wordpress/mcp-adapter package.
-	 *
-	 * @since 0.0.6
-	 * @return array<int, array{name:string, label:string, description:string}>
-	 */
-	private function get_core_tools(): array {
-		return array(
-			array(
-				'name'        => 'mcp-adapter/discover-abilities',
-				'label'       => __( 'Discover Abilities', 'acrossai-mcp-manager' ),
-				'description' => __( 'Lists all publicly available WordPress abilities registered on this site. AI clients use this to discover what actions the server can perform.', 'acrossai-mcp-manager' ),
-			),
-			array(
-				'name'        => 'mcp-adapter/get-ability-info',
-				'label'       => __( 'Get Ability Info', 'acrossai-mcp-manager' ),
-				'description' => __( 'Returns detailed information about a specific ability, including its input/output schema and description. Used by AI clients before executing an ability.', 'acrossai-mcp-manager' ),
-			),
-			array(
-				'name'        => 'mcp-adapter/execute-ability',
-				'label'       => __( 'Execute Ability', 'acrossai-mcp-manager' ),
-				'description' => __( 'Executes a WordPress ability with the provided input parameters and returns the result. This is the primary tool used by AI clients to interact with WordPress.', 'acrossai-mcp-manager' ),
-			),
-		);
-	}
-
-	/**
-	 * Renders the 3-column Tool ID / Name / Description table.
-	 *
-	 * @since 0.0.6
-	 * @param array<int, array{name:string, label:string, description:string}> $tools Tool rows.
-	 * @return void
-	 */
-	private function render_tools_table( array $tools ): void {
-		echo '<table class="wp-list-table widefat fixed striped" style="margin-top:16px;">';
-		echo '<thead><tr>';
-		printf( '<th style="width:30%%">%s</th>', esc_html__( 'Tool ID', 'acrossai-mcp-manager' ) );
-		printf( '<th style="width:20%%">%s</th>', esc_html__( 'Name', 'acrossai-mcp-manager' ) );
-		printf( '<th>%s</th>', esc_html__( 'Description', 'acrossai-mcp-manager' ) );
-		echo '</tr></thead><tbody>';
-		foreach ( $tools as $tool ) {
-			printf(
-				'<tr><td><code>%1$s</code></td><td><strong>%2$s</strong></td><td>%3$s</td></tr>',
-				esc_html( (string) $tool['name'] ),
-				esc_html( (string) $tool['label'] ),
-				esc_html( (string) $tool['description'] )
-			);
-		}
-		echo '</tbody></table>';
 	}
 }

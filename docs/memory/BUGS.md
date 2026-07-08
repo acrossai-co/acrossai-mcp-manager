@@ -734,3 +734,85 @@ Reviewer grep gate: `grep -rEn '_reset.*for_tests|_for_testing|_test_only' inclu
 - Called from production code (`includes/`, `admin/`, `public/`) → rename to production-shape (`clear_request_cache`, `reset_state`), OR redesign to eliminate the dependency (e.g., have `Query::upsert_and_get_effective()` return the new value directly, skipping the resolver's cache entirely).
 
 Applies to any static / singleton state reset the plugin uses to enforce a cross-call invariant.
+
+---
+
+### B24 — Vendor accessor assumption via `instanceof` silently fails when vendor namespace differs
+
+**Status**: Active (F020 — 2026-07-09)
+**Scope**: Cross-package integration, especially `mcp-adapter` / any vendor object accessed via WordPress action/filter payload.
+**Tags**: `vendor-accessor, method-exists, instanceof-antipattern, silent-failure, enforcement-gate, sec-020-007, generalizable`
+
+**Why this is durable**
+
+F020's first plan-remediation drafted `$server instanceof \WP\MCP\Server` and `$server->get_id()` for the runtime enforcement gate — plausible-looking pattern copied from casual documentation. The real vendor class is `\WP\MCP\Core\McpServer` (verified at `vendor/wordpress/mcp-adapter/includes/Core/McpServer.php:26`) with `get_server_id(): string` (returning a slug, not an int). As written, the `instanceof` check would have failed on every real request, `$server_id` stayed `0`, the fail-open branch triggered, and the enforcement gate became a **no-op**. Same effective outcome as the original SEC-020-001 gap the remediation was meant to close. Only caught because a second security review verified the contract text against the vendor's actual source.
+
+**Pattern to prevent**
+
+Use **duck-typed feature detection** for cross-package accessors:
+
+```php
+// WRONG — vendor namespace assumptions rot silently:
+if ( $server instanceof \WP\MCP\Server ) {
+    $id = (int) $server->get_id();
+}
+
+// RIGHT — feature-detected, forward-compatible with vendor refactors:
+if ( ! is_object( $server ) || ! method_exists( $server, 'get_server_id' ) ) {
+    return $args; // Fail-open.
+}
+$slug = (string) $server->get_server_id();
+```
+
+F015 (`AcrossAI_MCP_Access_Control.php:249-253`), F017 (`AbilityExposureGate.php:98-119`), and F020 (`ToolExposureGate.php:113-136`) all follow this pattern. Grep gate for new code that touches a vendor object's accessor: `grep -rEn 'instanceof.*\\\\.*McpServer|->get_id\(\)' includes/` MUST return zero matches OR the match MUST be inside an `if` block whose header is `method_exists( ..., 'get_server_id' )`.
+
+**Evidence**
+- `docs/security-reviews/2026-07-09-020-per-server-tool-selection-plan-v2.md §SEC-020-007` — full analysis.
+- `includes/MCP/ToolExposureGate.php:113-136` — correct shipped pattern.
+- `includes/MCP/AbilityExposureGate.php:98-119` — F017 canonical reference.
+- `includes/AccessControl/AcrossAI_MCP_Access_Control.php:249-253` — F015 canonical reference.
+
+**Where to look next**
+
+For every vendor object accessed via WordPress action/filter payload, check the vendor source for the exact class name + accessor signature BEFORE writing the check. Casual documentation and README snippets often lag behind the vendor's actual namespace layout.
+
+---
+
+### B25 — Redundant `apiFetch.createRootURLMiddleware` in admin JS risks double-slash 404
+
+**Status**: Active (F020 — 2026-07-09)
+**Scope**: Admin-context React/JS bundles enqueued via `admin_enqueue_scripts`.
+**Tags**: `apifetch, middleware, wp-api-settings, redundancy, double-slash-404, silent-failure, admin-js`
+
+**Why this is durable**
+
+WordPress admin JS bundles enqueued on plugin screens automatically inherit `wpApiSettings.root` from WordPress core; `@wordpress/api-fetch` uses that as its default rootURL. Explicitly wiring `apiFetch.use( apiFetch.createRootURLMiddleware( config.restApiRoot + '/' ) )` is redundant AND, when `config.restApiRoot` is already `untrailingslashit`-clean (per B17), risks silent 404s: combining a trailing-`/` base with paths that start with `/` produces `//`-doubled URLs that WordPress routes as 404. F020's initial mount function shipped this pattern; F017's `src/js/abilities.js:95` correctly wires ONLY `createNonceMiddleware` and leaves URL rooting to core.
+
+**Pattern to prevent**
+
+For admin-context JS, wire ONLY the nonce middleware:
+
+```javascript
+// WRONG — redundant + double-slash risk:
+if ( config.nonce ) {
+    apiFetch.use( apiFetch.createNonceMiddleware( config.nonce ) );
+}
+if ( config.restApiRoot ) {
+    apiFetch.use( apiFetch.createRootURLMiddleware( config.restApiRoot + '/' ) );
+}
+
+// RIGHT — matches F017 abilities.js:95, relies on wpApiSettings.root:
+if ( config.nonce ) {
+    apiFetch.use( apiFetch.createNonceMiddleware( config.nonce ) );
+}
+```
+
+Only add `createRootURLMiddleware` when the JS runs OUTSIDE an admin script context (e.g. in a public block that WordPress doesn't auto-configure, in a mail-template preview, or against a separate REST host).
+
+**Evidence**
+- `docs/security-reviews/2026-07-09-020-per-server-tool-selection-staged.md §SEC-020-STG-001` — full analysis.
+- `src/js/abilities.js:95` — F017 canonical reference (nonce middleware only).
+
+**Where to look next**
+
+Grep gate for admin JS: `grep -rEn 'createRootURLMiddleware' src/js/`. Every hit needs justification: is this JS enqueued in a WordPress admin context (`admin_enqueue_scripts`)? If yes, delete the wire. Companion check: `grep -rEn '\+ \x27/\x27\)' src/js/` catches trailing-slash concatenation patterns that trip B17.

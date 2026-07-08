@@ -63,11 +63,12 @@ final class AbilitiesTab extends AbstractServerTab {
 	 * Render the tab body.
 	 *
 	 * Two graceful-degradation branches preserved from the F013 shape:
-	 *   - Server disabled → warning notice.
-	 *   - `wp_get_abilities()` absent → warning notice.
+	 *   - Server disabled → warning notice AND picker still mounts so
+	 *     operators can prepare the exposure set in advance.
+	 *   - `wp_get_abilities()` absent → warning notice; picker cannot mount.
 	 *
-	 * When neither branch fires, emit a mount div for the F017 React app
-	 * (bundle enqueued by `admin/Main.php::maybe_enqueue_abilities_app()`).
+	 * When the Abilities API is present, emit a mount div for the F017 React
+	 * app (bundle enqueued by `admin/Main.php::maybe_enqueue_abilities_app()`).
 	 *
 	 * @since 0.0.6
 	 * @param array $server Server row data.
@@ -83,10 +84,10 @@ final class AbilitiesTab extends AbstractServerTab {
 			printf(
 				'<div class="notice notice-warning inline"><p><strong>%1$s</strong> %2$s</p></div>',
 				esc_html__( 'Server is disabled.', 'acrossai-mcp-manager' ),
-				esc_html__( 'Enable the server on the Overview tab to expose these abilities to MCP clients.', 'acrossai-mcp-manager' )
+				esc_html__( 'Enable the server on the Overview tab to expose these abilities to MCP clients. You can still curate the exposure set below — your selection will take effect the moment the server is enabled.', 'acrossai-mcp-manager' )
 			);
-			echo '</div>';
-			return;
+			// Fall through — the picker is still editable while the server is
+			// disabled so the operator can prepare the exposure set in advance.
 		}
 
 		if ( ! function_exists( 'wp_get_abilities' ) ) {

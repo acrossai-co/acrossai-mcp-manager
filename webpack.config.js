@@ -90,6 +90,9 @@ module.exports = {
 		// `build/js/abilities.css`, which admin/Main.php auto-enqueues via
 		// `file_exists()` alongside the JS bundle.
 		'js/abilities': path.resolve( process.cwd(), 'src/js', 'abilities.js' ),
+		// F020 — Tools tab React entry (mounts the hand-rolled shuttle picker).
+		// Matches F017's shape for asset manifest + optional CSS extract.
+		'js/tools': path.resolve( process.cwd(), 'src/js', 'tools.js' ),
 		'css/frontend': path.resolve(
 			process.cwd(),
 			'src/scss',

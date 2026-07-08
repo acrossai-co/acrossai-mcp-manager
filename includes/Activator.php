@@ -6,6 +6,7 @@ use AcrossAI_MCP_Manager\Includes\Database\MCPServer\Table as MCPServerTable;
 use AcrossAI_MCP_Manager\Includes\Database\MCPServer\DefaultServerSeeder;
 use AcrossAI_MCP_Manager\Includes\Database\CliAuthLog\Table as CliAuthLogTable;
 use AcrossAI_MCP_Manager\Includes\Database\MCPServerAbility\Table as MCPServerAbilityTable;
+use AcrossAI_MCP_Manager\Includes\Database\MCPServerTool\Table as MCPServerToolTable;
 use AcrossAI_MCP_Manager\Public\Partials\FrontendAuth;
 use WPBoilerplate\AccessControl\Database\Rule\RuleTable as WPB_AccessControl_RuleTable;
 
@@ -42,6 +43,12 @@ class Activator {
 		// Feature 017 — per-server ability exposure overrides. No seeder call —
 		// the empty-table state IS the correct backwards-compatible initial state.
 		MCPServerAbilityTable::instance()->maybe_upgrade();
+		// Feature 020 — per-server tool selection. Presence-based storage; no
+		// seeder — the empty-table state is the correct initial state (UI
+		// renders the zero-added warning banner until the operator saves a
+		// non-empty set). Co-commit invariant with the Main.php request-time
+		// boot below (DEC-BERLINDB-TABLE-REQUEST-BOOT).
+		MCPServerToolTable::instance()->maybe_upgrade();
 
 		// Feature 015 — Access Control v2 adoption. Create the
 		// {$wpdb->prefix}mcp_access_control table via the vendor-owned
