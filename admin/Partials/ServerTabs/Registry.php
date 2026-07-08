@@ -17,11 +17,17 @@
  * source of behaviour; third-party contributions are wrapped in
  * `FilteredServerTab` and adopt the same dispatch pipeline.
  *
- * Normalization + dedup mirrors vendor
- * `\AcrossAI_Main_Menu\TabbedPageRenderer::resolve_tabs()` in the 0.0.13
- * release (`vendor/acrossai-co/main-menu/src/TabbedPageRenderer.php`), so
- * companion-plugin authors already familiar with the vendor's
- * `acrossai_settings_tabs` filter have API parity here.
+ * Normalization + dedup mirrors vendor `\AcrossAI_Main_Menu\Tabs::get_tabs()`
+ * (extracted from `TabbedPageRenderer::resolve_tabs()` in 0.0.13 into a
+ * standalone abstract in 0.0.14 —
+ * `vendor/acrossai-co/main-menu/src/Tabs.php`). Feature 019 keeps a
+ * plugin-local implementation rather than subclassing `Tabs` because the
+ * per-server extension surface needs three primitives vendor `Tabs` does
+ * not provide: (1) `render_callback` dispatch — companion plugins
+ * contribute body HTML, no class instance to route through; (2) per-`$server`
+ * filter context — the filter fires with `$server` as arg 2 so callbacks
+ * can decide per-server; (3) throw safety on both callbacks. See the
+ * planning doc's "Why not subclass vendor Tabs" note for details.
  *
  * Singleton member ordering matches F012 SettingsMenu (DEC-VENDOR-SETTINGS-
  * TAB-INTEGRATION): protected static $instance → public static instance() →
@@ -231,8 +237,9 @@ final class Registry {
 	/**
 	 * Normalizes + dedups the filter's raw output.
 	 *
-	 * Mirrors vendor `TabbedPageRenderer::resolve_tabs()` (0.0.13, lines
-	 * 111–184 of `vendor/acrossai-co/main-menu/src/TabbedPageRenderer.php`):
+	 * Mirrors vendor `\AcrossAI_Main_Menu\Tabs::get_tabs()`
+	 * (`vendor/acrossai-co/main-menu/src/Tabs.php` in 0.0.14; was
+	 * `TabbedPageRenderer::resolve_tabs()` in 0.0.13):
 	 * - `sanitize_key()` on slug — dropped when empty.
 	 * - Missing `label` OR missing/non-callable `render_callback` on a
 	 *   non-built-in entry → dropped with `_doing_it_wrong` under `WP_DEBUG`.

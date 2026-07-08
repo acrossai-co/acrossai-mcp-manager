@@ -2,8 +2,12 @@
 
 **Feature Branch**: `019-per-server-tabs-filter`
 **Created**: 2026-07-08
-**Status**: Draft
+**Status**: Draft (with 2026-07-08 vendor bump addendum)
 **Input**: User description: "add a filter to add,remove some tabs from ?page=acrossai_mcp_manager&action=edit&server=1&tab=mcp-tracker so that third party plugin can do it"
+
+## 2026-07-08 addendum — vendor bump 0.0.13 → 0.0.14
+
+Concurrent with the initial commit, `acrossai-co/main-menu 0.0.14` shipped a new abstract `\AcrossAI_Main_Menu\Tabs` (`vendor/acrossai-co/main-menu/src/Tabs.php`) that factors the tab filter + normalization + nav-bar HTML out of `TabbedPageRenderer` into a reusable base. Feature 019 bumps the composer pin `0.0.13 → 0.0.14` as part of the same PR — the only vendor consumer in this plugin (`admin/Partials/SettingsMenu.php` via `SettingsPage::get_settings_renderer()`) is unchanged in 0.0.14, so no code impact. The bump keeps this plugin's vendor in step with the sibling `acrossai-abilities-manager`'s pin. See `docs/planings-tasks/019-per-server-tabs-filter.md` §"Vendor bump addendum" for why vendor `Tabs` is not adopted as the base class for `Registry`.
 
 ## User Scenarios & Testing *(mandatory)*
 

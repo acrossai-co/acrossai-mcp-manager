@@ -12,6 +12,22 @@ The migration is **not backwards-compatible with any prior "extension" attempt**
 
 ---
 
+## Vendor bump addendum (2026-07-08)
+
+Concurrent with the initial Feature 019 commit, `acrossai-co/main-menu` shipped `0.0.14`, which extracts the tab plumbing that used to live inside `TabbedPageRenderer` into a standalone abstract `\AcrossAI_Main_Menu\Tabs` (see `vendor/acrossai-co/main-menu/src/Tabs.php`). This makes it easy to build any tab bar — not just a Settings page — on the vendor primitive. Every previously-private helper (`get_tabs()`, `get_active_tab()`, `get_requested_slug()`, `render_tab_nav()`, `default_tab_url()`) is now protected/public and overridable.
+
+Feature 019 bumps the composer pin from `0.0.13 → 0.0.14` as part of this same PR (Jetpack Autoloader will pick the newest copy anyway once the sibling plugin upgrades; our own pin should track). No code change is required — the only runtime consumer of the vendor namespace in this plugin is `admin/Partials/SettingsMenu.php` via `SettingsPage::get_settings_renderer()`, which is unchanged in 0.0.14.
+
+**Why not subclass vendor `Tabs`?** Considered, rejected — three primitives Feature 019 needs that vendor `Tabs` does not provide:
+
+1. **`render_callback` dispatch.** Vendor `Tabs::get_tabs()` returns a normalized list; the consumer plugin renders bodies inline. Feature 019's contract requires third-party plugins to contribute body HTML via `render_callback` because they have no matching class instance for the plugin to route through. `Tabs` has no seat for this callback.
+2. **Per-`$server` filter context.** Vendor `Tabs::get_tabs()` caches on filter output alone; its signature accepts no context argument. Feature 019's `Registry::for_server( array $server )` fires the filter with `$server` as arg 2 so callbacks can decide per-server whether to contribute a tab.
+3. **Throw safety on both callbacks.** Vendor `Tabs` never invokes third-party code, so it has no wrapping to inherit. `FilteredServerTab::render_body()` and `visible_for()` both wrap `\Throwable` — matches Feature 017's `safeApplyFilters` JS pattern.
+
+Vendor `Tabs` is the right abstraction for a future tabbed admin page whose full context is `?page=SLUG` (e.g. a Tools page, a Server Templates page). Feature 019 keeps the per-server tab plumbing plugin-local; the normalization loop's shape is deliberately kept in step with `Tabs::get_tabs()` so companion-plugin authors have API parity between the two extension surfaces.
+
+---
+
 ## Speckit Workflow
 
 ```markdown

@@ -12,7 +12,7 @@ Add a WordPress filter `acrossai_mcp_manager_server_tabs` that lets companion pl
 ## Technical Context
 
 **Language/Version**: PHP 8.1+ (per `composer.json::require.php`); no JS changes; no build step.
-**Primary Dependencies**: `automattic/jetpack-autoloader ^5.0` (existing), `acrossai-co/main-menu 0.0.13` (existing — used as the reference implementation for the normalization loop, not as a runtime dependency of this filter). No new dependencies.
+**Primary Dependencies**: `automattic/jetpack-autoloader ^5.0` (existing), `acrossai-co/main-menu 0.0.14` (bumped from 0.0.13 in this PR — 0.0.14 factors the tab plumbing out of `TabbedPageRenderer` into a standalone abstract `\AcrossAI_Main_Menu\Tabs`; used as the reference implementation for the normalization loop, not as a runtime dependency of this filter). No other dependency changes.
 **Storage**: No schema changes. No new WordPress options. Filter state is purely per-request.
 **Testing**: PHPUnit via `composer test` for `RegistryTest` extensions and the new `FilteredServerTabTest`. No JS tests — the extension surface is PHP-only.
 **Target Platform**: WordPress 6.9+ single-site primary; multisite unchanged.
