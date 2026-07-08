@@ -47,6 +47,16 @@ final class ClientsTab extends AbstractServerTab {
 	}
 
 	/**
+	 * Priority slot.
+	 *
+	 * @since 0.0.7
+	 * @return int
+	 */
+	public function priority(): int {
+		return 30;
+	}
+
+	/**
 	 * Delegates render to MCPClientsBlock. Reads $_GET['client'] for sub-nav.
 	 *
 	 * @since 0.0.6

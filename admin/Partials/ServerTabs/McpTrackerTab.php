@@ -54,6 +54,16 @@ final class McpTrackerTab extends AbstractServerTab {
 	}
 
 	/**
+	 * Priority slot.
+	 *
+	 * @since 0.0.7
+	 * @return int
+	 */
+	public function priority(): int {
+		return 80;
+	}
+
+	/**
 	 * Renders MCP Tracker integration links. Gated on WPVMCPT presence per D8.
 	 *
 	 * @since 0.0.6

@@ -46,6 +46,16 @@ final class ToolsTab extends AbstractServerTab {
 	}
 
 	/**
+	 * Priority slot.
+	 *
+	 * @since 0.0.7
+	 * @return int
+	 */
+	public function priority(): int {
+		return 50;
+	}
+
+	/**
 	 * Renders the MCP tools reference.
 	 *
 	 * @since 0.0.6

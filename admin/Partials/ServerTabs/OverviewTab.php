@@ -76,6 +76,16 @@ final class OverviewTab extends AbstractServerTab {
 	}
 
 	/**
+	 * Priority slot — leftmost tab.
+	 *
+	 * @since 0.0.7
+	 * @return int
+	 */
+	public function priority(): int {
+		return 10;
+	}
+
+	/**
 	 * Renders the read-only info dashboard.
 	 *
 	 * @since 0.0.6

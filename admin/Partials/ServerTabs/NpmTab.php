@@ -48,6 +48,16 @@ final class NpmTab extends AbstractServerTab {
 	}
 
 	/**
+	 * Priority slot.
+	 *
+	 * @since 0.0.7
+	 * @return int
+	 */
+	public function priority(): int {
+		return 20;
+	}
+
+	/**
 	 * Delegates render to NpmClientBlock.
 	 *
 	 * @since 0.0.6

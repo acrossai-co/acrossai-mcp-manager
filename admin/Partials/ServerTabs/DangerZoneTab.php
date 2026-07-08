@@ -47,6 +47,16 @@ final class DangerZoneTab extends AbstractServerTab {
 	}
 
 	/**
+	 * Priority slot — rightmost tab.
+	 *
+	 * @since 0.0.7
+	 * @return int
+	 */
+	public function priority(): int {
+		return 100;
+	}
+
+	/**
 	 * Visible only when the server is database-registered.
 	 *
 	 * @since 0.0.6

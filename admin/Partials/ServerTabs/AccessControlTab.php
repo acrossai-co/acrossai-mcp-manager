@@ -48,6 +48,16 @@ final class AccessControlTab extends AbstractServerTab {
 	}
 
 	/**
+	 * Priority slot.
+	 *
+	 * @since 0.0.7
+	 * @return int
+	 */
+	public function priority(): int {
+		return 70;
+	}
+
+	/**
 	 * Delegates render to AccessControlBlock. The Block owns the vendor-package
 	 * fail-open branch, the form UI, and the read-side rule lookup.
 	 *
