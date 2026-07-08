@@ -79,7 +79,12 @@
       "Read(//Users/raftaar1191/local-sites/wordpress-7-0/app/public/**)",
       "Bash(wp plugin *)",
       "Bash(mkdir -p specs/011-berlindb-migration/checklists)",
-      "Bash(cp .specify/templates/spec-template.md specs/011-berlindb-migration/spec.md)"
+      "Bash(cp .specify/templates/spec-template.md specs/011-berlindb-migration/spec.md)",
+      "Bash(gh pr *)",
+      "Bash(wait)",
+      "Bash(xmllint --noout phpunit.xml.dist)",
+      "Bash(xmllint --noout phpcs.xml.dist)",
+      "Bash(svn status *)"
     ]
   },
   "enabledMcpjsonServers": [

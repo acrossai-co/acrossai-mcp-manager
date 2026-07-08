@@ -1,0 +1,312 @@
+/**
+ * Feature 017 — Per-server Ability Selection tab styles.
+ *
+ * Bundled by webpack alongside `src/js/abilities.js`. `@wordpress/scripts`
+ * emits it as `build/js/abilities.css`, which
+ * `admin/Main.php::maybe_enqueue_abilities_app()` auto-enqueues when present.
+ *
+ * @since 0.1.0
+ * @package AcrossAI_MCP_Manager
+ */
+
+// ============================================================================
+// Design tokens.
+// ============================================================================
+
+$acmcp-border:        #c3c4c7;
+$acmcp-inner-bg:      #fff;
+$acmcp-text-primary:  #1d2327;
+$acmcp-text-secondary:#50575e;
+$acmcp-text-tertiary: #646970;
+$acmcp-accent:        #2271b1;
+
+// ============================================================================
+// React app root — sits inside the mount div `#acrossai-mcp-abilities-root`.
+// Rendered as a single white bordered container; DataViews owns everything
+// inside it, so we tighten padding to avoid double-padding against its
+// internal spacing.
+// ============================================================================
+
+.acrossai-mcp-abilities-root {
+	background: $acmcp-inner-bg;
+	border: 1px solid $acmcp-border;
+	border-radius: 6px;
+	padding: 12px 16px 16px;
+	margin-top: 12px;
+
+	// The live "N of M exposed on this server" counter.
+	> .description {
+		margin: 4px 4px 12px;
+		color: $acmcp-text-secondary;
+		font-size: 13.5px;
+		line-height: 1.4;
+	}
+
+	// Custom unified toolbar — search + category + type on one row.
+	// Sits between the counter and the DataViews. Replaces DataViews' own
+	// search+filter strip (hidden below).
+	.acrossai-mcp-abilities-toolbar {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 8px;
+		margin: 0 4px 12px;
+
+		// SearchControl + SelectControl wrap in BaseControl. Trim vertical
+		// spacing so the row stays tight.
+		.components-base-control,
+		.components-input-control {
+			margin-bottom: 0;
+		}
+
+		// Search input grows to fill available space.
+		&__search {
+			flex: 1 1 260px;
+			min-width: 220px;
+			max-width: 480px;
+		}
+
+		select {
+			min-width: 160px;
+		}
+	}
+
+	// Hide DataViews' own filter-menu icon — our custom selects replace it.
+	// The icon is rendered as a button with aria-label containing "Add filter"
+	// (v17 DataViews). Targeting via aria-label keeps this resilient across
+	// classname changes.
+	button[aria-label*="filter" i][aria-label*="add" i],
+	button[aria-label*="Add filter" i] {
+		display: none !important;
+	}
+
+	// Hide DataViews' built-in search input — the one on our custom toolbar
+	// above owns search. Selector limits to inputs OUTSIDE our toolbar so
+	// our own SearchControl (which also renders `input[type="search"]`)
+	// stays visible.
+	> *:not(.acrossai-mcp-abilities-toolbar) input[type="search"] {
+		display: none !important;
+	}
+
+	// DataViews wraps its search area in a container; hide the container
+	// too so it doesn't leave a gap. Multiple selectors cover different
+	// class-name conventions across versions.
+	.dataviews-search,
+	.dataviews-filters__search-container,
+	.dataviews-view-actions-search {
+		display: none !important;
+	}
+
+	// ------------------------------------------------------------------------
+	// Cell content — ability name renders as a <code> chip.
+	// ------------------------------------------------------------------------
+
+	code {
+		display: inline-block;
+		max-width: 100%;
+		padding: 3px 8px;
+		border-radius: 3px;
+		background: #f0f0f1;
+		color: #2c3338;
+		font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+		font-size: 12.5px;
+		line-height: 1.5;
+		word-break: break-word;
+		overflow-wrap: anywhere;
+		vertical-align: middle;
+	}
+
+	// ------------------------------------------------------------------------
+	// Toggle track — flip to the WordPress accent when checked.
+	// ------------------------------------------------------------------------
+
+	.components-form-toggle.is-checked .components-form-toggle__track {
+		background: $acmcp-accent;
+	}
+
+	// ------------------------------------------------------------------------
+	// Bulk actions strip — shown above the table when rows are selected.
+	// ------------------------------------------------------------------------
+
+	.acrossai-mcp-abilities-bulk {
+		display: flex;
+		flex-wrap: nowrap;
+		align-items: center;
+		gap: 10px;
+		padding: 6px 60px 6px 12px; // right padding leaves room for the DataViews gear icon
+		// Negative bottom-margin pulls the bulk bar up so it shares a row
+		// with DataViews' `.dataviews__view-actions` strip (the one holding
+		// the Appearance gear icon).
+		margin: 4px 4px -44px;
+		max-width: 90%;
+		background: transparent;
+		border: 0;
+		border-radius: 0;
+		box-shadow: none;
+		position: relative;
+		z-index: 2;
+		min-height: 40px;
+
+		&__count {
+			margin-right: 4px;
+			font-weight: 600;
+			color: $acmcp-text-primary;
+		}
+
+		// Compact button variant already trims padding; nudge the link
+		// variant so "Clear" reads as an inline text link, not a button.
+		.components-button.is-link {
+			text-decoration: underline;
+		}
+	}
+
+	// DataViews' view-actions strip — align it to the right so the gear
+	// icon sits opposite the bulk-actions bar on the same visual line.
+	.dataviews__view-actions,
+	[class*="__stack"].dataviews__view-actions {
+		justify-content: flex-end;
+	}
+
+	// Push the DataViews table down slightly so it clears the overlapping
+	// bulk-actions bar above.
+	.dataviews-layout__container {
+		padding-top: 22px;
+	}
+
+	// ------------------------------------------------------------------------
+	// Table — subtle border style matching the 1A mockup: outer border on
+	// the table, single header underline, light row dividers, NO vertical
+	// column borders.
+	// ------------------------------------------------------------------------
+
+	table {
+		border-collapse: collapse;
+		border: 1px solid $acmcp-border;
+		width: 100%;
+
+		thead th {
+			border-bottom: 1px solid $acmcp-border;
+			background: transparent;
+		}
+
+		// Nudge the thead first-row and every tbody row with a small
+		// padding-left so content doesn't sit flush against the left
+		// edge of the table.
+		thead tr:first-child th,
+		tbody tr td {
+			padding-left: 5px;
+		}
+
+		tbody td {
+			border-bottom: 1px solid #f0f0f1;
+		}
+
+		tbody tr:last-child td {
+			border-bottom: 0;
+		}
+
+		// Hide DataViews' per-row Actions column — it's the last column when
+		// any action is registered. Our custom bulk-actions bar above the
+		// table replaces its function. Registering the action is what keeps
+		// the row-selection checkboxes visible; hiding this column just
+		// removes the kebab UI.
+		th:last-child,
+		td:last-child {
+			display: none;
+		}
+
+		// Description column width backstop — nth-child counts columns from
+		// the left in their built-in order (checkbox, slug, label, type,
+		// category, description, is_exposed, [hidden actions]).
+		th:nth-child(6),
+		td:nth-child(6) {
+			width: 20%;
+			max-width: 20%;
+			word-wrap: break-word;
+			overflow-wrap: anywhere;
+		}
+	}
+
+	// ------------------------------------------------------------------------
+	// Custom footer — replaces DataViews' native pagination bar.
+	// Layout: [Select all] · [Prev / Page / Next] · [N of M Items]
+	// Sticky-pinned to the bottom of the wrapper.
+	// ------------------------------------------------------------------------
+
+	.acrossai-mcp-abilities-footer {
+		position: sticky;
+		bottom: 0;
+		z-index: 2;
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 16px;
+		background: $acmcp-inner-bg;
+		border-top: 1px solid $acmcp-border;
+		padding: 8px 12px;
+		margin-top: 0;
+		font-size: 13px;
+		color: $acmcp-text-secondary;
+
+		&__left,
+		&__right,
+		&__center {
+			display: flex;
+			align-items: center;
+			gap: 8px;
+		}
+
+		// Padding-left on the first section (left cell in a "footer row"),
+		// mirroring the thead/tbody rule above.
+		> :first-child {
+			padding-left: 5px;
+		}
+
+		&__center {
+			flex: 1;
+			justify-content: center;
+		}
+
+		&__page {
+			font-variant-numeric: tabular-nums;
+			color: $acmcp-text-primary;
+			min-width: 90px;
+			text-align: center;
+		}
+
+		// CheckboxControl wraps its input in a BaseControl; trim margins so
+		// it sits inline with the pagination.
+		.components-base-control {
+			margin-bottom: 0;
+		}
+	}
+
+	// Hide DataViews' own pagination bar — our custom footer replaces it.
+	.dataviews-pagination,
+	.dataviews-view-table__pagination,
+	.dataviews-footer,
+	.dataviews__view-actions-pagination {
+		display: none !important;
+	}
+
+	// ------------------------------------------------------------------------
+	// Loading / error states.
+	// ------------------------------------------------------------------------
+
+	// The initial "Loading abilities…" text emitted by PHP before React boots.
+	// Once React takes over, the wrapper contents are replaced entirely.
+	> p.description:first-child:last-child {
+		padding: 24px 0;
+		color: $acmcp-text-tertiary;
+		font-style: italic;
+	}
+
+	.components-notice {
+		margin: 0 0 16px;
+	}
+
+	.components-spinner {
+		display: block;
+		margin: 40px auto;
+	}
+}

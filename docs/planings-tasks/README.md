@@ -43,6 +43,8 @@ Full file-by-file source→target mapping: [`source-map.md`](source-map.md)
 | 012 | mcp-settings-tab | 2026-07-03 | Complete | [012-mcp-settings-tab.md](012-mcp-settings-tab.md) |
 | 013 | per-server-tabs-refactor | 2026-07-03 | Complete | [013-per-server-tabs-refactor.md](013-per-server-tabs-refactor.md) |
 | 015 | access-control-v2-adoption | 2026-07-04 | Implemented | [015-access-control-v2-adoption.md](015-access-control-v2-adoption.md) |
+| 016 | remove-claude-connectors | 2026-07-07 | Complete | [016-remove-claude-connectors.md](016-remove-claude-connectors.md) |
+| 017 | per-server-ability-selection | 2026-07-07 | Implemented | [017-per-server-ability-selection.md](017-per-server-ability-selection.md) |
 
 ---
 

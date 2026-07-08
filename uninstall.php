@@ -57,6 +57,7 @@ $tables = array(
 	$wpdb->prefix . 'acrossai_mcp_oauth_tokens',
 	$wpdb->prefix . 'acrossai_mcp_oauth_audit',
 	$wpdb->prefix . 'mcp_access_control', // F015 AC rule table (TABLE_SLUG = 'mcp').
+	$wpdb->prefix . 'acrossai_mcp_server_abilities', // F017 per-server ability overrides.
 );
 foreach ( $tables as $table ) {
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange

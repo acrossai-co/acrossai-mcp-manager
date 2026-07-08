@@ -204,6 +204,8 @@ final class Main {
 	private function bootstrap_database_tables() {
 		\AcrossAI_MCP_Manager\Includes\Database\MCPServer\Table::instance();
 		\AcrossAI_MCP_Manager\Includes\Database\CliAuthLog\Table::instance();
+		// Feature 017 — per DEC-BERLINDB-TABLE-REQUEST-BOOT.
+		\AcrossAI_MCP_Manager\Includes\Database\MCPServerAbility\Table::instance();
 	}
 
 	/**
@@ -404,6 +406,26 @@ final class Main {
 		 */
 		$mcp_controller = \AcrossAI_MCP_Manager\Includes\MCP\Controller::instance();
 		$this->loader->add_action( 'rest_api_init', $mcp_controller, 'initialize_adapter' );
+
+		/**
+		 * Feature 017 — Per-server Ability Selection.
+		 *
+		 * Two wiring points:
+		 * 1. REST controller for the per-server abilities read/write surface,
+		 *    registered on `rest_api_init` (matching the F015 access-control
+		 *    REST wiring shape immediately above).
+		 * 2. Call-time enforcement gate on `mcp_adapter_pre_tool_call` at
+		 *    priority 20 — F015's `AcrossAI_MCP_Access_Control::gate_mcp_tool_call`
+		 *    runs at priority 10, so F017's hidden-on-this-server decision
+		 *    runs LATER and supersedes any F015 "allow" verdict. F017 never
+		 *    overrides an F015 deny (see AbilityExposureGate::gate_tool_call_by_exposure).
+		 *    Closes SEC-001 per FR-030.
+		 */
+		$abilities_rest = \AcrossAI_MCP_Manager\Includes\REST\AbilitiesController::instance();
+		$this->loader->add_action( 'rest_api_init', $abilities_rest, 'register_routes' );
+
+		$ability_exposure_gate = \AcrossAI_MCP_Manager\Includes\MCP\AbilityExposureGate::instance();
+		$this->loader->add_filter( 'mcp_adapter_pre_tool_call', $ability_exposure_gate, 'gate_tool_call_by_exposure', 20, 4 );
 
 		// TODO (phase 5): wire REST\CliController.
 		// $cli_controller = \AcrossAI_MCP_Manager\Includes\REST\CliController::instance();
