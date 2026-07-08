@@ -67,6 +67,24 @@ abstract class AbstractServerTab {
 	}
 
 	/**
+	 * Sort key for the effective tab list.
+	 *
+	 * Feature 019 introduces the `acrossai_mcp_manager_server_tabs` filter and
+	 * a stable priority-based sort in `Registry::for_server()`. Built-in tabs
+	 * override this to their fixed slot (Overview = 10 … Danger Zone = 100 in
+	 * 10-step increments). Third-party entries from the filter default to 100
+	 * when omitted — matching Danger Zone's slot — so an unmarked third-party
+	 * tab lands adjacent to the last built-in with insertion order breaking
+	 * the tie.
+	 *
+	 * @since 0.0.7
+	 * @return int Lower values render first in the nav bar.
+	 */
+	public function priority(): int {
+		return 100;
+	}
+
+	/**
 	 * Public entry point — called by Registry::render().
 	 *
 	 * @since 0.0.6

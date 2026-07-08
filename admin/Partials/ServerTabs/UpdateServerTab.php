@@ -48,6 +48,16 @@ final class UpdateServerTab extends AbstractServerTab {
 	}
 
 	/**
+	 * Priority slot.
+	 *
+	 * @since 0.0.7
+	 * @return int
+	 */
+	public function priority(): int {
+		return 90;
+	}
+
+	/**
 	 * Visible only when the server is database-registered.
 	 *
 	 * @since 0.0.6

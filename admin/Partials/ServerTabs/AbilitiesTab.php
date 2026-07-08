@@ -50,6 +50,16 @@ final class AbilitiesTab extends AbstractServerTab {
 	}
 
 	/**
+	 * Priority slot.
+	 *
+	 * @since 0.0.7
+	 * @return int
+	 */
+	public function priority(): int {
+		return 60;
+	}
+
+	/**
 	 * Render the tab body.
 	 *
 	 * Two graceful-degradation branches preserved from the F013 shape:

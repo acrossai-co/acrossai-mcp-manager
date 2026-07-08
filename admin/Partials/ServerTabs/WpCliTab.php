@@ -47,6 +47,16 @@ final class WpCliTab extends AbstractServerTab {
 	}
 
 	/**
+	 * Priority slot.
+	 *
+	 * @since 0.0.7
+	 * @return int
+	 */
+	public function priority(): int {
+		return 40;
+	}
+
+	/**
 	 * Renders the WP-CLI STDIO transport instructions.
 	 *
 	 * @since 0.0.6
