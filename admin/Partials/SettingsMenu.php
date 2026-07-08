@@ -4,9 +4,13 @@
  *
  * Registers the "MCP" tab via the `acrossai_settings_tabs` filter provided
  * by acrossai-co/main-menu, and wires the tab's sections + fields onto the
- * per-tab page slug returned by \AcrossAI_Main_Menu\SettingsPage::tab_page_slug().
- * The option group stays the shared 'acrossai-settings' so the vendor's
- * settings_fields() emit + options.php handoff resolve for every tab.
+ * per-tab page slug returned by the vendor's SettingsPageRenderer, accessed
+ * via \AcrossAI_Main_Menu\SettingsPage::get_settings_renderer(). Vendor 0.0.13
+ * scopes each tab's form to that same per-tab slug (see TabbedPageRenderer::render),
+ * so register_setting() calls use the tab-scoped slug as the option_group —
+ * NOT the shared parent page slug used prior to 0.0.13. See Feature 018 for
+ * background on the vendor bump and the FR-011 grep audit that prevents any
+ * literal reintroduction of the shared-group registration shape.
  *
  * @package    AcrossAI_MCP_Manager
  * @subpackage Admin/Partials
@@ -95,10 +99,11 @@ class SettingsMenu {
 	/**
 	 * Registers settings sections and fields via the WordPress Settings API.
 	 *
-	 * Hooked to admin_init. Sections target the per-tab page slug derived from
-	 * the host package's `SettingsPage::tab_page_slug()` helper — `option_group`
-	 * stays the shared `'acrossai-settings'` so the form submission and nonce
-	 * flow continue to resolve regardless of which tab the user is on.
+	 * Hooked to admin_init. Both `option_group` and `page` arguments are set to
+	 * the per-tab page slug derived from `SettingsPageRenderer::tab_page_slug()`,
+	 * matching the tab-scoped `option_page` value that vendor 0.0.13's
+	 * TabbedPageRenderer::render() emits — the options.php whitelist walks only
+	 * this tab's registrations on save.
 	 *
 	 * The vendor package acrossai-co/main-menu is a hard-require in composer.json,
 	 * so the `SettingsPage` class is guaranteed present at admin_init and no
@@ -106,15 +111,31 @@ class SettingsMenu {
 	 * optional integration, revisit DEC-VENDOR-SETTINGS-TAB-INTEGRATION and add
 	 * a guard here.
 	 *
+	 * The renderer is obtained via SettingsPage::get_settings_renderer() (added
+	 * in vendor 0.0.13). A fall-through slug matching the vendor's own format is
+	 * kept for the edge case where get_settings_renderer() has not yet populated
+	 * (e.g. if another consumer disabled the SettingsPage bootstrap for this
+	 * request); this keeps admin_init non-fatal.
+	 *
 	 * @since 0.1.0
 	 * @return void
 	 */
 	public function register_settings(): void {
-		$page_slug = \AcrossAI_Main_Menu\SettingsPage::tab_page_slug( self::TAB_SLUG );
+		$renderer  = \AcrossAI_Main_Menu\SettingsPage::get_settings_renderer();
+		$page_slug = $renderer
+			? $renderer->tab_page_slug( self::TAB_SLUG )
+			: \AcrossAI_Main_Menu\SettingsPage::SETTINGS_SLUG . '-' . sanitize_key( self::TAB_SLUG );
+
+		// Vendor 0.0.13 posts each tab's form with `option_page = <tab-scoped
+		// slug>` (see TabbedPageRenderer::render), so register against the same
+		// tab-scoped slug — not the shared parent page slug used pre-0.0.13 —
+		// or options.php will reject the save with "not in the allowed options
+		// list".
+		$option_group = $page_slug;
 
 		// npm / CLI login toggle.
 		register_setting(
-			'acrossai-settings',
+			$option_group,
 			'acrossai_mcp_npm_login_enabled',
 			array(
 				'sanitize_callback' => 'rest_sanitize_boolean',
@@ -124,7 +145,7 @@ class SettingsMenu {
 
 		// Uninstall opt-in flag.
 		register_setting(
-			'acrossai-settings',
+			$option_group,
 			'acrossai_mcp_uninstall_delete_data',
 			array(
 				'sanitize_callback' => array( $this, 'sanitize_uninstall_flag' ),

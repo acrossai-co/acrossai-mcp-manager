@@ -5,6 +5,7 @@ use AcrossAI_MCP_Manager\Includes\AccessControl\AcrossAI_MCP_Access_Control;
 use AcrossAI_MCP_Manager\Includes\Database\MCPServer\Table as MCPServerTable;
 use AcrossAI_MCP_Manager\Includes\Database\MCPServer\DefaultServerSeeder;
 use AcrossAI_MCP_Manager\Includes\Database\CliAuthLog\Table as CliAuthLogTable;
+use AcrossAI_MCP_Manager\Includes\Database\MCPServerAbility\Table as MCPServerAbilityTable;
 use AcrossAI_MCP_Manager\Public\Partials\FrontendAuth;
 use WPBoilerplate\AccessControl\Database\Rule\RuleTable as WPB_AccessControl_RuleTable;
 
@@ -38,6 +39,9 @@ class Activator {
 		MCPServerTable::instance()->maybe_upgrade();
 		DefaultServerSeeder::seed();
 		CliAuthLogTable::instance()->maybe_upgrade();
+		// Feature 017 — per-server ability exposure overrides. No seeder call —
+		// the empty-table state IS the correct backwards-compatible initial state.
+		MCPServerAbilityTable::instance()->maybe_upgrade();
 
 		// Feature 015 — Access Control v2 adoption. Create the
 		// {$wpdb->prefix}mcp_access_control table via the vendor-owned

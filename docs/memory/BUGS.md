@@ -639,3 +639,98 @@ grep -rEn "'name' *=> *'[^']*_(secret|token|password|key)'" includes/Database/
 Every hit MUST have `'type' => 'char'` with `length >= 64` on the next 1-3 lines. If `'type' => 'varchar'` or shorter length appears, either (a) reject the PR, or (b) confirm the column is intentionally storing a non-secret (e.g. a public identifier, an opaque request ID) and add an inline comment justifying it.
 
 Retroactive-fix pattern (F016 canonical): (1) delete the write path (admin form handler + REST controller); (2) pre-DROP `UPDATE table SET secret_col = ''` to overwrite InnoDB pages; (3) `ALTER TABLE ... DROP COLUMN`; (4) update `Schema.php`, `Row.php`, `DefaultServerSeeder.php` to remove the field entirely. Applies to any custom-DB plugin storing OAuth secrets, API keys, or session tokens.
+
+---
+
+### 2026-07-07 - B21 — BerlinDB v3 recognized column flags do NOT include `date_updated`
+
+**Status**
+Active — surfaced during F017 implementation on PHP 8.2 (2026-07-07).
+
+**Why this is durable**
+BerlinDB v3's `Kern\Column` docblock enumerates ~20 recognized column flags. `created` (INSERT-time timestamp) and `modified` (UPDATE-time timestamp) are the two datetime flags — there is NO `date_updated` flag despite the intuitive name. Passing an unrecognized flag as a column-args key silently creates a dynamic property on `Column`, which trips PHP 8.2+'s "Creation of dynamic property Column::$X is deprecated" notice at every column boot. In `debug.log`, this looks like every request logs the same deprecation for every Schema definition using the wrong flag. In an admin-only path, it's an ugly noise wall in `wp-content/debug.log`; on a live install with `WP_DEBUG_DISPLAY = true`, the notice would surface at the top of every admin page.
+
+**Symptom**
+```
+Deprecated: Creation of dynamic property BerlinDB\Database\Kern\Column::$date_updated is deprecated
+in vendor/berlindb/core/src/Database/Traits/Base.php on line 183
+```
+Row inserts and updates still succeed (BerlinDB's `save_item()` handles the `created` timestamp; without a valid `modified` flag, the `updated_at` column never gets auto-stamped). The bug is silent at the DB layer but noisy at the PHP layer.
+
+**Evidence**
+- **Manifestation**: F017 `includes/Database/MCPServerAbility/Schema.php` shipped with `'date_updated' => true` on the `updated_at` column. On the developer's local install running PHP 8.2, every `Query::instance()->query(...)` (executed on every request from `Main::bootstrap_database_tables()` → `Table::instance()`) fired the deprecation.
+- **Root cause**: I intuited the flag name from the memory `A11/A15` pattern documentation and BerlinDB's `date_query` flag, without checking the BerlinDB Column docblock. The docblock at `vendor/berlindb/core/src/Database/Kern/Column.php:38-56` is the authoritative list of recognized flags.
+- **Fix**: Change `'date_updated' => true` → `'modified' => true`. No DDL change needed (the column type is already `datetime`); BerlinDB's next `maybe_upgrade()` diff-pass leaves the column shape untouched.
+
+**Where to look next**
+The BerlinDB v3 Column docblock at `vendor/berlindb/core/src/Database/Kern/Column.php:38-56` is the authoritative list of recognized flags. Recognized datetime flags: `created` (INSERT-time), `modified` (UPDATE-time), `date_query` (enables __between / __compare / __not_in variants). Recognized boolean flags include `unsigned`, `zerofill`, `binary`, `allow_null`, `primary`, `uuid`, `searchable`, `sortable`, `in`, `not_in`, `cache_key`, `transition`. Any Schema flag NOT on that list becomes a dynamic property on PHP 8.2+.
+
+Reviewer grep-gate for every new Schema.php:
+```
+grep -rEn "'(date_updated|updated_date|modified_date|updated_time)'" includes/Database/
+```
+MUST return zero matches — these are all common misspellings of the `modified` flag.
+
+Broader lesson: when authoring subclass configs against a vendor package's args array, read the vendor's docblock @param list end-to-end. Do NOT rely on flag names inferred from memory documentation or sibling code, especially when the vendor was recently upgraded (BerlinDB v3 renamed several v2 flags).
+
+---
+
+### 2026-07-08 - B22 — New `@wordpress/*` packages need runtime string store lookup, not build-time import
+
+**Status**
+Active — surfaced during F017 implementation on `@wordpress/abilities@0.16.0` (2026-07-08).
+
+**Why this is durable**
+`@wordpress/scripts` (v30.x) maintains an internal externals map that translates `import ... from '@wordpress/foo'` into the runtime handle `wp.foo` + the enqueue-side dep `wp-foo`. Packages not yet in that map get either bundled (silent bloat) or manifest-listed under a handle WordPress doesn't actually register (silent no-op). The failure is invisible — the bundle builds, the JS runs, the exported symbol imports OK, but its runtime side-effects (store registration) never fire.
+
+**Symptom**
+```js
+import { store as fooStore } from '@wordpress/foo';
+useSelect( ( select ) => select( fooStore ).getSomething() );  // returns undefined forever
+```
+The React tree hangs on a permanent loading state; no console error; the network tab shows no dependency handle loaded.
+
+**Evidence**
+F017 initial implementation at `src/js/abilities.js` imported `store as abilitiesStore` from `@wordpress/abilities`. Tab rendered `Loading abilities…` indefinitely. Rewrite to string-key runtime lookup + REST fallback resolved it: `wp.data.select( 'core/abilities' )` returns undefined at that moment, the fallback fetches `GET /servers/{id}/abilities?include_abilities=1`, and the tab populates from the server-shipped ability list.
+
+**Where to look next**
+The canonical shape lives in `src/js/abilities.js:52-100` — a `ABILITIES_STORE_KEY` constant, a `useSelect` that returns `null` when the store isn't registered, and a REST fallback state populated by the `?include_abilities=1` path. Add this pattern to every future `@wordpress/*` package the plugin adopts until the package lands in `@wordpress/scripts`' externals bundle. Reviewer grep-gate: `grep -rEn "import.*from '@wordpress/(?!scripts|env)" src/js/` — any hit is a candidate for the string-key rewrite.
+
+---
+
+### 2026-07-08 - B23 — Test-suffix method names on production-load-bearing helpers
+
+**Status**
+Active — surfaced during F017 staged security review (SEC-STAGED-001, 2026-07-08).
+
+**Why this is durable**
+A method named `_reset_cache_for_tests()`, `_for_testing()`, or `_test_only_reset()` signals "safe to remove, guard, or replace with a mock" to any maintainer reading the source. When production code silently depends on the method to enforce an invariant, removal produces no visible failure — the invariant just quietly stops holding. Common invariants at risk: per-request cache invalidation between two reads, singleton reset between requests, shared static state clearing between hook fires.
+
+**Symptom**
+```php
+final class ExposureResolver {
+    private static array $cache = array();
+    public static function _reset_cache_for_tests(): void {  // <-- name lies
+        self::$cache = array();
+    }
+}
+// AbilitiesController::post_abilities():
+$was = ExposureResolver::resolve( $server_id, $slug, $meta );
+Query::instance()->upsert( $server_id, $slug, $is_exposed );
+ExposureResolver::_reset_cache_for_tests();  // <-- production call site!
+$now = ExposureResolver::resolve( $server_id, $slug, $meta );
+if ( $was !== $now ) { do_action( 'exposure_changed', ... ); }
+```
+Maintainer sweeps `grep -rn "_for_tests" includes/` looking for cleanup targets, removes the method — `$was === $now` becomes always-true — `exposure_changed` action never fires again — silent regression on the audit contract.
+
+**Evidence**
+- `includes/Database/MCPServerAbility/ExposureResolver.php:75-77` — method definition.
+- `includes/REST/AbilitiesController.php:~215, ~264` — production call sites.
+- Staged security review 2026-07-08 SEC-STAGED-001 (MEDIUM) — full analysis.
+
+**Where to look next**
+Reviewer grep gate: `grep -rEn '_reset.*for_tests|_for_testing|_test_only' includes/ src/`. Each hit needs classification:
+- Called ONLY from `tests/**` → legitimate, keep test-suffix name, no action.
+- Called from production code (`includes/`, `admin/`, `public/`) → rename to production-shape (`clear_request_cache`, `reset_state`), OR redesign to eliminate the dependency (e.g., have `Query::upsert_and_get_effective()` return the new value directly, skipping the resolver's cache entirely).
+
+Applies to any static / singleton state reset the plugin uses to enforce a cross-call invariant.

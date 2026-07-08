@@ -84,6 +84,12 @@ module.exports = {
 			'src/js',
 			'access-control.js'
 		),
+		// F017 — Abilities tab React entry (mounts the @wordpress/dataviews app).
+		// `src/js/abilities.js` imports `../scss/abilities.scss`; the
+		// @wordpress/scripts mini-css-extract config emits it as
+		// `build/js/abilities.css`, which admin/Main.php auto-enqueues via
+		// `file_exists()` alongside the JS bundle.
+		'js/abilities': path.resolve( process.cwd(), 'src/js', 'abilities.js' ),
 		'css/frontend': path.resolve(
 			process.cwd(),
 			'src/scss',

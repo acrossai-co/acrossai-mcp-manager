@@ -1126,3 +1126,69 @@ F016 (2026-07-07) — Claude Connectors retirement.
 
 **Where to look next**
 Any future retirement feature: cite this DEC in the plan's Constitution Check with the operator-attestation status. If attestation exists → apply this pattern. If not → apply F011's self-healing pattern (phantom-version guard + Activator `maybe_upgrade` calls). WORKLOG.md 2026-07-07 has the milestone narrative.
+
+---
+
+### DEC-ABILITY-OVERRIDE-RESOLUTION — Effective ability exposure has a single resolver
+
+**Status**: Active (Feature 017)
+**Scope**: Ability exposure decisions at the MCP boundary + admin UI + REST
+**Tags**: resolver, single-source-of-truth, fallback, per-request-cache, generalizable
+
+**Why this is durable**
+F017 introduces per-`(server, ability)` overrides that must NOT contradict the ability's own `meta[mcp][public]` default. Every consumer — REST GET, REST POST audit action, `mcp_adapter_pre_tool_call` gate, future WP-CLI subcommands — MUST use the same resolution rule or the plugin surfaces contradictory verdicts across contexts. Codifying the rule as a stateless service prevents drift.
+
+**Decision**
+Effective exposure for a `(server_id, ability_slug)` pair is:
+
+1. If a row exists in `{prefix}acrossai_mcp_server_abilities` for the pair → `(bool) $row->is_exposed`.
+2. Otherwise → `! empty( $meta['mcp']['public'] )` (the ability's own default).
+
+Single implementation: `Includes\Database\MCPServerAbility\ExposureResolver::resolve( int $server_id, string $ability_slug, array $meta ): bool`. Includes per-request static cache keyed by `"{$server_id}:{$ability_slug}"`. A11 pure-service exception — no singleton, no ctor.
+
+**Consumers (grep gate)**
+Every consumer of the F013 partition-by-`meta[mcp][public]` logic MUST route through `ExposureResolver::resolve()`. Grep gate at review:
+```
+grep -rEn "meta\['mcp'\]\['public'\]\|meta\[\"mcp\"\]\[\"public\"\]" includes/ admin/ public/
+```
+Exactly two hits acceptable: (1) inside `ExposureResolver::resolve()` itself, (2) inside the REST controller's inline `$meta['mcp']['type'] ?? 'tool'` for the `type` field (unrelated key). Any other hit is a duplicate resolution path that must be routed through the resolver.
+
+**Applied**
+- REST GET: `Includes\REST\AbilitiesController::build_row()` — uses resolver for `is_exposed`.
+- REST POST: same controller — uses resolver to compute `$was`/`$now` for FR-024 audit action.
+- Enforcement gate: `Includes\MCP\AbilityExposureGate::gate_tool_call_by_exposure()` — uses resolver for the 403 decision.
+- (Retired) F013's `AbilitiesTab::partition_abilities()` — the last direct-`meta[mcp][public]` consumer is removed by F017 TASK-5.
+
+**Where to look next**
+`includes/Database/MCPServerAbility/ExposureResolver.php`. When a future feature adds a fifth consumer (WP-CLI subcommand, background cron, etc.), route through the resolver — do NOT re-derive the fallback rule.
+
+---
+
+### DEC-WP-DATAVIEWS-OVER-REACT — New admin JS surfaces use `@wordpress/dataviews`, not custom React grids
+
+**Status**: Active (Feature 017)
+**Scope**: All new admin JS UIs added after 2026-07-07
+**Tags**: dataviews, wp-packages-first, principle-vi, react-libs-forbidden
+
+**Why this is durable**
+Constitution Principle IV mandates `@wordpress/dataviews` for admin listings; Principle VI mandates Tier 1 `@wordpress/*` packages. A slow drift toward `react-query` / `react-table` / MUI / styled-components would inflate the admin bundle, duplicate React state machinery already shipped by WordPress, and diverge from core admin UI. F017's Abilities tab is the first F017-era proof-of-concept — every future admin tab MUST inherit the same discipline.
+
+**Decision**
+New admin JS surfaces (new admin pages, per-server tabs added after F013, dashboard widgets outside DEV1's WP_List_Table exception) MUST use `@wordpress/dataviews` + `@wordpress/components` + `@wordpress/element` + `@wordpress/api-fetch` + `@wordpress/i18n` + `@wordpress/hooks` — no generic React libraries.
+
+Forbidden (grep gate at review):
+```
+grep -rEn 'react-query|@tanstack|redux|mobx|react-table|@mui/|styled-components' src/js/
+```
+MUST return zero matches. Failure blocks merge.
+
+**Tradeoffs**
+- Gained: coherent admin UI across features; small bundles; `@wordpress/scripts` externalization keeps runtime footprint stable.
+- Made harder: features that need advanced grid interactions not covered by `@wordpress/dataviews` need a spec-kit clarification to widen this decision.
+- Reconsider: only when `@wordpress/dataviews` provably cannot express a feature's UX AND the alternative is a well-scoped Tier 2 add. Requires a `/speckit-clarify` round + a new DEC-* entry.
+
+**Applied**
+F017 (2026-07-07) — `src/js/abilities.js` mounted on the Abilities tab via `admin/Main.php::maybe_enqueue_abilities_app()`.
+
+**Where to look next**
+`docs/planings-tasks/017-per-server-ability-selection.md` §CONSTRAINTS. F015 access-control precedent (`src/js/access-control.js`) is the sibling shape (vendor-provided React component in that case) — F017 shows the WP-provided package shape.

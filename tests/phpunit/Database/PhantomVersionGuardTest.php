@@ -15,6 +15,7 @@ namespace AcrossAI_MCP_Manager\Tests\PHPUnit\Database;
 
 use AcrossAI_MCP_Manager\Includes\Database\MCPServer\Table as MCPServerTable;
 use AcrossAI_MCP_Manager\Includes\Database\CliAuthLog\Table as CliAuthLogTable;
+use AcrossAI_MCP_Manager\Includes\Database\MCPServerAbility\Table as MCPServerAbilityTable;
 use WP_UnitTestCase;
 
 /**
@@ -58,8 +59,9 @@ class PhantomVersionGuardTest extends WP_UnitTestCase {
 	 */
 	public static function provideTables(): array {
 		return array(
-			'MCPServer'  => array( MCPServerTable::class, 'acrossai_mcp_servers', 'acrossai_mcp_servers_db_version', '1.0.0' ),
-			'CliAuthLog' => array( CliAuthLogTable::class, 'acrossai_mcp_cli_auth_logs', 'acrossai_mcp_cli_auth_logs_db_version', '1.0.0' ),
+			'MCPServer'         => array( MCPServerTable::class, 'acrossai_mcp_servers', 'acrossai_mcp_servers_db_version', '1.0.0' ),
+			'CliAuthLog'        => array( CliAuthLogTable::class, 'acrossai_mcp_cli_auth_logs', 'acrossai_mcp_cli_auth_logs_db_version', '1.0.0' ),
+			'MCPServerAbility'  => array( MCPServerAbilityTable::class, 'acrossai_mcp_server_abilities', 'acrossai_mcp_server_abilities_db_version', '1.0.0' ),
 		);
 	}
 }
