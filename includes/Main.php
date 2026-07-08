@@ -206,6 +206,11 @@ final class Main {
 		\AcrossAI_MCP_Manager\Includes\Database\CliAuthLog\Table::instance();
 		// Feature 017 — per DEC-BERLINDB-TABLE-REQUEST-BOOT.
 		\AcrossAI_MCP_Manager\Includes\Database\MCPServerAbility\Table::instance();
+		// Feature 020 — per DEC-BERLINDB-TABLE-REQUEST-BOOT. Co-commit invariant
+		// with Activator's MCPServerToolTable::instance()->maybe_upgrade() —
+		// omitting either produces the "Table doesn't exist" fallback bug or the
+		// silent-fail-open enforcement gate (SEC-020-T-001).
+		\AcrossAI_MCP_Manager\Includes\Database\MCPServerTool\Table::instance();
 	}
 
 	/**
@@ -426,6 +431,34 @@ final class Main {
 
 		$ability_exposure_gate = \AcrossAI_MCP_Manager\Includes\MCP\AbilityExposureGate::instance();
 		$this->loader->add_filter( 'mcp_adapter_pre_tool_call', $ability_exposure_gate, 'gate_tool_call_by_exposure', 20, 4 );
+
+		/**
+		 * Feature 020 — Per-server Tool Selection.
+		 *
+		 * Three wiring points:
+		 * 1. REST controller for the per-server tools read/write surface,
+		 *    registered on `rest_api_init` (matches the F017 shape immediately above).
+		 * 2. Call-time enforcement gate on `mcp_adapter_pre_tool_call` at
+		 *    priority 30 — F015 access control runs at 10, F017 ability
+		 *    exposure at 20, F020 tool curation at 30. Deny-precedence honored;
+		 *    F020 never re-allows an already-denied ability. Closes SEC-020-001.
+		 * 3. Cascade cleanup on BerlinDB's `mcp_server_deleted` action — fired
+		 *    by `MCPServer\Query::delete_item()` and covers both single-row and
+		 *    bulk-delete admin paths (FR-026).
+		 */
+		$tools_rest = \AcrossAI_MCP_Manager\Includes\REST\ToolsController::instance();
+		$this->loader->add_action( 'rest_api_init', $tools_rest, 'register_routes' );
+
+		$tool_exposure_gate = \AcrossAI_MCP_Manager\Includes\MCP\ToolExposureGate::instance();
+		$this->loader->add_filter( 'mcp_adapter_pre_tool_call', $tool_exposure_gate, 'gate_tool_call_by_curation', 30, 4 );
+
+		$this->loader->add_action(
+			'mcp_server_deleted',
+			\AcrossAI_MCP_Manager\Includes\Database\MCPServerTool\Query::class,
+			'on_mcp_server_deleted',
+			10,
+			2
+		);
 
 		// TODO (phase 5): wire REST\CliController.
 		// $cli_controller = \AcrossAI_MCP_Manager\Includes\REST\CliController::instance();
