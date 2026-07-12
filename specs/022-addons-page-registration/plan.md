@@ -6,7 +6,7 @@
 
 ## Summary
 
-Insert a single 25-line block into `AcrossAI_MCP_Manager\Includes\Main::define_admin_hooks()` that instantiates `\AcrossAI_Addon\AddonsPage` under a `class_exists` guard + `try/catch`, passing this plugin's Freemius credentials (product `34418`, public key `pk_d61a7ddb1a619f7697fbb4fc397b6`, slug `acrossai-mcp-manager`). The class is bundled inside the vendored `acrossai-co/main-menu` package and self-registers all its WordPress hooks in its constructor, so no `Loader` wiring is needed. Copy the sibling plugin `acrossai-abilities-manager/includes/Main.php:316-349` pattern verbatim, adjusting only the credential values. Update `README.txt`, `docs/planings-tasks/README.md`, and (if present) the memory hub with the accepted-deviation `DEC-ADDONS-PAGE-VENDOR-CTOR-BOOT`.
+Insert a block into `AcrossAI_MCP_Manager\Includes\Main::define_admin_hooks()` that instantiates `\AcrossAI_Addon\AddonsPage` under a `class_exists` guard + `try/catch`, passing this plugin's Freemius credentials for the AcrossAI umbrella product (product id `34418`, public key `pk_d61a7ddb1a619f7697fbb4fc397b6`, `fs_slug = acrossai-add-ons` — deliberately distinct from the WordPress plugin slug because the Freemius product represents the shared cross-plugin add-ons surface, not this plugin specifically). The block also passes an explicit `fs_menu` array (umbrella-model config: `account/contact/addons` on; `support/pricing/upgrade` off) and `fs_has_addons => true` — both required to surface the Freemius Add-ons submenu per SDK's `has_addons()` gate. The class is bundled inside the vendored `acrossai-co/main-menu` package and self-registers all its WordPress hooks in its constructor, so no `Loader` wiring is needed. Copy the sibling plugin `acrossai-abilities-manager/includes/Main.php:316-349` pattern as the base shape, adjusting credential values + adding the umbrella-specific `fs_menu` + `fs_has_addons` keys. Update `README.txt`, `docs/planings-tasks/README.md`, and (if present) the memory hub with the accepted-deviation `DEC-ADDONS-PAGE-VENDOR-CTOR-BOOT`.
 
 ## Technical Context
 
@@ -48,7 +48,9 @@ Constitution version: **1.1.0** (per the plugin's ratified constitution referenc
 
 ### Principle V — Extensibility Without Core Modification — ✅ PASS
 
-- Zero core-modification. Zero vendor-code modification. The `class_exists` guard is a Constitution §V Integration Resilience gate.
+- **Zero modification of vendor code inside the plugin's `vendor/` directory.** Composer-managed vendor code (`vendor/acrossai-co/main-menu/`, `vendor/freemius/wordpress-sdk/`) is never edited from the plugin's own commits — that would be overwritten by the next `composer install`.
+- **Upstream vendor releases during this feature ARE allowed** and did happen: Phases 4b-4e released new tags (0.0.15 through 0.0.18) in the `acrossai-co/main-menu` upstream repo that AcrossAI itself owns. Those are separate git commits in a separate repo (`git@github.com:acrossai-co/main-menu.git`), pulled into this plugin via a `composer.json` version bump. This is not "modifying vendor code" — it is "consuming a new vendor version we published". The distinction matters: rule = never touch files under `vendor/` from this plugin's PRs; releasing new tags in the upstream repo is a separate governance surface.
+- The `class_exists` guard around `\AcrossAI_Addon\AddonsPage` is a Constitution §V Integration Resilience gate that keeps the plugin bootable even if the vendor package is stripped from a build.
 
 ### Principle VI — Reusability & DRY — ✅ PASS
 
