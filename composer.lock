@@ -4,20 +4,20 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "f3ba101966c807dd2355b8e045ad7853",
+    "content-hash": "c2326484aa474261cbd3e7e276564d6f",
     "packages": [
         {
             "name": "acrossai-co/main-menu",
-            "version": "0.0.16",
+            "version": "0.0.17",
             "source": {
                 "type": "git",
                 "url": "https://github.com/acrossai-co/main-menu.git",
-                "reference": "0fb50ea645ace86beeee18eccd56e482a28f543c"
+                "reference": "d467f839207b1b1676e791998dc87a98f4c67fbe"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/acrossai-co/main-menu/zipball/0fb50ea645ace86beeee18eccd56e482a28f543c",
-                "reference": "0fb50ea645ace86beeee18eccd56e482a28f543c",
+                "url": "https://api.github.com/repos/acrossai-co/main-menu/zipball/d467f839207b1b1676e791998dc87a98f4c67fbe",
+                "reference": "d467f839207b1b1676e791998dc87a98f4c67fbe",
                 "shasum": ""
             },
             "require": {
@@ -41,10 +41,10 @@
             ],
             "description": "AcrossAI Admin Dashboard — parent menu, shared Settings page (Settings API), manager submenu slots, and an Add-ons page with Freemius integration.",
             "support": {
-                "source": "https://github.com/acrossai-co/main-menu/tree/0.0.16",
+                "source": "https://github.com/acrossai-co/main-menu/tree/0.0.17",
                 "issues": "https://github.com/acrossai-co/main-menu/issues"
             },
-            "time": "2026-07-12T17:50:57+00:00"
+            "time": "2026-07-12T21:33:43+00:00"
         },
         {
             "name": "automattic/jetpack-autoloader",

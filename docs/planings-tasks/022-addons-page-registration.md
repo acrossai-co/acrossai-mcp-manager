@@ -420,6 +420,23 @@ composer run phpstan
 
 ## Emergent Fixes (post-plan — 2026-07-12)
 
+### T035-T036 — Vendor bump `acrossai-co/main-menu` `0.0.16` → `0.0.17` (disable vendor Add-ons submenu)
+
+**Symptom** (operator decision, 2026-07-13): with the umbrella model in place — Freemius product 34418 (`acrossai-add-ons`) owning the single ecosystem-wide Add-ons page — the vendor's own `MenuRegistrar::register()` and Freemius's `menu.addons` submenu together produced a duplicate Add-ons row under the AcrossAI menu.
+
+**Root cause**: `\AcrossAI_Addon\MenuRegistrar::register()` (`vendor/acrossai-co/main-menu/src/Addons/MenuRegistrar.php:35-42`) calls `add_submenu_page('acrossai', ..., 'acrossai-addons', ...)` unconditionally. Meanwhile the plugin's `fs_menu.addons = true` tells Freemius to also register its own Add-ons submenu at `acrossai-add-ons-addons` (or similar Freemius-generated slug). Two distinct rows, same page family — bad UX.
+
+**Fix** (chosen path — retire the vendor's custom Add-ons registration and let Freemius own it):
+1. In the vendor repo at `/wp-content/main-menu/`, comment out the `$this->hook_suffix = add_submenu_page(...)` block inside `MenuRegistrar::register()`. Preserve the `self::$registered` guard so cross-plugin coordination still short-circuits on subsequent calls. Commit `d467f83` on the vendor's `main` branch.
+2. Tag `0.0.17` on the same commit; push both to `origin`.
+3. Plugin: bump `composer.json` constraint from `"0.0.16"` to `"0.0.17"`. `composer update acrossai-co/main-menu` — installs 0.0.17 against commit `d467f83`.
+
+**Cross-consumer impact**: every consumer of `acrossai-co/main-menu` that bumps to `0.0.17` loses the vendor-owned Add-ons submenu row. Consumers using Freemius's own `menu.addons` (recommended umbrella pattern) see one Add-ons row. Consumers who set `fs_menu.addons = false` AND relied on the vendor's row will now see ZERO Add-ons rows — they need to flip `fs_menu.addons` back to `true` to restore.
+
+**Spec/tasks fold-back**: spec.md FR-014 bumped from 0.0.16 to 0.0.17; plan.md Technical Context Primary Dependencies extended with the 0.0.17 rationale; tasks.md Phase 4d added with T035-T036; README.txt Unreleased bullet extended.
+
+---
+
 ### T029-T034 — Vendor bump `acrossai-co/main-menu` `0.0.15` → `0.0.16` (per-consumer `fs_menu` override)
 
 **Symptom** (operator request, 2026-07-12): after 0.0.15 flipped the three defaults on at the package level, operator asked "make it dynamic so the plugin can decide which submenus to show or hide."

@@ -111,6 +111,18 @@ Rationale: the vendored `\AcrossAI_Addon\FreemiusInitializer` hardcoded `account
 - [x] **T027** Add an explicit `repositories` VCS entry for `https://github.com/acrossai-co/main-menu` in `composer.json` (deterministic resolution independent of Packagist sync lag).
 - [x] **T028** `composer clear-cache && composer update acrossai-co/main-menu` — confirms 0.0.15 installed against commit `a58dec9`. Verified via `grep -A8 "'menu'" vendor/.../FreemiusInitializer.php` — three defaults now `true`.
 
+## Phase 4d: Vendor bump — disable vendor Add-ons submenu (folded in, 2026-07-13)
+
+Rationale: with the umbrella model in place (Freemius product 34418 = `acrossai-add-ons` = single Add-ons surface for the ecosystem) and `fs_menu.addons = true` on the plugin, keeping the vendor's own `MenuRegistrar::register()` alive would produce a duplicate Add-ons row. Vendor 0.0.17 disables that registration (comments out the `add_submenu_page()` call inside `MenuRegistrar::register()`).
+
+- [x] **T035** Edit `/wp-content/main-menu/src/Addons/MenuRegistrar.php` — comment out the `$this->hook_suffix = add_submenu_page(...)` block; preserve the `self::$registered` guard so cross-plugin coordination still short-circuits future calls. Tag commit `d467f83` as `0.0.17`.
+- [x] **T036** Plugin: bump `composer.json` from `0.0.16` to `0.0.17`. `composer update acrossai-co/main-menu` — confirmed 0.0.17 installed against commit `d467f83`. Verified `grep -n "add_submenu_page" vendor/.../MenuRegistrar.php` shows the call is now commented (line 36).
+
+Manual verification (post-implement):
+- Reload wp-admin as `install_plugins`-capable user. Confirm exactly ONE Add-ons row appears under the AcrossAI menu — sourced from Freemius (product 34418) via `fs_menu.addons = true`, no longer the vendor's `MenuRegistrar`.
+
+---
+
 ## Phase 4c: Vendor bump — per-consumer `fs_menu` override (folded in, 2026-07-12)
 
 Rationale: operator asked "make it dynamic so the plugin can decide which submenus to show or hide". Turning the vendor-level hardcode into a per-consumer knob preserves the sensible defaults for every plugin that doesn't opt in, and lets each plugin make its intent explicit at the call site — see spec.md §Clarifications Q3 and FR-016.
