@@ -362,12 +362,16 @@ final class Main {
 		 * public API does not expose individual hook methods. Guarded per
 		 * Constitution §V Integration Resilience — fails gracefully when the
 		 * vendor package is stripped from a build. Freemius credentials are
-		 * scoped to this plugin's Freemius product (id 34413).
+		 * scoped to this plugin's Freemius product (id 34418, slug
+		 * `acrossai-add-ons`). The Freemius slug is intentionally distinct
+		 * from the WordPress plugin slug (`acrossai-mcp-manager`) so the
+		 * Freemius product represents the shared add-ons surface rather
+		 * than the plugin itself.
 		 * Mirrors acrossai-abilities-manager Feature 038 DEC-EXTERNAL-PACKAGE-HOOK-CTOR.
 		 *
 		 * The `fs_menu` array declares this plugin's intent for each Freemius
 		 * auto-submenu explicitly (main-menu 0.0.16+). `support` is `false`
-		 * per operator preference for product 34413 (the wp.org Support Forum
+		 * per operator preference for product 34418 (the wp.org Support Forum
 		 * row is redundant with the shared AcrossAI support surface); all
 		 * other keys match the vendor's DEFAULT_MENU. Values are declared
 		 * explicitly so future maintainers see the full menu policy at the
@@ -378,9 +382,9 @@ final class Main {
 				new \AcrossAI_Addon\AddonsPage(
 					ACROSSAI_MCP_MANAGER_PLUGIN_FILE,
 					array(
-						'fs_product_id' => '34413',
-						'fs_public_key' => 'pk_1dd32ce8eb65f3bcfd0c9df459e7d',
-						'fs_slug'       => 'acrossai-mcp-manager',
+						'fs_product_id' => '34418',
+						'fs_public_key' => 'pk_d61a7ddb1a619f7697fbb4fc397b6',
+						'fs_slug'       => 'acrossai-add-ons',
 						'fs_menu'       => array(
 							'account' => true,
 							'contact' => true,

@@ -6,7 +6,7 @@
 
 ## Summary
 
-Insert a single 25-line block into `AcrossAI_MCP_Manager\Includes\Main::define_admin_hooks()` that instantiates `\AcrossAI_Addon\AddonsPage` under a `class_exists` guard + `try/catch`, passing this plugin's Freemius credentials (product `34413`, public key `pk_1dd32ce8eb65f3bcfd0c9df459e7d`, slug `acrossai-mcp-manager`). The class is bundled inside the vendored `acrossai-co/main-menu` package and self-registers all its WordPress hooks in its constructor, so no `Loader` wiring is needed. Copy the sibling plugin `acrossai-abilities-manager/includes/Main.php:316-349` pattern verbatim, adjusting only the credential values. Update `README.txt`, `docs/planings-tasks/README.md`, and (if present) the memory hub with the accepted-deviation `DEC-ADDONS-PAGE-VENDOR-CTOR-BOOT`.
+Insert a single 25-line block into `AcrossAI_MCP_Manager\Includes\Main::define_admin_hooks()` that instantiates `\AcrossAI_Addon\AddonsPage` under a `class_exists` guard + `try/catch`, passing this plugin's Freemius credentials (product `34418`, public key `pk_d61a7ddb1a619f7697fbb4fc397b6`, slug `acrossai-mcp-manager`). The class is bundled inside the vendored `acrossai-co/main-menu` package and self-registers all its WordPress hooks in its constructor, so no `Loader` wiring is needed. Copy the sibling plugin `acrossai-abilities-manager/includes/Main.php:316-349` pattern verbatim, adjusting only the credential values. Update `README.txt`, `docs/planings-tasks/README.md`, and (if present) the memory hub with the accepted-deviation `DEC-ADDONS-PAGE-VENDOR-CTOR-BOOT`.
 
 ## Technical Context
 
@@ -90,7 +90,7 @@ includes/Main.php:
  * public API does not expose individual hook methods. Guarded per
  * Constitution §V Integration Resilience — fails gracefully when the
  * vendor package is stripped from a build. Freemius credentials are
- * scoped to this plugin's Freemius product (id 34413).
+ * scoped to this plugin's Freemius product (id 34418).
  * Mirrors acrossai-abilities-manager Feature 038 DEC-EXTERNAL-PACKAGE-HOOK-CTOR.
  */
 if ( class_exists( \AcrossAI_Addon\AddonsPage::class ) ) {
@@ -98,9 +98,9 @@ if ( class_exists( \AcrossAI_Addon\AddonsPage::class ) ) {
         new \AcrossAI_Addon\AddonsPage(
             ACROSSAI_MCP_MANAGER_PLUGIN_FILE,
             array(
-                'fs_product_id' => '34413',
-                'fs_public_key' => 'pk_1dd32ce8eb65f3bcfd0c9df459e7d',
-                'fs_slug'       => 'acrossai-mcp-manager',
+                'fs_product_id' => '34418',
+                'fs_public_key' => 'pk_d61a7ddb1a619f7697fbb4fc397b6',
+                'fs_slug'       => 'acrossai-add-ons',
                 'fs_menu'       => array(
                     'account' => true,
                     'contact' => true,
