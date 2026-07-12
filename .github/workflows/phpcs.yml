@@ -4,11 +4,11 @@ on:
   push:
     branches: [main]
   pull_request:
-    paths:
-      - '**.php'
-      - 'phpcs.xml.dist'
-      - 'composer.json'
-      - 'composer.lock'
+    # NOTE: intentionally NO `paths:` filter — see B27 memory entry.
+    # Path-filtered required checks stall as "Expected — Waiting for
+    # status to be reported" on PRs that don't touch the filtered paths
+    # (workflow-only PRs, doc-only PRs, etc.), permanently blocking merge.
+    # Whole-repo PHPCS on every PR costs ~30s; trivial vs the blocking cost.
 
 permissions: {}
 

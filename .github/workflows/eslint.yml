@@ -4,12 +4,16 @@ on:
   push:
     branches: [main]
   pull_request:
-    paths:
-      - 'src/js/**'
-      - 'package.json'
-      - 'package-lock.json'
-      - '.eslintrc*'
-      - '.github/workflows/eslint.yml'
+    # NOTE: intentionally NO `paths:` filter.
+    #
+    # Branch protection requires this check name (`JavaScript Lint`). When a
+    # workflow is path-filtered AND branch-protection-required, GitHub reports
+    # "Expected — Waiting for status to be reported" indefinitely on PRs that
+    # don't touch the filtered paths — blocking every unrelated PR (F022 hit
+    # this exact trap 2026-07-13).
+    #
+    # The syntax-only smoke test on `src/js/ai-connectors.js` costs ~30s per
+    # PR. Trivial. See B27 memory entry for the general pattern.
 
 permissions: {}
 
