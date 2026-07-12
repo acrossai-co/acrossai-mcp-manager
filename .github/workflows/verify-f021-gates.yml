@@ -1,0 +1,33 @@
+name: F021 Governance Gates
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - 'includes/OAuth/**'
+      - 'includes/Connectors/**'
+      - 'includes/Database/OAuth*/**'
+      - 'admin/Partials/ServerTabs/AIConnectorsTab.php'
+      - 'bin/verify-f021-gates.sh'
+      - '.github/workflows/verify-f021-gates.yml'
+
+permissions: {}
+
+concurrency:
+  group: f021-gates-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify-f021-gates:
+    name: F021 grep gates (A1 / layering / column widths / raw secrets)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Run bin/verify-f021-gates.sh (T118b/T118c/T118d/T119/T120)
+        run: bash bin/verify-f021-gates.sh

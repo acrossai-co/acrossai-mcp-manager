@@ -1,0 +1,39 @@
+name: Validate Packages
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/validate-packages.yml'
+
+permissions: {}
+
+concurrency:
+  group: validate-packages-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate-packages:
+    name: WordPress Package Hierarchy (Constitution §VI/§VII)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@1d0ff469b7ec7b3cb9d8673fde0c81c44821de2a # v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      # `--legacy-peer-deps` — see eslint.yml comment.
+      - run: npm ci --no-audit --no-fund --legacy-peer-deps
+
+      - name: Run package validator (Tier-1 @wordpress/* enforcement)
+        run: npm run validate-packages

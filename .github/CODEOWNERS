@@ -1,0 +1,30 @@
+# CODEOWNERS — automatic reviewer assignment.
+#
+# See https://docs.github.com/en/repositories/managing-your-repositories-settings-and-security/customizing-your-repository/about-code-owners
+#
+# Order matters — the LAST matching pattern for a given file wins. Repo-wide
+# fallback goes first, then progressively more specific paths.
+
+# Default owner for everything in the repo.
+*                                       @raftaar1191
+
+# Constitution + spec-kit governance surfaces — must be reviewed by the
+# same author for consistency with amendment procedure.
+/.specify/                              @raftaar1191
+/.specify/memory/constitution.md        @raftaar1191
+
+# F021 OAuth 2.1 code paths — security-sensitive; keep review focused.
+/includes/OAuth/                        @raftaar1191
+/includes/Connectors/                   @raftaar1191
+/includes/Database/OAuthClients/        @raftaar1191
+/includes/Database/OAuthTokens/         @raftaar1191
+/includes/Database/OAuthAuthCodes/      @raftaar1191
+/admin/Partials/ServerTabs/AIConnectorsTab.php  @raftaar1191
+/templates/oauth/                       @raftaar1191
+/tests/phpunit/OAuth/                   @raftaar1191
+/bin/verify-f021-gates.sh               @raftaar1191
+
+# CI + repo governance.
+/.github/                               @raftaar1191
+/.github/CODEOWNERS                     @raftaar1191
+/.github/workflows/                     @raftaar1191

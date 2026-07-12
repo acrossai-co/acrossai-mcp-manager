@@ -1,38 +1,41 @@
 <!--
   SYNC IMPACT REPORT
   ==================
-  Version change:    (template) → 1.0.0
-  Bump type:         MINOR — initial concrete fill of all placeholder tokens;
-                     6 principles replaced templates, architecture standards and
-                     governance sections added.
+  Version change:    1.0.0 → 1.1.0
+  Bump type:         MINOR — Principle IV materially expanded with a new
+                     "Connector picker card layout" exception paragraph;
+                     Principle VII DoD checklist item wording updated to
+                     reference the new exception explicitly.
 
-  Principles added:
-    I.   Modular Architecture (new)
-    II.  WordPress Standards Compliance (new)
-    III. Security First — NON-NEGOTIABLE (new)
-    IV.  User-Centric Design — NON-NEGOTIABLE (new)
-         NOTE: source document had duplicate "III" label; corrected to IV here.
-    V.   Extensibility Without Core Modification (new; was IV in source)
-    VI.  Reusability & DRY Principle (new; was V in source)
-    VII. Definition of Done (new; was VI in source)
+  Principles added:    none
+  Principles removed:  none
+  Principles modified:
+    IV. User-Centric Design (NON-NEGOTIABLE) — new exception paragraph added
+        after the "MCP Manager parent menu" exception. Formalizes the narrow
+        deviation for the AI Connectors tab and its nested Level 2 + Level 3
+        panels; keeps DataViews/DataForm mandatory for anything that actually
+        needs filtering/sorting/pagination.
+    VII. Definition of Done — DoD checklist item wording updated:
+        "All new data input uses DataForm from @wordpress/dataviews
+         (exceptions: MCP Manager parent menu; AI Connectors tab card layout)".
 
-  Principles removed:  none (all were template placeholders)
-
-  Sections added:
-    - Code Quality & Workflow
-    - Architecture & UI Standards
-    - Governance
+  Sections added:      none
+  Sections removed:    none
 
   Templates reviewed:
     - .specify/templates/plan-template.md  ✅ no update needed
-      (Constitution Check section is already generic and compatible)
-    - .specify/templates/spec-template.md  ✅ no update needed
+      (Constitution Check section is generic; principle text now covers the
+       AI Connectors card layout without further template edits.)
+    - .specify/templates/spec-template.md  ⚠ updated — §Admin UI Requirements
+      "Pre-approved WP_List_Table exception" block extended to mention the
+      new AI Connectors exception; DoD gate at line 163 updated to reference
+      both exceptions.
     - .specify/templates/tasks-template.md ✅ no update needed
 
-  Deferred TODOs:      none — all placeholders resolved.
+  Deferred TODOs:      none.
 
   Suggested commit:
-    docs: amend constitution to v1.0.0 (initial AcrossAI MCP Manager principles)
+    docs: amend constitution to v1.1.0 (AI Connectors card layout exception)
 -->
 
 # AcrossAI MCP Manager Constitution
@@ -109,10 +112,26 @@ No custom form or table rendering that duplicates DataForm/DataViews functionali
 form for the server edit page. This is a pre-approved exception because the page predates the
 DataViews mandate and its data model (server rows, toggle/delete row actions) maps naturally to
 `WP_List_Table`. All new admin UIs added after this constitution is ratified MUST use
-DataViews/DataForm — the exception does not extend to any future screen.
+DataViews/DataForm — this specific exception does not extend to any future screen.
+
+**Exception — Connector picker card layout** *(added 2026-07-12, constitution v1.1.0)*: The
+AI Connectors tab (`?tab=ai-connectors`) and its nested Level 2 (per-connector sub-tabs) +
+Level 3 (Generate | Connections | Settings) panels MAY use hand-rolled card sections, WP core
+`.nav-tab-wrapper` markup, and a `widefat striped` table for the Connections panel when the row
+model is "one card per registered connector profile with brand/icon/instructions + a Generate
+button" — a display of static configuration + a small operational list, not a
+searchable/sortable/filterable data grid. This exception explicitly covers `AIConnectorsTab`
+(F021 Phase 8+), its Phase 9 shared card shell, and its Phase 10 nested tab structure
+(F024 folded in). Any future admin UI whose data model is a filterable/sortable row set MUST
+still use DataViews/DataForm — this exception is narrowly scoped to the branded connector-picker
+UX and small operational lists (< 20 rows) inside it.
 
 **Rationale**: Consistency with WordPress core UI patterns reduces the learning curve for
 administrators and ensures a coherent, familiar admin experience across all active feature areas.
+The Connector picker exception acknowledges that DataViews cannot express "one branded card per
+connector profile" without visible layout gymnastics, and that the ecosystem cost of forcing
+every future connector plugin (Claude, ChatGPT, Gemini, Copilot, …) into a filterable grid
+outweighs the consistency benefit for what is fundamentally a static configuration display.
 
 ### V. Extensibility Without Core Modification
 
@@ -148,8 +167,8 @@ A feature is ONLY considered complete when ALL of the following gates pass:
 - [ ] ESLint: zero errors
 - [ ] Security review complete: sanitization, escaping, nonces, and capabilities verified at every boundary
 - [ ] Unit tests written and passing for all new logic
-- [ ] All new data input uses `DataForm` from `@wordpress/dataviews` (exception: MCP Manager parent menu)
-- [ ] All new data display uses DataViews (`@wordpress/dataviews`) (exception: MCP Manager parent menu)
+- [ ] All new data input uses `DataForm` from `@wordpress/dataviews` (exceptions: MCP Manager parent menu; AI Connectors tab card layout)
+- [ ] All new data display uses DataViews (`@wordpress/dataviews`) (exceptions: MCP Manager parent menu; AI Connectors tab card layout)
 - [ ] No code duplication or DRY violations exist in the changeset
 - [ ] All functions, hooks, and classes are prefixed with `acrossai_mcp_`
 - [ ] All standards in `AGENTS.md` are met
@@ -285,4 +304,4 @@ constitution. Any implementation that appears to violate a principle MUST either
 include documented justification in the feature plan explaining why a compliant approach was not
 feasible.
 
-**Version**: 1.0.0 | **Ratified**: 2026-05-28 | **Last Amended**: 2026-05-29
+**Version**: 1.1.0 | **Ratified**: 2026-05-28 | **Last Amended**: 2026-07-12

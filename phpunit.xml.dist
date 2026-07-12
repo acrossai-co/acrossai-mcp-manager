@@ -51,6 +51,24 @@
         <testsuite name="renderers">
             <directory>tests/phpunit/Public/Renderers</directory>
         </testsuite>
+
+        <!--
+            OAuth (Feature 021): tests for the OAuth 2.1 authorization server.
+            All tests extend OAuthTestCase which truncates the 3 F021 tables +
+            resets ConnectorProfileRegistry memoization before each test.
+            Requires WP (wp_generate_uuid4, wp_delete_user, rest_do_request,
+            wp_schedule_event) — use tests/bootstrap-wp.php.
+
+            Coverage: BerlinDB phantom guard + column widths + atomic CAS +
+            PKCE S256 + RateLimiter + SecretsVault + ConnectorRegistry +
+            TokenValidator (recursion + audience + no-header short-circuit +
+            bearer fallbacks) + UserLifecycle cascade + DCR + Admin
+            credential generation + Discovery metadata + SEC-021-001 refresh
+            family revocation + Uninstall opt-in gate.
+        -->
+        <testsuite name="oauth">
+            <directory>tests/phpunit/OAuth</directory>
+        </testsuite>
     </testsuites>
 
     <source>

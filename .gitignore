@@ -39,6 +39,7 @@ contributors.md
 .env
 # Cache
 .phpunit.result.cache
+.phpunit.cache/
 # Test output
 /tests/_output/*
 !/tests/_output/.gitkeep
@@ -63,6 +64,7 @@ CLAUDE.md
 .gemini/
 .vscode/mcp.json
 .claude/skills
+.claude/settings.local.json
 .cursor/
 .antigravity/
 .windsurf/
@@ -70,4 +72,3 @@ CLAUDE.md
 opencode.json
 .junie/mcp/
 .junie/skills
-.mcp.json

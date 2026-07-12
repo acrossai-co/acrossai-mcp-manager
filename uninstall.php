@@ -54,16 +54,23 @@ if ( class_exists( '\WPBoilerplate\AccessControl\Database\Rule\RuleQuery' ) ) {
 $tables = array(
 	$wpdb->prefix . 'acrossai_mcp_servers',
 	$wpdb->prefix . 'acrossai_mcp_cli_auth_logs',
-	$wpdb->prefix . 'acrossai_mcp_oauth_tokens',
-	$wpdb->prefix . 'acrossai_mcp_oauth_audit',
-	$wpdb->prefix . 'mcp_access_control', // F015 AC rule table (TABLE_SLUG = 'mcp').
+	$wpdb->prefix . 'acrossai_mcp_oauth_tokens', // F021 (reuses F016's retired table name — same DROP covers both).
+	$wpdb->prefix . 'acrossai_mcp_oauth_audit',  // F016 retired — DROP IF EXISTS no-ops.
+	$wpdb->prefix . 'mcp_access_control',        // F015 AC rule table (TABLE_SLUG = 'mcp').
 	$wpdb->prefix . 'acrossai_mcp_server_abilities', // F017 per-server ability overrides.
 	$wpdb->prefix . 'acrossai_mcp_server_tools',     // F020 per-server tool selection.
+	$wpdb->prefix . 'acrossai_mcp_oauth_clients',    // F021 OAuth clients.
+	$wpdb->prefix . 'acrossai_mcp_oauth_auth_codes', // F021 OAuth auth codes.
 );
 foreach ( $tables as $table ) {
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange
 	$wpdb->query( $wpdb->prepare( 'DROP TABLE IF EXISTS %i', $table ) );
 }
+
+// Feature 021 — clear the daily OAuth cleanup cron. Deactivator also does
+// this but uninstall runs when the plugin was still-active-then-deleted,
+// so we need it here too. wp_clear_scheduled_hook is idempotent.
+wp_clear_scheduled_hook( 'acrossai_mcp_manager_oauth_cleanup' );
 
 // Feature 015 — delete the vendor-owned schema version option. The
 // `acrossai_mcp_*` LIKE-sweep below does NOT match `wpb_ac_mcp_*`, so

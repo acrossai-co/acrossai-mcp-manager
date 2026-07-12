@@ -816,3 +816,70 @@ Only add `createRootURLMiddleware` when the JS runs OUTSIDE an admin script cont
 **Where to look next**
 
 Grep gate for admin JS: `grep -rEn 'createRootURLMiddleware' src/js/`. Every hit needs justification: is this JS enqueued in a WordPress admin context (`admin_enqueue_scripts`)? If yes, delete the wire. Companion check: `grep -rEn '\+ \x27/\x27\)' src/js/` catches trailing-slash concatenation patterns that trip B17.
+
+---
+
+### B26 — Governance-gate scope drift: grep gates that hard-code a directory allow-list silently skip newly-added layers
+
+**Status**: Active (F021 T118d added — 2026-07-12)
+**Scope**: Project-specific verification gates under `bin/verify-*.sh` that use `grep -r` against a hard-coded set of directories to enforce a layering rule.
+**Tags**: `grep, gate-hygiene, layer-scope, silent-pass, boundary, refactor-hazard, verification-gate`
+
+**Why this is durable**
+
+Related to but distinct from B15 (regex form completeness). B15 is about the *shape* of the pattern (bare-name vs FQN); B26 is about the *scope* of the scan (which directories the pattern is applied against). Both are grep-based verification-gate hygiene failures with silent-pass symptoms — the gate reads green in CI, the boundary is broken. F021's T118c gate scanned only `includes/OAuth/**` when checking "Controllers MUST NOT touch `$wpdb`"; the F024 nested-tabs work added `global $wpdb` + direct `\...\OAuthClients\Query::instance()` calls to `admin/Partials/ServerTabs/AIConnectorsTab.php:273-326` (the presentation layer, participating in the same layering rule). The gate passed for 24+ hours; the architecture review found it as V2.
+
+**Pattern to prevent**
+
+Every layering gate MUST enumerate every layer that participates in the layering rule, not just the layer being called out in the rule name. Concrete checklist:
+
+1. **Enumerate all layers**: For a rule like "X MUST NOT touch Y", list every directory/namespace pattern that could contain code standing in for X. For F021 T118c, "no `$wpdb` above the Repository line" applies to Controllers AND Partials AND Renderers AND anywhere else that instantiates Query classes.
+2. **Add the layer to the gate when the layer is added to the codebase**: When introducing a new admin-Partial subdirectory, new REST controller subclass, or new namespace, audit every `bin/verify-*.sh` for whether the scan set needs to grow.
+3. **Validate every new gate against a known violation**: A gate that has never seen red is not a gate — it is a decoration. Before shipping `T118d`, verify it fires on the pre-fix code, then re-run after the fix and confirm green.
+4. **Prefer inclusive base directories over per-layer allow-lists** when possible: `grep -rEn ... includes/ admin/Partials/ public/Partials/` is more robust than an exhaustive per-namespace list, because it grows with the codebase.
+
+**Evidence**
+- `bin/verify-f021-gates.sh` (pre-fix): T118c grep set = `includes/OAuth/Discovery/Authorization/Token/ClientRegistration/TokenValidator/UserLifecycle/Cleanup/OAuthRouter/PKCE.php` — 9 files, controllers only.
+- `admin/Partials/ServerTabs/AIConnectorsTab.php:273-326` (pre-fix): direct `\...\OAuthClients\Query::instance()` + `global $wpdb; $wpdb->get_var(...)` — passed T118c silently.
+- `bin/verify-f021-gates.sh` (post-fix 2026-07-12): T118d added to scan `admin/Partials/ServerTabs/AIConnectorsTab.php` for both `$wpdb` and `\...\OAuth*\Query::instance` patterns — fires red on the pre-fix code before R2 refactor.
+- Architecture review report 2026-07-12 V2 + V3 findings.
+
+**Where to look next**
+
+Grep for governance gate drift: `grep -rEn 'grep.*includes/[A-Z]' bin/verify-*.sh` → every hit's directory list must be reviewed for completeness whenever a new top-level PHP directory pattern is added under `admin/`, `public/`, or `includes/`. Related: [[D22]] (fold-in tracking — same failure mode class); [[B15]] (regex form completeness).
+
+---
+
+### B27 — GitHub Actions matrix-cell check names are brittle for `required_status_checks.contexts` — matrix cells register as separate check names that shift when the matrix expands/contracts
+
+**Status**: Active (F021 branch protection setup — 2026-07-12)
+**Scope**: GitHub Actions matrix workflows + repository branch-protection `required_status_checks.contexts` API config.
+**Tags**: `github-actions, matrix, required-status-checks, brittle-pinning, ci-drift, branch-protection`
+
+**Why this is durable**
+
+Applies to any repo that uses GH Actions matrix workflows + branch protection with `required_status_checks.contexts`. The check-run naming pattern is a stable GH Actions API contract; the brittleness follows deterministically from that contract. Not a bug in GH Actions — a bug in how the two features are wired together at the operator level.
+
+**Pattern to prevent**
+
+When a workflow uses a `strategy.matrix`, GitHub creates one check run per matrix cell with a name derived from the job's `name:` field + the matrix combination (e.g. `PHPUnit (pure) — PHP 8.1`, `PHPUnit (pure) — PHP 8.2`, ...). Pinning these in `repos/{owner}/{repo}/branches/{branch}/protection` → `required_status_checks.contexts` produces three failure modes:
+
+1. **Adding a new matrix cell** (e.g. PHP 8.5): creates a NEW check name NOT in the required list → merges no longer wait for it. Silent coverage loss.
+2. **Removing a matrix cell** (e.g. dropping PHP 8.1): leaves a stale required-name that will never report → merges block indefinitely. Loud but confusing.
+3. **Renaming the job's `name:`**: breaks all pinned matrix cells atomically → all cells become stale required-names. Merges block until the operator manually updates protection settings.
+
+Concrete remediation options in order of preference:
+
+1. **Prefer non-matrix single-job workflows for gate checks** (PHPCS, PHPStan, PHPCompat, ESLint, validate-packages, project-specific grep gates). One check name per workflow, stable across matrix changes. Pin these.
+2. **Use matrix workflows for coverage only** (PHPUnit across PHP versions). Do NOT pin matrix cells in branch protection. Accept that a PR could theoretically pass with one PHP cell red; enforce elsewhere (e.g. required review from CODEOWNERS who spot-check the matrix).
+3. **Meta-job pattern** when you MUST enforce a matrix: add a single `jobs.gate` job with `needs: [phpunit]` and pin the meta-job name instead. Costs one extra scheduled job per PR; buys a stable pinned name.
+4. **Audit protection settings whenever the workflow matrix changes**: cross-check `git grep -l 'strategy:' .github/workflows/` × `gh api repos/{owner}/{repo}/branches/main/protection` `required_status_checks.contexts`. Every workflow with a matrix should either NOT appear in the list, or appear via its meta-job name.
+
+**Evidence**
+- `.github/workflows/phpunit.yml` (2026-07-12): matrix `[8.1, 8.2, 8.3, 8.4]` — 4 matrix cells producing checks `PHPUnit (pure) — PHP 8.1`, `... 8.2`, `... 8.3`, `... 8.4` for the pure job and 2 more (`PHPUnit (integration) — PHP 8.1 / WP latest`, `... 8.4 / WP latest`) for the integration job.
+- `acrossai-co/acrossai-mcp-manager` branch protection (2026-07-12): `required_status_checks.contexts` = 6 non-matrix check names (PHPCS, PHPStan, PHPCompat, ESLint, validate-packages, F021 gates). PHPUnit intentionally omitted.
+- Architecture review + workflow-setup session 2026-07-12.
+
+**Where to look next**
+
+Before applying branch protection: `gh api repos/{owner}/{repo}/actions/runs?per_page=1 --jq '.workflow_runs[0].check_run_url'` and inspect the actual check names GitHub assigns. For every matrix workflow, decide: pin the meta-job, or omit and rely on CODEOWNERS. Never pin raw matrix-cell names unless the matrix values are frozen at the plugin's supported-version floor (rare).

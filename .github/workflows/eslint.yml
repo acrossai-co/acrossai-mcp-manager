@@ -1,0 +1,68 @@
+name: ESLint
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - 'src/js/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.eslintrc*'
+      - '.github/workflows/eslint.yml'
+
+permissions: {}
+
+concurrency:
+  group: eslint-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  eslint:
+    name: JavaScript Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@1d0ff469b7ec7b3cb9d8673fde0c81c44821de2a # v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      # `--legacy-peer-deps` is required — @wordpress/dataviews@17 pins
+      # @wordpress/components@^36 whose peer resolution collides under npm 10+
+      # strict mode even though the lockfile pins react@18.3.1 (satisfies ^18).
+      - run: npm ci --no-audit --no-fund --legacy-peer-deps
+
+      # `wp-scripts lint-js` currently bundles eslint 10 while its internal
+      # config still uses the legacy eslintrc format — the two are
+      # incompatible (`Legacy eslintrc configuration detected. ESLint v10 no
+      # longer supports eslintrc files`). The plugin also ships no eslint
+      # config of its own. Until we migrate to eslint's flat config, invoke
+      # eslint 8 directly with `--no-eslintrc` so this workflow performs a
+      # syntax-only smoke test of `src/js/` — enough to catch parse errors +
+      # obvious mistakes without pulling in wp-scripts's stale ruleset.
+      # Follow-up: add `eslint.config.js` (flat config) + re-wire to
+      # `wp-scripts lint-js` once wp-scripts's internal config is migrated.
+      - name: Install top-level eslint 8 (bypass wp-scripts legacy-config)
+        run: npm install eslint@^8 --no-save --legacy-peer-deps
+
+      # Scope: F021-added file only. Pre-existing `src/js/*.js` files carry
+      # inline `// eslint-disable-next-line react-hooks/exhaustive-deps` style
+      # comments referencing rules from plugins we don't load in this smoke
+      # test, which trip "Definition for rule ... was not found". Expanding
+      # scope to the whole `src/js/` tree needs a proper flat config + the
+      # relevant plugin loads — captured in the follow-up list.
+      # `--no-inline-config` is defense-in-depth for the same class of issue.
+      - name: Run ESLint (syntax-only smoke test on F021 additions)
+        run: |
+          ./node_modules/.bin/eslint \
+            --no-eslintrc \
+            --no-inline-config \
+            --parser-options=ecmaVersion:latest,sourceType:module \
+            src/js/ai-connectors.js

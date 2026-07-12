@@ -110,6 +110,10 @@ final class Registry {
 			new OverviewTab(),
 			new NpmTab(),
 			new ClientsTab(),
+			// Feature 021 — built-in AI Connectors tab (priority 35). NOT via
+			// the F019 filter — DEC-OAUTH-BUILTIN-TAB-NOT-FILTER. Third parties
+			// use `acrossai_mcp_manager_server_tabs`; this tab is base-plugin.
+			new AIConnectorsTab(),
 			new WpCliTab(),
 			new ToolsTab(),
 			new AbilitiesTab(),

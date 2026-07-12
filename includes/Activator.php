@@ -7,6 +7,9 @@ use AcrossAI_MCP_Manager\Includes\Database\MCPServer\DefaultServerSeeder;
 use AcrossAI_MCP_Manager\Includes\Database\CliAuthLog\Table as CliAuthLogTable;
 use AcrossAI_MCP_Manager\Includes\Database\MCPServerAbility\Table as MCPServerAbilityTable;
 use AcrossAI_MCP_Manager\Includes\Database\MCPServerTool\Table as MCPServerToolTable;
+use AcrossAI_MCP_Manager\Includes\Database\OAuthClients\Table as OAuthClientsTable;
+use AcrossAI_MCP_Manager\Includes\Database\OAuthTokens\Table as OAuthTokensTable;
+use AcrossAI_MCP_Manager\Includes\Database\OAuthAuthCodes\Table as OAuthAuthCodesTable;
 use AcrossAI_MCP_Manager\Public\Partials\FrontendAuth;
 use WPBoilerplate\AccessControl\Database\Rule\RuleTable as WPB_AccessControl_RuleTable;
 
@@ -50,6 +53,19 @@ class Activator {
 		// boot below (DEC-BERLINDB-TABLE-REQUEST-BOOT).
 		MCPServerToolTable::instance()->maybe_upgrade();
 
+		// Feature 021 — OAuth 2.1 authorization server. Three new tables and
+		// a daily cleanup cron. SEC-021-T01: T044 (Cleanup class) + T045 (Main.php
+		// cron action wire) MUST already be in the codebase — verified in Phase 2
+		// checkpoint. Scheduling a cron whose handler is missing would silently
+		// no-op (best case) or fatal on execution (worst case).
+		OAuthClientsTable::instance()->maybe_upgrade();
+		OAuthTokensTable::instance()->maybe_upgrade();
+		OAuthAuthCodesTable::instance()->maybe_upgrade();
+
+		if ( ! wp_next_scheduled( 'acrossai_mcp_manager_oauth_cleanup' ) ) {
+			wp_schedule_event( time() + DAY_IN_SECONDS, 'daily', 'acrossai_mcp_manager_oauth_cleanup' );
+		}
+
 		// Feature 015 — Access Control v2 adoption. Create the
 		// {$wpdb->prefix}mcp_access_control table via the vendor-owned
 		// RuleTable BerlinDB subclass. SEC-015-001 defense-in-depth: the
@@ -80,6 +96,17 @@ class Activator {
 		// exactly one place (loader contract).
 		if ( class_exists( FrontendAuth::class ) ) {
 			FrontendAuth::instance()->register_rewrite_rule();
+		}
+
+		// Feature 021 — register the OAuth router's four rewrite rules
+		// (.well-known/oauth-authorization-server, .well-known/oauth-protected-resource,
+		// /authorize, /token) BEFORE flush_rewrite_rules() so a fresh activation
+		// persists them without the operator needing to manually visit
+		// Settings → Permalinks. Without this line, `.well-known/*` returns
+		// 404 until permalinks are re-saved — which breaks DCR discovery for
+		// every AI client that follows the RFC 8414 metadata pointer.
+		if ( class_exists( '\AcrossAI_MCP_Manager\Includes\OAuth\OAuthRouter' ) ) {
+			\AcrossAI_MCP_Manager\Includes\OAuth\OAuthRouter::instance()->register_rewrite_rules();
 		}
 
 		flush_rewrite_rules();
