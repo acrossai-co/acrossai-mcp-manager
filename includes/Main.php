@@ -388,8 +388,8 @@ final class Main {
 							'account' => true,
 							'contact' => true,
 							'support' => true,
-							'upgrade' => false,
-							'pricing' => false,
+							'upgrade' => true,
+							'pricing' => true,
 							'addons'  => true,
 						),
 					)
