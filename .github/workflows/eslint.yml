@@ -39,5 +39,13 @@ jobs:
       # strict mode even though the lockfile pins react@18.3.1 (satisfies ^18).
       - run: npm ci --no-audit --no-fund --legacy-peer-deps
 
+      # `wp-scripts lint-js` internally does `require('eslint/package.json')`
+      # from its own path; when eslint lives under @wordpress/scripts's nested
+      # node_modules the lookup fails. Install eslint at the top level as a
+      # workaround. Version pinned to eslint 8 since @wordpress/scripts hasn't
+      # yet migrated to eslint 9's flat-config API.
+      - name: Install top-level eslint for wp-scripts lint-js
+        run: npm install eslint@^8 --no-save --legacy-peer-deps
+
       - name: Run ESLint (WP wp-scripts lint:js)
         run: npm run lint:js
