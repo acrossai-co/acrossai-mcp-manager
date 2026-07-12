@@ -64,18 +64,10 @@ jobs:
   # WordPress integration tests — require the WP test lib + a MySQL service.
   # Covers the F021 oauth suite (SC-008 cleanup, TokenValidator audience, DCR,
   # authorize state policy, refresh-token family revocation, etc.).
-  #
-  # ⚠ Currently `continue-on-error: true` — the WP test lib's
-  # phpunit6-compat.php extends `PHPUnit\Util\Test` which is final in
-  # PHPUnit 13+ (the plugin's dev dep). Bridging requires adding
-  # `yoast/phpunit-polyfills` to composer.json (dev) — deferred to a
-  # follow-up. Until then this job runs for visibility but doesn't
-  # block merges; F021 test coverage is validated locally.
   phpunit-integration:
     name: PHPUnit (integration) — PHP ${{ matrix.php }} / WP ${{ matrix.wp }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
-    continue-on-error: true
     permissions:
       contents: read
 
@@ -134,6 +126,21 @@ jobs:
           WP_VERSION: ${{ matrix.wp }}
         run: |
           bash bin/install-wp-tests.sh wordpress_test root root 127.0.0.1:3306 "$WP_VERSION" true
+
+      # PHPUnit 13+ (the plugin's dev dep, per composer.json `^13.2@dev`)
+      # makes `PHPUnit\Util\Test` final + drops several classes the WP test
+      # lib's phpunit6-compat.php still expects. The compat file is designed
+      # for PHPUnit 6-9 and is a fatal-error source on modern PHPUnit —
+      # unused by modern tests. Neutralize it to a no-op stub.
+      #
+      # This is a hermetic per-CI patch; the WP test lib is a scratch install
+      # inside the runner, not shared.
+      - name: Neutralize legacy phpunit6-compat.php (PHPUnit 13 incompatible)
+        run: |
+          COMPAT=/tmp/wordpress-tests-lib/includes/phpunit6-compat.php
+          if [ -f "$COMPAT" ]; then
+            printf '%s\n' '<?php // Neutralized in CI by phpunit.yml — targets PHPUnit 6-9, unused on modern PHPUnit.' > "$COMPAT"
+          fi
 
       # WP-dependent suites — override the default pure bootstrap in
       # phpunit.xml.dist to load the WordPress test scaffolding + plugin.
