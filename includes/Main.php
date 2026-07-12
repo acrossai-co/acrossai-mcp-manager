@@ -370,12 +370,11 @@ final class Main {
 		 * Mirrors acrossai-abilities-manager Feature 038 DEC-EXTERNAL-PACKAGE-HOOK-CTOR.
 		 *
 		 * The `fs_menu` array declares this plugin's intent for each Freemius
-		 * auto-submenu explicitly (main-menu 0.0.16+). `support` is `false`
-		 * per operator preference for product 34418 (the wp.org Support Forum
-		 * row is redundant with the shared AcrossAI support surface); all
-		 * other keys match the vendor's DEFAULT_MENU. Values are declared
-		 * explicitly so future maintainers see the full menu policy at the
-		 * call site instead of inheriting a moving default.
+		 * auto-submenu explicitly (main-menu 0.0.16+). Every key is spelled
+		 * out so the full menu policy is visible at the call site — flip any
+		 * value here to change what operators see, without needing a vendor
+		 * release. The vendor's DEFAULT_MENU is used only when a consumer
+		 * plugin does NOT pass `fs_menu` at all.
 		 */
 		if ( class_exists( \AcrossAI_Addon\AddonsPage::class ) ) {
 			try {
@@ -388,10 +387,10 @@ final class Main {
 						'fs_menu'       => array(
 							'account' => true,
 							'contact' => true,
-							'support' => false,
+							'support' => true,
 							'upgrade' => false,
 							'pricing' => false,
-							'addons'  => false,
+							'addons'  => true,
 						),
 					)
 				);
