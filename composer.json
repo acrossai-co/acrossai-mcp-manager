@@ -39,6 +39,11 @@
 			"AcrossAI_MCP_Manager\\Public\\": "public/"
 		}
 	},
+	"autoload-dev": {
+		"psr-4": {
+			"AcrossAI_MCP_Manager\\Tests\\PHPUnit\\": "tests/phpunit/"
+		}
+	},
 	"require-dev": {
 		"wp-coding-standards/wpcs": "*",
 		"dealerdirect/phpcodesniffer-composer-installer": "^1.2",

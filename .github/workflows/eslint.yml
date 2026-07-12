@@ -34,7 +34,10 @@ jobs:
           node-version: '18'
           cache: 'npm'
 
-      - run: npm ci --no-audit --no-fund
+      # `--legacy-peer-deps` is required — @wordpress/dataviews@17 pins
+      # @wordpress/components@^36 whose peer resolution collides under npm 10+
+      # strict mode even though the lockfile pins react@18.3.1 (satisfies ^18).
+      - run: npm ci --no-audit --no-fund --legacy-peer-deps
 
       - name: Run ESLint (WP wp-scripts lint:js)
         run: npm run lint:js

@@ -32,7 +32,8 @@ jobs:
           node-version: '18'
           cache: 'npm'
 
-      - run: npm ci --no-audit --no-fund
+      # `--legacy-peer-deps` — see eslint.yml comment.
+      - run: npm ci --no-audit --no-fund --legacy-peer-deps
 
       - name: Run package validator (Tier-1 @wordpress/* enforcement)
         run: npm run validate-packages
