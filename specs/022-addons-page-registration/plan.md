@@ -104,10 +104,10 @@ if ( class_exists( \AcrossAI_Addon\AddonsPage::class ) ) {
                 'fs_menu'       => array(
                     'account' => true,
                     'contact' => true,
-                    'support' => true,
-                    'upgrade' => true,
-                    'pricing' => true,
-                    'addons'  => false,
+                    'addons'  => true,
+                    'support' => false,
+                    'pricing' => false,
+                    'upgrade' => false,
                 ),
             )
         );
