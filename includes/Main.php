@@ -389,25 +389,25 @@ final class Main {
 						// every AcrossAI plugin's Add-ons page + license
 						// activation surface.
 						//
-						//  - `addons`  : the point of the umbrella — the ONE
-						//                Add-ons page for the whole ecosystem.
-						//  - `account` : one place for all license activations
-						//                (each add-on activates its license
-						//                here).
-						//  - `contact` : single contact surface for the whole
-						//                ecosystem.
-						//  - `support` : off — Freemius links this to a
-						//                WP.org forum keyed on the product's
-						//                slug. The umbrella product is NOT on
-						//                WP.org, so the link would be dead.
-						//                Per-plugin support surfaces live in
-						//                each plugin's own main-menu pages.
-						//  - `pricing`/`upgrade` : off — pricing/upgrade
-						//                belongs to individual add-ons, not
-						//                the umbrella. With
-						//                `has_paid_plans => false` on this
-						//                product these would render Freemius'
-						//                placeholder anyway.
+						// - `addons`  : the point of the umbrella — the ONE
+						// Add-ons page for the whole ecosystem.
+						// - `account` : one place for all license activations
+						// (each add-on activates its license
+						// here).
+						// - `contact` : single contact surface for the whole
+						// ecosystem.
+						// - `support` : off — Freemius links this to a
+						// WP.org forum keyed on the product's
+						// slug. The umbrella product is NOT on
+						// WP.org, so the link would be dead.
+						// Per-plugin support surfaces live in
+						// each plugin's own main-menu pages.
+						// - `pricing`/`upgrade` : off — pricing/upgrade
+						// belongs to individual add-ons, not
+						// the umbrella. With
+						// `has_paid_plans => false` on this
+						// product these would render Freemius'
+						// placeholder anyway.
 						'fs_menu'       => array(
 							'account' => true,
 							'contact' => true,
