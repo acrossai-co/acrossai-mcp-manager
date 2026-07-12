@@ -87,7 +87,7 @@ Existing WordPress-plugin layout: `admin/`, `includes/`, `public/`, `docs/`. All
 ## Phase 4: User Story 2 — Graceful degradation (P2)
 
 - [ ] **T020** [US2] Manual E2E — bad-credentials fault path:
-      1. Locally blank `'fs_product_id' => '31226'` → `'fs_product_id' => ''` in `includes/Main.php`.
+      1. Locally blank `'fs_product_id' => '34413'` → `'fs_product_id' => ''` in `includes/Main.php`.
       2. Reload wp-admin as admin. Assert (a) NO php fatal, (b) `notice-error` banner with the exception message renders, (c) Add-ons submenu is absent.
       3. Log in as Editor — assert no notice visible.
       4. Revert the credential.
@@ -134,7 +134,7 @@ Manual verification (post-implement):
       ```
       * **Feature 022 — Shared AcrossAI Add-ons submenu.** The plugin now
         registers the shared "Add-ons" nav entry under the AcrossAI top-level
-        menu, powered by Freemius for product id 31226. The page requires
+        menu, powered by Freemius for product id 34413. The page requires
         `install_plugins`; when a companion AcrossAI plugin is active
         simultaneously only one plugin contributes the nav entry (the shared
         package coordinates this so operators never see duplicate submenu rows).

@@ -22,7 +22,7 @@ feature. Copy the pattern verbatim (guarded `class_exists`, `try/catch`, and a
 graceful admin-notice degradation on constructor throw) into this plugin's
 `AcrossAI_MCP_Manager\Includes\Main::define_admin_hooks()`, using the
 plugin-specific Freemius product credentials the user provided
-(`fs_product_id = 31226`, `fs_public_key = pk_4f369b07d1fc7cadbc272ce96d75e`,
+(`fs_product_id = 34413`, `fs_public_key = pk_1dd32ce8eb65f3bcfd0c9df459e7d`,
 `fs_slug = acrossai-mcp-manager`).
 
 The change is strictly additive:
@@ -65,7 +65,7 @@ Mirror the sibling plugin acrossai-abilities-manager/includes/Main.php lines
 316-349 pattern exactly: class_exists guard, try/catch with an admin-notice
 fallback that only prints to manage_options users, and pass the plugin's
 own Freemius credentials via the second constructor argument
-(fs_product_id 31226, fs_public_key pk_4f369b07d1fc7cadbc272ce96d75e,
+(fs_product_id 34413, fs_public_key pk_1dd32ce8eb65f3bcfd0c9df459e7d,
 fs_slug acrossai-mcp-manager). The constructor's first positional argument
 is ACROSSAI_MCP_MANAGER_PLUGIN_FILE. Do not add the block via the Loader —
 follow the sibling plugin's Accepted Deviation from Boot Flow Rule
@@ -123,8 +123,8 @@ hooks in its constructor, hence the exception to the Boot Flow Rule."
 > **Freemius credentials for this plugin** (user-provided, 2026-07-12):
 >
 > ```
-> fs_product_id = 31226
-> fs_public_key = pk_4f369b07d1fc7cadbc272ce96d75e
+> fs_product_id = 34413
+> fs_public_key = pk_1dd32ce8eb65f3bcfd0c9df459e7d
 > fs_slug       = acrossai-mcp-manager
 > ```
 >
@@ -180,7 +180,7 @@ hooks in its constructor, hence the exception to the Boot Flow Rule."
 >  * public API does not expose individual hook methods. Guarded per
 >  * Constitution §V Integration Resilience — fails gracefully when the
 >  * vendor package is stripped from a build. Freemius credentials are
->  * scoped to this plugin's Freemius product (id 31226).
+>  * scoped to this plugin's Freemius product (id 34413).
 >  * Mirrors acrossai-abilities-manager Feature 038 DEC-EXTERNAL-PACKAGE-HOOK-CTOR.
 >  */
 > if ( class_exists( \AcrossAI_Addon\AddonsPage::class ) ) {
@@ -188,8 +188,8 @@ hooks in its constructor, hence the exception to the Boot Flow Rule."
 >         new \AcrossAI_Addon\AddonsPage(
 >             ACROSSAI_MCP_MANAGER_PLUGIN_FILE,
 >             array(
->                 'fs_product_id' => '31226',
->                 'fs_public_key' => 'pk_4f369b07d1fc7cadbc272ce96d75e',
+>                 'fs_product_id' => '34413',
+>                 'fs_public_key' => 'pk_1dd32ce8eb65f3bcfd0c9df459e7d',
 >                 'fs_slug'       => 'acrossai-mcp-manager',
 >             )
 >         );
@@ -241,7 +241,7 @@ hooks in its constructor, hence the exception to the Boot Flow Rule."
 > ```
 > * **Feature 022 — Shared AcrossAI Add-ons submenu.** The plugin now
 >   registers the shared "Add-ons" nav entry under the AcrossAI top-level
->   menu, powered by Freemius for product id 31226. The page requires
+>   menu, powered by Freemius for product id 34413. The page requires
 >   `install_plugins`; when a companion AcrossAI plugin is active
 >   simultaneously only one plugin contributes the nav entry (the shared
 >   package coordinates this so operators never see duplicate submenu rows).
@@ -369,8 +369,8 @@ composer run phpstan
       call and before the "Admin notices" comment header.
 - [ ] The `new \AcrossAI_Addon\AddonsPage( ... )` call passes
       `ACROSSAI_MCP_MANAGER_PLUGIN_FILE` as the first positional argument.
-- [ ] The `$args` array contains `fs_product_id => '31226'`,
-      `fs_public_key => 'pk_4f369b07d1fc7cadbc272ce96d75e'`, and
+- [ ] The `$args` array contains `fs_product_id => '34413'`,
+      `fs_public_key => 'pk_1dd32ce8eb65f3bcfd0c9df459e7d'`, and
       `fs_slug => 'acrossai-mcp-manager'`.
 - [ ] The `catch ( \Throwable $e )` branch registers an `admin_notices`
       closure that gates on `current_user_can( 'manage_options' )` and
@@ -382,7 +382,7 @@ composer run phpstan
 - [ ] Reload wp-admin as a `install_plugins`-capable user; the
       **AcrossAI → Add-ons** submenu appears in the sidebar.
 - [ ] Visit `/wp-admin/admin.php?page=acrossai-addons` directly; page
-      renders (Freemius opt-in banner on first visit for product 31226,
+      renders (Freemius opt-in banner on first visit for product 34413,
       then the add-ons grid).
 - [ ] Log in as an Editor (no `install_plugins`); confirm the submenu is
       hidden and the direct URL redirects to
@@ -465,8 +465,8 @@ phase.
 
 **Attestation**: This is an additive, no-schema-change feature. No install
 carries pre-migration data that this change could orphan. The Freemius
-credentials (`fs_product_id = 31226`,
-`fs_public_key = pk_4f369b07d1fc7cadbc272ce96d75e`) belong to the
+credentials (`fs_product_id = 34413`,
+`fs_public_key = pk_1dd32ce8eb65f3bcfd0c9df459e7d`) belong to the
 "AcrossAI MCP Manager" Freemius product owned by the user
 (`raftaar1191@gmail.com`) and are safe to store inline in `includes/Main.php`
 alongside the sibling plugin's precedent.

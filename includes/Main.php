@@ -362,27 +362,29 @@ final class Main {
 		 * public API does not expose individual hook methods. Guarded per
 		 * Constitution §V Integration Resilience — fails gracefully when the
 		 * vendor package is stripped from a build. Freemius credentials are
-		 * scoped to this plugin's Freemius product (id 31226).
+		 * scoped to this plugin's Freemius product (id 34413).
 		 * Mirrors acrossai-abilities-manager Feature 038 DEC-EXTERNAL-PACKAGE-HOOK-CTOR.
 		 *
 		 * The `fs_menu` array declares this plugin's intent for each Freemius
-		 * auto-submenu explicitly (main-menu 0.0.16+). Values below match the
-		 * vendor's DEFAULT_MENU today but the explicit form is preserved so
-		 * that future maintainers see the choice at the call site instead of
-		 * inheriting a moving default.
+		 * auto-submenu explicitly (main-menu 0.0.16+). `support` is `false`
+		 * per operator preference for product 34413 (the wp.org Support Forum
+		 * row is redundant with the shared AcrossAI support surface); all
+		 * other keys match the vendor's DEFAULT_MENU. Values are declared
+		 * explicitly so future maintainers see the full menu policy at the
+		 * call site instead of inheriting a moving default.
 		 */
 		if ( class_exists( \AcrossAI_Addon\AddonsPage::class ) ) {
 			try {
 				new \AcrossAI_Addon\AddonsPage(
 					ACROSSAI_MCP_MANAGER_PLUGIN_FILE,
 					array(
-						'fs_product_id' => '31226',
-						'fs_public_key' => 'pk_4f369b07d1fc7cadbc272ce96d75e',
+						'fs_product_id' => '34413',
+						'fs_public_key' => 'pk_1dd32ce8eb65f3bcfd0c9df459e7d',
 						'fs_slug'       => 'acrossai-mcp-manager',
 						'fs_menu'       => array(
 							'account' => true,
 							'contact' => true,
-							'support' => true,
+							'support' => false,
 							'upgrade' => false,
 							'pricing' => false,
 							'addons'  => false,
