@@ -390,7 +390,7 @@ final class Main {
 							'support' => true,
 							'upgrade' => true,
 							'pricing' => true,
-							'addons'  => true,
+							'addons'  => false,
 						),
 					)
 				);

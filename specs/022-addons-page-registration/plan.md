@@ -107,7 +107,7 @@ if ( class_exists( \AcrossAI_Addon\AddonsPage::class ) ) {
                     'support' => true,
                     'upgrade' => true,
                     'pricing' => true,
-                    'addons'  => true,
+                    'addons'  => false,
                 ),
             )
         );
