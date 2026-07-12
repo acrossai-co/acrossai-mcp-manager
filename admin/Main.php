@@ -133,6 +133,7 @@ class Main {
 		// F020 — Tools tab React app (hand-rolled shuttle picker).
 		// Scoped to the Tools tab only — same guard shape as F015/F017.
 		$this->maybe_enqueue_tools_app();
+		$this->maybe_enqueue_ai_connectors_app();
 	}
 
 	/**
@@ -352,6 +353,71 @@ class Main {
 				'restApiRoot' => esc_url_raw( untrailingslashit( rest_url() ) ),
 				'nonce'       => wp_create_nonce( 'wp_rest' ),
 				'namespace'   => 'acrossai-mcp-manager/v1',
+			)
+		);
+	}
+
+	/**
+	 * Enqueue the F021 Phase 9 AI Connectors shared card shell on the
+	 * AI Connectors tab only. Ships CSS + delegated JS that every companion
+	 * connector plugin inherits — companions themselves ship zero assets.
+	 *
+	 * Mirrors `maybe_enqueue_tools_app()` verbatim for consistency.
+	 *
+	 * @since 0.1.0 (Phase 9)
+	 * @return void
+	 */
+	private function maybe_enqueue_ai_connectors_app(): void {
+		// phpcs:disable WordPress.Security.NonceVerification.Recommended -- Read-only routing check.
+		$is_edit          = isset( $_GET['action'] ) && 'edit' === sanitize_key( wp_unslash( $_GET['action'] ) );
+		$is_ai_connectors = isset( $_GET['tab'] ) && 'ai-connectors' === sanitize_key( wp_unslash( $_GET['tab'] ) );
+		if ( ! $is_edit || ! $is_ai_connectors ) {
+			return;
+		}
+		// phpcs:enable
+
+		$asset = $this->read_asset_manifest( 'build/js/ai-connectors.asset.php' );
+		if ( null === $asset ) {
+			return;
+		}
+
+		$handle = $this->plugin_name . '-ai-connectors';
+		wp_enqueue_script(
+			$handle,
+			esc_url( \ACROSSAI_MCP_MANAGER_PLUGIN_URL . 'build/js/ai-connectors.js' ),
+			$asset['dependencies'],
+			$asset['version'],
+			true
+		);
+
+		$css_path = \ACROSSAI_MCP_MANAGER_PLUGIN_PATH . 'build/js/ai-connectors.css';
+		if ( file_exists( $css_path ) ) {
+			wp_enqueue_style(
+				$handle,
+				esc_url( \ACROSSAI_MCP_MANAGER_PLUGIN_URL . 'build/js/ai-connectors.css' ),
+				array(),
+				$asset['version']
+			);
+		}
+
+		wp_localize_script(
+			$handle,
+			'acrossaiMcpConnectors',
+			array(
+				'restEndpoint'      => esc_url_raw( rest_url( 'acrossai-mcp-manager/v1/oauth/generate-client' ) ),
+				'namespace'         => 'acrossai-mcp-manager/v1',
+				'copied'            => __( 'Copied!', 'acrossai-mcp-manager' ),
+				'reveal'            => __( 'Reveal', 'acrossai-mcp-manager' ),
+				'hide'              => __( 'Hide', 'acrossai-mcp-manager' ),
+				'working'           => __( 'Generating credentials…', 'acrossai-mcp-manager' ),
+				'failed'            => __( 'Failed to generate credentials. Please try again.', 'acrossai-mcp-manager' ),
+				'missingCtx'        => __( 'Missing server context. Reload the page and try again.', 'acrossai-mcp-manager' ),
+				'confirmRegenerate' => __( 'Regenerating will revoke every outstanding token for this connector. Continue?', 'acrossai-mcp-manager' ),
+				'issued'            => __( 'Credentials generated', 'acrossai-mcp-manager' ),
+				'clientId'          => __( 'OAuth Client ID', 'acrossai-mcp-manager' ),
+				'secret'            => __( 'OAuth Client Secret (visible once — copy it now)', 'acrossai-mcp-manager' ),
+				'setup'             => __( 'Setup instructions', 'acrossai-mcp-manager' ),
+				'copy'              => __( 'Copy', 'acrossai-mcp-manager' ),
 			)
 		);
 	}

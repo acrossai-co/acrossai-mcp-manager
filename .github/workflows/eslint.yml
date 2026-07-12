@@ -1,0 +1,40 @@
+name: ESLint
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - 'src/js/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.eslintrc*'
+      - '.github/workflows/eslint.yml'
+
+permissions: {}
+
+concurrency:
+  group: eslint-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  eslint:
+    name: JavaScript Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@1d0ff469b7ec7b3cb9d8673fde0c81c44821de2a # v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - run: npm ci --no-audit --no-fund
+
+      - name: Run ESLint (WP wp-scripts lint:js)
+        run: npm run lint:js

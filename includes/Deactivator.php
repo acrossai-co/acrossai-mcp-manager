@@ -34,8 +34,14 @@ class Deactivator {
 	 * @since    0.0.1
 	 */
 	public static function deactivate() {
-		// Feature 016: no plugin-side deactivation cleanup. Retired Connectors
-		// cron events are unscheduled by the operator via `wp cron event
-		// unschedule` per spec §User Story 2.
+		// Feature 016: no plugin-side deactivation cleanup for the retired
+		// Connectors integration. Operator unschedules retired cron events via
+		// `wp cron event unschedule` per F016 spec §User Story 2.
+
+		// Feature 021 — clear the daily OAuth cleanup cron.
+		// T042a decision: Deactivator class already existed (empty). Single-path
+		// deactivation preserved — no inline callback in acrossai-mcp-manager.php
+		// beyond the require + delegation.
+		wp_clear_scheduled_hook( 'acrossai_mcp_manager_oauth_cleanup' );
 	}
 }

@@ -211,6 +211,12 @@ final class Main {
 		// omitting either produces the "Table doesn't exist" fallback bug or the
 		// silent-fail-open enforcement gate (SEC-020-T-001).
 		\AcrossAI_MCP_Manager\Includes\Database\MCPServerTool\Table::instance();
+		// Feature 021 — per DEC-BERLINDB-TABLE-REQUEST-BOOT. Three new OAuth
+		// tables must materialize before any /authorize, /token, or Bearer
+		// bootstrap fires. Co-commit invariant with Activator maybe_upgrade().
+		\AcrossAI_MCP_Manager\Includes\Database\OAuthClients\Table::instance();
+		\AcrossAI_MCP_Manager\Includes\Database\OAuthTokens\Table::instance();
+		\AcrossAI_MCP_Manager\Includes\Database\OAuthAuthCodes\Table::instance();
 	}
 
 	/**
@@ -452,6 +458,24 @@ final class Main {
 		$tool_exposure_gate = \AcrossAI_MCP_Manager\Includes\MCP\ToolExposureGate::instance();
 		$this->loader->add_filter( 'mcp_adapter_pre_tool_call', $tool_exposure_gate, 'gate_tool_call_by_curation', 30, 4 );
 
+		/**
+		 * Feature 021 — Admin OAuth credential generator REST route.
+		 *
+		 * `/wp-json/acrossai-mcp-manager/v1/oauth/generate-client` — POST from
+		 * AIConnectorsTab. Capability gate (`manage_options`) + WP nonce enforced
+		 * in the controller's permission callback.
+		 */
+		$oauth_client_registration = \AcrossAI_MCP_Manager\Includes\OAuth\ClientRegistrationController::instance();
+		$this->loader->add_action( 'rest_api_init', $oauth_client_registration, 'register_routes' );
+
+		/**
+		 * F024 — Admin REST endpoints for the nested-tab AI Connectors UI:
+		 * connector-settings save, revoke-client-tokens, delete-client,
+		 * revoke-connector-tokens (nuclear), approve-pending-consent.
+		 */
+		$oauth_connector_admin = \AcrossAI_MCP_Manager\Includes\OAuth\ConnectorAdminController::instance();
+		$this->loader->add_action( 'rest_api_init', $oauth_connector_admin, 'register_routes' );
+
 		$this->loader->add_action(
 			'mcp_server_deleted',
 			\AcrossAI_MCP_Manager\Includes\Database\MCPServerTool\Query::class,
@@ -505,6 +529,52 @@ final class Main {
 		$this->loader->add_action( 'rest_api_init', $client_renderer_rest, 'register_rest_routes' );
 
 		$this->loader->add_action( 'init', $client_renderer_rest, 'register_shortcodes_and_actions' );
+
+		/**
+		 * Feature 021 — OAuth 2.1 rewrite-rule router + daily cleanup cron.
+		 *
+		 * All A1-compliant wiring — the router owns rule shape, this method
+		 * owns hook registration. parse_request dispatches to Discovery /
+		 * Authorization / Token controllers (Phase 5 completes those).
+		 *
+		 * SEC-021-T01 co-commit: the cron action wire below MUST land with
+		 * the Activator's wp_schedule_event() call, so no cron-without-callback
+		 * window exists between Phase 2 activation and Phase 5 controller ship.
+		 */
+		$oauth_router = \AcrossAI_MCP_Manager\Includes\OAuth\OAuthRouter::instance();
+		$this->loader->add_action( 'init', $oauth_router, 'register_rewrite_rules' );
+		$this->loader->add_filter( 'query_vars', $oauth_router, 'add_query_var' );
+		$this->loader->add_action( 'parse_request', $oauth_router, 'parse_request' );
+
+		$oauth_cleanup = \AcrossAI_MCP_Manager\Includes\OAuth\Cleanup::instance();
+		$this->loader->add_action( 'acrossai_mcp_manager_oauth_cleanup', $oauth_cleanup, 'run' );
+
+		/**
+		 * Feature 021 — Bearer TokenValidator + user-deletion cascade.
+		 *
+		 * TokenValidator hooks `determine_current_user @ 20`. Q1 audience-binding
+		 * enforced at call time — cross-server tokens rejected → anonymous
+		 * (mcp-adapter denies at current_user_can). Zero DB touch when no
+		 * bearer header is present (SC-011 short-circuit).
+		 *
+		 * UserLifecycle hooks `deleted_user @ 10`. Bulk-revokes every token
+		 * for the deleted user + deletes pending auth codes + fires
+		 * `token_revoked` per row (FR-042 / Q4).
+		 */
+		$token_validator = \AcrossAI_MCP_Manager\Includes\OAuth\TokenValidator::instance();
+		$this->loader->add_filter( 'determine_current_user', $token_validator, 'authenticate', 20 );
+
+		$user_lifecycle = \AcrossAI_MCP_Manager\Includes\OAuth\UserLifecycle::instance();
+		$this->loader->add_action( 'deleted_user', $user_lifecycle, 'on_user_deleted', 10 );
+
+		/**
+		 * F024 hotfix (2026-07-11) — RFC 6750 / RFC 9728 `WWW-Authenticate`
+		 * header on 401 responses from MCP routes. AI clients (Claude,
+		 * ChatGPT, Cursor) rely on this header to auto-discover the OAuth
+		 * server via the RFC 9728 protected-resource metadata pointer.
+		 */
+		$bearer_challenge = \AcrossAI_MCP_Manager\Includes\OAuth\BearerChallengeHeader::instance();
+		$this->loader->add_filter( 'rest_post_dispatch', $bearer_challenge, 'add_bearer_challenge', 10, 3 );
 	}
 
 	/**

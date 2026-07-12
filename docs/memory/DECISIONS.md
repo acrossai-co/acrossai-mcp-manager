@@ -1276,3 +1276,40 @@ Rules for future gate additions:
 **Where to look next**
 
 When adding a 4th gate: verify the slot table above matches shipped code (grep `mcp_adapter_pre_tool_call` in `includes/Main.php`); pick slot 40 or higher; add a companion row to this DEC's slot table; consider whether the registry extraction is warranted (2-line PR if slot 40 is the target; multi-file PR if extracting).
+
+---
+
+### D22 — Inline-shipped follow-up features MUST fold into parent spec as concrete task IDs, not "See F###" pointers
+
+**Status**: Active (Feature 021 Phase 10 / F024 fold-in — 2026-07-12)
+**Scope**: Spec-Kit tasks.md hygiene when a follow-up feature ships inline with a parent feature's phase iteration.
+**Tags**: `tasks-ledger, fold-in, traceability, inline-shipping, spec-kit, generalizable`
+
+**Why this is durable**
+
+When a follow-up feature (F024) ships inline with a parent feature's phase iteration (F021 Phase 9 → Phase 10), a `## Phase N — See F###` stub in the parent tasks.md breaks reviewer traceability: the PR diff contains F024 code but the parent's task ledger has no matching IDs, so completion state is untracked and boundary-gate checks (which iterate task-referenced files) silently miss the newly-added files. F021 shipped this exact anti-pattern on 2026-07-11; architecture review on 2026-07-12 surfaced it as V4 and it was corrected by folding F024's 32 tasks into F021's Phase 10.
+
+**Decision**
+
+When feature X's code lands in feature Y's branch, feature Y's tasks.md MUST enumerate the X-added tasks with concrete IDs using the pattern `T<X-number>-<seq>` (e.g. T024-001, T024-002, ...) grouped under a `## Phase N: <Title> (folded from F###)` heading. Rules:
+
+1. The child feature's spec directory (`specs/###-<slug>/`) MAY be preserved for historical trail but MUST link back to the parent's Phase N heading via a "folded into F###" note.
+2. Every child-feature file (new + modified) MUST map to at least one folded task ID.
+3. Boundary-gate scripts that whitelist directories MUST be re-audited whenever a fold-in adds a new layer (see [[B26]] governance gate scope drift).
+4. A "See F###" pointer without concrete IDs is INSUFFICIENT — treat it as a code smell that reviewer traceability will fail.
+
+**Tradeoffs**
+- Gained: PR reviewers see every file mapped to a concrete task; boundary gates catch new additions; completion state stays inside one spec directory; architecture-review + security-review passes can iterate the parent's task list and be assured they've covered every shipped file.
+- Made harder: tasks.md grows longer per feature; duplicate task narrative between parent and child spec directories if both are kept.
+- Reconsider: If the child feature is genuinely orthogonal and ships in a separate PR/branch/release, keep it standalone — this decision applies only to inline-with-parent-phase shipping.
+- Related: [[D13]] (when to escalate a deviation to the constitution — same governance thread); [[B26]] (governance-gate scope drift — the failure mode this prevents).
+
+**Evidence**
+- `specs/021-oauth-2-1-implementation/tasks.md §Phase 10` (before): 12-line "See F024" stub with no task IDs.
+- `specs/021-oauth-2-1-implementation/tasks.md §Phase 10` (after 2026-07-12): 32 concrete T024-001..T024-065 IDs with file mappings.
+- Architecture review report 2026-07-12 V4 finding: "Task Sync — Drifted".
+- `specs/024-connectors-nested-tabs/tasks.md` — preserved standalone for history, links back to parent Phase 10.
+
+**Where to look next**
+
+When a feature description references "landed inline with F###", verify tasks.md has concrete IDs, not a pointer. When adding a new top-level directory or namespace in a fold-in, audit every `bin/verify-*-gates.sh` script for whether it needs to scan the new location.

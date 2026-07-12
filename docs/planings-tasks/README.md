@@ -46,6 +46,7 @@ Full file-by-file source→target mapping: [`source-map.md`](source-map.md)
 | 016 | remove-claude-connectors | 2026-07-07 | Complete | [016-remove-claude-connectors.md](016-remove-claude-connectors.md) |
 | 017 | per-server-ability-selection | 2026-07-07 | Implemented | [017-per-server-ability-selection.md](017-per-server-ability-selection.md) |
 | 020 | per-server-tool-selection | 2026-07-09 | Implemented | [020-per-server-tool-selection.md](020-per-server-tool-selection.md) |
+| 021 | oauth-2-1-implementation | 2026-07-10 | Implemented | [021-oauth-2-1-implementation.md](021-oauth-2-1-implementation.md) |
 
 ---
 

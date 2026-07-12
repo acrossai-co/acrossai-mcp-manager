@@ -100,6 +100,13 @@
 - The `?page=acrossai_mcp_manager` screen uses `WP_List_Table` — this exception is pre-ratified
 - No new screens may extend this exception without a constitution amendment
 
+**Pre-approved Connector picker card exception** (AI Connectors tab only, constitution v1.1.0):
+- The AI Connectors tab (`?tab=ai-connectors`) and its nested Level 2 + Level 3 panels MAY use
+  hand-rolled card sections, `.nav-tab-wrapper` markup, and a `widefat striped` table for the
+  Connections panel. Scope is narrow: branded connector-picker UX + small operational lists
+  (< 20 rows). Any future admin UI whose data model is a filterable/sortable row set MUST still
+  use DataViews/DataForm.
+
 ### REST API Contract
 
 <!--
@@ -160,7 +167,7 @@ All of the following MUST pass before this feature is considered complete:
 - [ ] PHPUnit tests written and passing for all new PHP logic
 - [ ] Security checklist above: all applicable items verified
 - [ ] All hooks wired in `Main.php` — none in class constructors
-- [ ] All new admin UI uses DataForm/DataViews (unless WP_List_Table exception applies)
+- [ ] All new admin UI uses DataForm/DataViews (unless a pre-approved exception applies: MCP Manager parent menu; AI Connectors tab card layout)
 - [ ] No code duplication — shared logic extracted to `includes/Utilities/`
 - [ ] All functions, hooks, and classes prefixed with `acrossai_mcp_`
 - [ ] `npm run validate-packages` passes

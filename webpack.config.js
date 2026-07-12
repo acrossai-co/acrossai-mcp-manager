@@ -93,6 +93,16 @@ module.exports = {
 		// F020 — Tools tab React entry (mounts the hand-rolled shuttle picker).
 		// Matches F017's shape for asset manifest + optional CSS extract.
 		'js/tools': path.resolve( process.cwd(), 'src/js', 'tools.js' ),
+		// F021 Phase 9 — AI Connectors shared card shell. Delegated event
+		// handlers + card CSS shared across every companion connector
+		// plugin. `src/js/ai-connectors.js` imports
+		// `../scss/ai-connectors.scss`; mini-css-extract emits it as
+		// `build/js/ai-connectors.css` alongside the JS.
+		'js/ai-connectors': path.resolve(
+			process.cwd(),
+			'src/js',
+			'ai-connectors.js'
+		),
 		'css/frontend': path.resolve(
 			process.cwd(),
 			'src/scss',
