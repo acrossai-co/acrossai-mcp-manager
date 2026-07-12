@@ -420,6 +420,27 @@ composer run phpstan
 
 ## Emergent Fixes (post-plan — 2026-07-12)
 
+### T037-T042 — Vendor bump `acrossai-co/main-menu` `0.0.17` → `0.0.18` (expose `fs_has_addons` — unblock Freemius Add-ons row)
+
+**Symptom** (operator report, 2026-07-13): after 0.0.17 disabled the vendor's own Add-ons submenu and the plugin set `fs_menu.addons => true` (expecting Freemius to take over), the Add-ons row still didn't appear under the AcrossAI menu. Same for the Account row.
+
+**Root cause**: Freemius SDK gates its Add-ons submenu on `if ( $this->has_addons() )` at `vendor/freemius/wordpress-sdk/includes/class-freemius.php:18964`. Meanwhile the vendored `FreemiusInitializer::init()` hardcoded `has_addons => false` when calling `fs_dynamic_init()`. The two are ANDed at render time — both need to be `true`. `fs_menu.addons = true` alone is insufficient. (Separately, the Account row requires Freemius opt-in via `$this->is_registered()` — that's normal SDK behavior, not a bug.)
+
+**Fix** — thread a new optional `fs_has_addons` key through the vendor API:
+1. `FreemiusInitializer::init()` accepts `bool $has_addons = false` and passes it to `fs_dynamic_init()`'s `has_addons` field. Default `false` preserves back-compat.
+2. `AddonsPage::__construct()` extracts `$fs_has_addons = ! empty( $args['fs_has_addons'] )` and forwards it.
+3. `README.md` §Add-ons page documents the new key.
+4. Tag `0.0.18` (commit `a6a35ff`).
+5. Plugin bumps to `0.0.18` and passes `'fs_has_addons' => true` in the `AddonsPage(...)` args alongside `fs_menu.addons => true`. An inline comment explains the SDK gate.
+
+**Cross-consumer impact**: existing 0.0.17 consumers that don't pass `fs_has_addons` behave identically (default is `false`, same as the previous hardcode). Umbrella consumers that WANT the Add-ons row must now pass `'fs_has_addons' => true` — this is an intentional opt-in.
+
+**Also relevant**: the Account submenu still requires operator opt-in for product 34418. Even with correct config, Account will not appear until the operator clicks "Login & Connect" on the Freemius Add-ons page. Complete opt-in once and both Account + Add-ons rows appear together.
+
+**Spec/tasks fold-back**: spec.md FR-014 bumped 0.0.17 → 0.0.18; plan.md Primary Dependencies extended with 0.0.18 rationale; tasks.md Phase 4e added with T037-T042; README.txt Unreleased bullet extended.
+
+---
+
 ### T035-T036 — Vendor bump `acrossai-co/main-menu` `0.0.16` → `0.0.17` (disable vendor Add-ons submenu)
 
 **Symptom** (operator decision, 2026-07-13): with the umbrella model in place — Freemius product 34418 (`acrossai-add-ons`) owning the single ecosystem-wide Add-ons page — the vendor's own `MenuRegistrar::register()` and Freemius's `menu.addons` submenu together produced a duplicate Add-ons row under the AcrossAI menu.

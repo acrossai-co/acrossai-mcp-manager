@@ -111,6 +111,22 @@ Rationale: the vendored `\AcrossAI_Addon\FreemiusInitializer` hardcoded `account
 - [x] **T027** Add an explicit `repositories` VCS entry for `https://github.com/acrossai-co/main-menu` in `composer.json` (deterministic resolution independent of Packagist sync lag).
 - [x] **T028** `composer clear-cache && composer update acrossai-co/main-menu` — confirms 0.0.15 installed against commit `a58dec9`. Verified via `grep -A8 "'menu'" vendor/.../FreemiusInitializer.php` — three defaults now `true`.
 
+## Phase 4e: Vendor bump — expose fs_has_addons override (folded in, 2026-07-13)
+
+Rationale: after Phase 4d, the vendor's own Add-ons submenu was disabled and Freemius's `menu.addons` was expected to fill the gap. But `fs_menu.addons = true` alone didn't produce the row — Freemius's SDK gates its Add-ons submenu on `if ( $this->has_addons() )` (`vendor/freemius/wordpress-sdk/includes/class-freemius.php:18964`), and the vendored `FreemiusInitializer` hardcoded `has_addons => false`. Both need to be `true` together.
+
+- [x] **T037** Edit `/wp-content/main-menu/src/Addons/FreemiusInitializer.php` — add `bool $has_addons = false` as a new optional parameter to `init()`, wire it through to `fs_dynamic_init()`'s `has_addons` field. Default `false` preserves backwards compatibility for consumers that don't need the Add-ons row.
+- [x] **T038** Edit `/wp-content/main-menu/src/Addons/AddonsPage.php` — extract `$fs_has_addons = ! empty( $args['fs_has_addons'] );`, pass it as the seventh positional argument to `FreemiusInitializer::init()`. Update the constructor docblock.
+- [x] **T039** Edit `/wp-content/main-menu/README.md` §Add-ons page — document the new `fs_has_addons` key with an example.
+- [x] **T040** Commit to `main` (commit `a6a35ff`). Tag `0.0.18` (`0.0.18 — AddonsPage 'fs_has_addons' arg unblocks Freemius Add-ons submenu`). Push both.
+- [x] **T041** Plugin: bump `composer.json` from `0.0.17` to `0.0.18`. `composer update acrossai-co/main-menu` — confirms 0.0.18 installed against commit `a6a35ff`.
+- [x] **T042** Plugin: add `'fs_has_addons' => true` to the `AddonsPage(...)` `$args` in `includes/Main.php` with an inline comment explaining Freemius's `has_addons()` gate + the umbrella-consumer requirement.
+
+Manual verification (post-implement):
+- After Freemius opt-in for product 34418, reload wp-admin as `install_plugins`-capable user. Confirm the **Add-ons** row appears under the AcrossAI menu (renders Freemius' "no add-ons yet" placeholder while the umbrella product's Freemius add-on catalog is empty).
+
+---
+
 ## Phase 4d: Vendor bump — disable vendor Add-ons submenu (folded in, 2026-07-13)
 
 Rationale: with the umbrella model in place (Freemius product 34418 = `acrossai-add-ons` = single Add-ons surface for the ecosystem) and `fs_menu.addons = true` on the plugin, keeping the vendor's own `MenuRegistrar::register()` alive would produce a duplicate Add-ons row. Vendor 0.0.17 disables that registration (comments out the `add_submenu_page()` call inside `MenuRegistrar::register()`).

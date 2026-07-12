@@ -416,6 +416,16 @@ final class Main {
 							'pricing' => false,
 							'upgrade' => false,
 						),
+						// `fs_menu.addons => true` alone is not enough — the
+						// Freemius SDK also gates the Add-ons submenu row on
+						// `if ( $this->has_addons() )` (class-freemius.php:18964).
+						// Pass `fs_has_addons => true` so the vendor forwards
+						// `has_addons => true` to fs_dynamic_init() and the row
+						// actually renders. Empty add-on lists render Freemius'
+						// "no add-ons yet" placeholder — expected for a fresh
+						// umbrella product with no add-ons published yet.
+						// Requires main-menu 0.0.18+.
+						'fs_has_addons' => true,
 					)
 				);
 			} catch ( \Throwable $e ) {
