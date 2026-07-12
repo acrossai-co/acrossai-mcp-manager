@@ -364,6 +364,12 @@ final class Main {
 		 * vendor package is stripped from a build. Freemius credentials are
 		 * scoped to this plugin's Freemius product (id 31226).
 		 * Mirrors acrossai-abilities-manager Feature 038 DEC-EXTERNAL-PACKAGE-HOOK-CTOR.
+		 *
+		 * The `fs_menu` array declares this plugin's intent for each Freemius
+		 * auto-submenu explicitly (main-menu 0.0.16+). Values below match the
+		 * vendor's DEFAULT_MENU today but the explicit form is preserved so
+		 * that future maintainers see the choice at the call site instead of
+		 * inheriting a moving default.
 		 */
 		if ( class_exists( \AcrossAI_Addon\AddonsPage::class ) ) {
 			try {
@@ -373,6 +379,14 @@ final class Main {
 						'fs_product_id' => '31226',
 						'fs_public_key' => 'pk_4f369b07d1fc7cadbc272ce96d75e',
 						'fs_slug'       => 'acrossai-mcp-manager',
+						'fs_menu'       => array(
+							'account' => true,
+							'contact' => true,
+							'support' => true,
+							'upgrade' => false,
+							'pricing' => false,
+							'addons'  => false,
+						),
 					)
 				);
 			} catch ( \Throwable $e ) {

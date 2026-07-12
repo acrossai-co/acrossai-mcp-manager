@@ -111,8 +111,20 @@ Rationale: the vendored `\AcrossAI_Addon\FreemiusInitializer` hardcoded `account
 - [x] **T027** Add an explicit `repositories` VCS entry for `https://github.com/acrossai-co/main-menu` in `composer.json` (deterministic resolution independent of Packagist sync lag).
 - [x] **T028** `composer clear-cache && composer update acrossai-co/main-menu` — confirms 0.0.15 installed against commit `a58dec9`. Verified via `grep -A8 "'menu'" vendor/.../FreemiusInitializer.php` — three defaults now `true`.
 
+## Phase 4c: Vendor bump — per-consumer `fs_menu` override (folded in, 2026-07-12)
+
+Rationale: operator asked "make it dynamic so the plugin can decide which submenus to show or hide". Turning the vendor-level hardcode into a per-consumer knob preserves the sensible defaults for every plugin that doesn't opt in, and lets each plugin make its intent explicit at the call site — see spec.md §Clarifications Q3 and FR-016.
+
+- [x] **T029** Edit `/wp-content/main-menu/src/Addons/FreemiusInitializer.php` — extract the six-key `menu` array into a private `DEFAULT_MENU` constant, add an optional `array $menu_overrides = []` parameter to `init()`, `unset( $menu_overrides['slug'] )` before the merge (`slug` derives from `$menu_slug` and cannot be overridden this way), and `array_merge` in the order `DEFAULT_MENU` → `$menu_overrides` → `[ 'slug' => $menu_slug ]` so slug always wins.
+- [x] **T030** Edit `/wp-content/main-menu/src/Addons/AddonsPage.php` — extract `$fs_menu = isset( $args['fs_menu'] ) && is_array( $args['fs_menu'] ) ? $args['fs_menu'] : array();`, thread it through the `FreemiusInitializer::init()` call, update the constructor docblock.
+- [x] **T031** Edit `/wp-content/main-menu/README.md` §Add-ons page — document the new `fs_menu` key with a full example showing every accepted key and its default, plus the note that `slug` cannot be overridden this way.
+- [x] **T032** Commit to `main` (commit `0fb50ea`). Tag `0.0.16` (`0.0.16 — AddonsPage 'fs_menu' arg lets consumers override Freemius menu submenus`). Push both.
+- [x] **T033** Plugin: bump `composer.json` from `0.0.15` to `0.0.16`. `composer update acrossai-co/main-menu` — confirms 0.0.16 installed against commit `0fb50ea`.
+- [x] **T034** Plugin: extend the `AddonsPage(...)` args in `includes/Main.php` with an explicit `'fs_menu' => [...]` block containing all six standard keys. Values mirror the vendor `DEFAULT_MENU` today, but the explicit form is preserved so future maintainers see the choice at the call site.
+
 Manual verification (post-implement):
-- Reload wp-admin as `install_plugins`-capable user. Confirm the AcrossAI menu now shows **Account**, **Contact Us**, and **wp.org Support Forum** submenu rows in addition to the existing plugin submenus (MCP, Add-ons, Settings).
+- Reload wp-admin as `install_plugins`-capable user. Confirm the AcrossAI menu shows **Account**, **Contact Us**, and **wp.org Support Forum** submenu rows in addition to the existing plugin submenus (MCP, Add-ons, Settings).
+- To later hide one, flip its `fs_menu` key to `false` in `includes/Main.php`, reload wp-admin, confirm the row disappears without any other plugin surface changing.
 
 ---
 

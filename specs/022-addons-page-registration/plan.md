@@ -11,7 +11,7 @@ Insert a single 25-line block into `AcrossAI_MCP_Manager\Includes\Main::define_a
 ## Technical Context
 
 **Language/Version**: PHP 8.1+.
-**Primary Dependencies**: Vendored `acrossai-co/main-menu` package — bumped from `0.0.14` to `0.0.15` in this feature so the vendor's newly-flipped `account`/`contact`/`support` menu defaults reach production. Autoloaded via `vendor/autoload_packages.php`. No new composer requires beyond the version bump.
+**Primary Dependencies**: Vendored `acrossai-co/main-menu` package — bumped from `0.0.14` to `0.0.16` in this feature. `0.0.15` flipped the vendor-level `account`/`contact`/`support` defaults to `true`; `0.0.16` promotes those defaults to `FreemiusInitializer::DEFAULT_MENU` and adds an `fs_menu` override key on `AddonsPage`'s `$args` so each consumer plugin explicitly declares its intent for every Freemius auto-submenu. Autoloaded via `vendor/autoload_packages.php`. No new composer requires beyond the version bump.
 **Storage**: None. This feature is UI wiring only.
 **Testing**: Manual smoke via wp-admin (see `spec.md` §Success Criteria + §Definition of Done Gates). No new PHPUnit tests — the block is a single external-package instantiation with error-handling that is already covered by the sibling plugin's identical shape.
 **Target Platform**: WordPress 6.9+ (matches plugin `Requires WP: 7.0` header; the vendor's own `AddonsPage::assert_wp_version()` requires WP ≥ 6.0 and would throw on older installs, but the plugin's own header floor is already tighter).
@@ -101,6 +101,14 @@ if ( class_exists( \AcrossAI_Addon\AddonsPage::class ) ) {
                 'fs_product_id' => '31226',
                 'fs_public_key' => 'pk_4f369b07d1fc7cadbc272ce96d75e',
                 'fs_slug'       => 'acrossai-mcp-manager',
+                'fs_menu'       => array(
+                    'account' => true,
+                    'contact' => true,
+                    'support' => true,
+                    'upgrade' => false,
+                    'pricing' => false,
+                    'addons'  => false,
+                ),
             )
         );
     } catch ( \Throwable $e ) {

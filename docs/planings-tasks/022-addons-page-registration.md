@@ -420,6 +420,25 @@ composer run phpstan
 
 ## Emergent Fixes (post-plan — 2026-07-12)
 
+### T029-T034 — Vendor bump `acrossai-co/main-menu` `0.0.15` → `0.0.16` (per-consumer `fs_menu` override)
+
+**Symptom** (operator request, 2026-07-12): after 0.0.15 flipped the three defaults on at the package level, operator asked "make it dynamic so the plugin can decide which submenus to show or hide."
+
+**Root cause**: 0.0.15's fix was a global policy change of the shared package. It didn't give individual consumer plugins a way to disagree.
+
+**Fix** — introduce a per-consumer `fs_menu` override key on `AddonsPage`'s `$args`:
+1. In the vendor, extract the six-key `menu` array into `FreemiusInitializer::DEFAULT_MENU`, add an `array $menu_overrides = []` param to `init()`, `unset( $menu_overrides['slug'] )` before the merge (slug derives from `$menu_slug`, cannot be overridden this way), `array_merge` in the order `DEFAULT_MENU` → overrides → `[ 'slug' => $menu_slug ]`.
+2. Thread `fs_menu` through `AddonsPage::__construct()` (`$fs_menu = isset( $args['fs_menu'] ) && is_array( $args['fs_menu'] ) ? $args['fs_menu'] : array();`).
+3. Document the new key in `README.md` §Add-ons page with a full example.
+4. Tag `0.0.16` (commit `0fb50ea`).
+5. Bump the plugin to `0.0.16` and extend the `AddonsPage(...)` `$args` block in `includes/Main.php` with an explicit `'fs_menu' => [ 'account' => true, 'contact' => true, 'support' => true, 'upgrade' => false, 'pricing' => false, 'addons' => false ]` block that mirrors the vendor defaults but declares the plugin's intent explicitly at the call site.
+
+**Cross-consumer impact**: every existing 0.0.15 consumer keeps working without a call-site change because the vendor's `DEFAULT_MENU` matches the 0.0.15 hardcode. New consumers can override any subset of the six keys by passing `fs_menu` in `$args`. Unknown keys pass through verbatim so future Freemius menu-config extensions work without a package bump.
+
+**Spec/tasks fold-back**: spec.md Clarification Q3 added; FR-016 added; FR-014 amended from 0.0.15 → 0.0.16; tasks.md Phase 4c added with T029-T034; README.txt Unreleased bullet extended.
+
+---
+
 ### T024-T028 — Vendor bump `acrossai-co/main-menu` `0.0.14` → `0.0.15`
 
 **Symptom** (operator report, 2026-07-12): after F022 landed the Add-ons submenu correctly, operator noticed the standard Freemius Account / Contact Us / wp.org Support Forum submenus were missing from the AcrossAI menu.

@@ -1350,3 +1350,11 @@ Freemius credentials MUST be stored inline in the `new` call as string literals 
 **Where to look next**
 
 When adding a second self-registering external package: apply this same DEC. When bumping the vendored `acrossai-co/main-menu` package: verify `\AcrossAI_Addon\AddonsPage` FQN + constructor arity are preserved (the `class_exists` guard would silently fall false on a rename, hiding the regression — SC-001 smoke catches it end-to-end).
+
+**Corollary — the `fs_menu` explicit-at-call-site pattern (main-menu 0.0.16+)**
+
+`\AcrossAI_Addon\AddonsPage`'s constructor accepts an optional `fs_menu` key on its `$args` array (main-menu 0.0.16 commit `0fb50ea`). It is merged over `FreemiusInitializer::DEFAULT_MENU` and controls which Freemius auto-submenus (`account`, `contact`, `support`, `upgrade`, `pricing`, `addons`) surface under the consumer's parent menu. `slug` cannot be overridden this way (stripped before merge — derives from the constructor's `$parent_slug` argument).
+
+Consumer plugins SHOULD pass an explicit `fs_menu` array with all six keys even when the values mirror the vendor defaults, so future maintainers see the intent at the call site instead of inheriting an implicit default that a future package bump could shift under them. Unknown keys pass through verbatim to Freemius's `menu` config so this is future-proof against new Freemius menu extensions.
+
+Reference: `vendor/acrossai-co/main-menu/src/Addons/FreemiusInitializer.php` `DEFAULT_MENU` + `init($menu_overrides)`; `vendor/acrossai-co/main-menu/src/Addons/AddonsPage.php` `$args['fs_menu']` extraction; this plugin's `includes/Main.php` `AddonsPage` instantiation block.
