@@ -352,6 +352,47 @@ final class Main {
 		$this->loader->add_action( 'admin_init', $settings_menu, 'register_settings' );
 
 		/**
+		 * Add-ons submenu page — bundled in acrossai-co/main-menu (\AcrossAI_Addon\AddonsPage).
+		 *
+		 * The AddonsPage constructor self-registers all WordPress hooks
+		 * (admin_menu, admin_init, admin_enqueue_scripts, admin_notices,
+		 * wp_ajax_acrossai_addons_*, admin_post_acrossai_addons_connect_again)
+		 * — no Loader wiring needed. Accepted deviation from Boot Flow Rule
+		 * (see DEC-ADDONS-PAGE-VENDOR-CTOR-BOOT) because the external package's
+		 * public API does not expose individual hook methods. Guarded per
+		 * Constitution §V Integration Resilience — fails gracefully when the
+		 * vendor package is stripped from a build. Freemius credentials are
+		 * scoped to this plugin's Freemius product (id 31226).
+		 * Mirrors acrossai-abilities-manager Feature 038 DEC-EXTERNAL-PACKAGE-HOOK-CTOR.
+		 */
+		if ( class_exists( \AcrossAI_Addon\AddonsPage::class ) ) {
+			try {
+				new \AcrossAI_Addon\AddonsPage(
+					ACROSSAI_MCP_MANAGER_PLUGIN_FILE,
+					array(
+						'fs_product_id' => '31226',
+						'fs_public_key' => 'pk_4f369b07d1fc7cadbc272ce96d75e',
+						'fs_slug'       => 'acrossai-mcp-manager',
+					)
+				);
+			} catch ( \Throwable $e ) {
+				$error_message = $e->getMessage();
+				add_action(
+					'admin_notices',
+					function () use ( $error_message ) {
+						if ( ! current_user_can( 'manage_options' ) ) {
+							return;
+						}
+						printf(
+							'<div class="notice notice-error"><p><strong>AcrossAI MCP Manager:</strong> %s</p></div>',
+							esc_html( $error_message )
+						);
+					}
+				);
+			}
+		}
+
+		/**
 		 * Admin notices — extracted to Admin\Partials\Notices per RT-2.
 		 * - render_action_result_notice consumes the `?notice=...` query var set by
 		 *   Settings::handle_actions() redirects (FR-016)

@@ -4,20 +4,20 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "81220eee80a129d66a75e5d2429560af",
+    "content-hash": "c1d565a864508ae908791577dcae492e",
     "packages": [
         {
             "name": "acrossai-co/main-menu",
-            "version": "0.0.14",
+            "version": "0.0.15",
             "source": {
                 "type": "git",
                 "url": "https://github.com/acrossai-co/main-menu.git",
-                "reference": "d56ddfabd58d4caf54159561de7dd623b149c13f"
+                "reference": "a58dec91bfcc64fc4258588cbdac7f8e7c1e39bb"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/acrossai-co/main-menu/zipball/d56ddfabd58d4caf54159561de7dd623b149c13f",
-                "reference": "d56ddfabd58d4caf54159561de7dd623b149c13f",
+                "url": "https://api.github.com/repos/acrossai-co/main-menu/zipball/a58dec91bfcc64fc4258588cbdac7f8e7c1e39bb",
+                "reference": "a58dec91bfcc64fc4258588cbdac7f8e7c1e39bb",
                 "shasum": ""
             },
             "require": {
@@ -27,25 +27,24 @@
             },
             "type": "library",
             "extra": {
-                "wp-requires": "6.0",
-                "autoloader-suffix": "AcrossAI_Main_Menu"
+                "autoloader-suffix": "AcrossAI_Main_Menu",
+                "wp-requires": "6.0"
             },
             "autoload": {
                 "psr-4": {
-                    "AcrossAI_Addon\\": "src/Addons/",
-                    "AcrossAI_Main_Menu\\": "src/"
+                    "AcrossAI_Main_Menu\\": "src/",
+                    "AcrossAI_Addon\\": "src/Addons/"
                 }
             },
-            "notification-url": "https://packagist.org/downloads/",
             "license": [
                 "GPL-2.0-or-later"
             ],
             "description": "AcrossAI Admin Dashboard — parent menu, shared Settings page (Settings API), manager submenu slots, and an Add-ons page with Freemius integration.",
             "support": {
-                "issues": "https://github.com/acrossai-co/main-menu/issues",
-                "source": "https://github.com/acrossai-co/main-menu/tree/0.0.14"
+                "source": "https://github.com/acrossai-co/main-menu/tree/0.0.15",
+                "issues": "https://github.com/acrossai-co/main-menu/issues"
             },
-            "time": "2026-07-08T16:10:19+00:00"
+            "time": "2026-07-12T17:40:48+00:00"
         },
         {
             "name": "automattic/jetpack-autoloader",
@@ -169,16 +168,16 @@
         },
         {
             "name": "freemius/wordpress-sdk",
-            "version": "2.13.2",
+            "version": "2.13.4",
             "source": {
                 "type": "git",
                 "url": "https://github.com/Freemius/wordpress-sdk.git",
-                "reference": "20358d1ef8e11ef17038fc9cb8fca6c6a544c519"
+                "reference": "fa43eb92ae9dffa0d9f5ae11b5a1739bd7222308"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/Freemius/wordpress-sdk/zipball/20358d1ef8e11ef17038fc9cb8fca6c6a544c519",
-                "reference": "20358d1ef8e11ef17038fc9cb8fca6c6a544c519",
+                "url": "https://api.github.com/repos/Freemius/wordpress-sdk/zipball/fa43eb92ae9dffa0d9f5ae11b5a1739bd7222308",
+                "reference": "fa43eb92ae9dffa0d9f5ae11b5a1739bd7222308",
                 "shasum": ""
             },
             "require": {
@@ -216,9 +215,9 @@
             ],
             "support": {
                 "issues": "https://github.com/Freemius/wordpress-sdk/issues",
-                "source": "https://github.com/Freemius/wordpress-sdk/tree/2.13.2"
+                "source": "https://github.com/Freemius/wordpress-sdk/tree/2.13.4"
             },
-            "time": "2026-06-16T08:33:57+00:00"
+            "time": "2026-07-09T08:50:52+00:00"
         },
         {
             "name": "wordpress/mcp-adapter",

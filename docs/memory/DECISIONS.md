@@ -1313,3 +1313,40 @@ When feature X's code lands in feature Y's branch, feature Y's tasks.md MUST enu
 **Where to look next**
 
 When a feature description references "landed inline with F###", verify tasks.md has concrete IDs, not a pointer. When adding a new top-level directory or namespace in a fold-in, audit every `bin/verify-*-gates.sh` script for whether it needs to scan the new location.
+
+---
+
+### DEC-ADDONS-PAGE-VENDOR-CTOR-BOOT — External-package classes whose constructor self-registers all hooks are exempt from the Loader-only rule (A1), and MUST instead be instantiated inside `Main::define_admin_hooks()` under a `class_exists` guard + `try/catch`
+
+**Status**: Active (Feature 022 — 2026-07-12)
+**Scope**: Every consumer plugin integrating `\AcrossAI_Addon\AddonsPage` (bundled in the vendored `acrossai-co/main-menu` package) or any future external-package class that follows the same self-registering-in-constructor pattern.
+**Tags**: `vendor-integration, main-menu, addons-page, external-package, a1-exception, boot-flow, class-exists-guard, try-catch, generalizable`
+
+**Why this is durable**
+
+`\AcrossAI_Addon\AddonsPage::__construct()` self-registers six WordPress hooks in its private `boot()` method (`vendor/acrossai-co/main-menu/src/Addons/AddonsPage.php:104-115`): `admin_menu @ 20`, `admin_menu @ 21`, `admin_init`, `admin_enqueue_scripts`, `admin_notices`, plus four `wp_ajax_acrossai_addons_*` handlers and one `admin_post_acrossai_addons_connect_again`. The vendor's public API deliberately does NOT expose per-hook registration methods — the constructor is the ONLY documented entrypoint. Therefore consumers cannot route these hooks through `$this->loader->add_action()` in `Main.php` per Architecture Constraint A1. Any future external package that follows the same self-registering-in-constructor pattern falls under the same exception.
+
+**Decision**
+
+Consumers MUST instantiate `\AcrossAI_Addon\AddonsPage` (or any equivalent self-registering external class) exactly once per request inside `AcrossAI_MCP_Manager\Includes\Main::define_admin_hooks()`, wrapped in:
+
+1. A `class_exists( \AcrossAI_Addon\AddonsPage::class )` guard — Constitution §V Integration Resilience so a stripped vendor package degrades silently rather than fataling.
+2. A `try { ... } catch ( \Throwable $e ) { ... }` — the vendor's constructor throws `InvalidArgumentException` on empty Freemius credentials and `RuntimeException` on WP < 6.0 or an unresolvable consumer file. The catch registers an `admin_notices` closure that (a) short-circuits on `! current_user_can( 'manage_options' )` and (b) prints the exception message through `esc_html()` inside a `notice-error` div.
+
+Freemius credentials MUST be stored inline in the `new` call as string literals — do NOT introduce a filter, option, or environment-variable indirection. Rationale: matches the sibling plugin's precedent (audit-trivial + no runtime lookup), and Freemius public keys (`pk_...`) are safe to embed in shipped source.
+
+**Tradeoffs**
+- Gained: consumer plugins integrate any AcrossAI shared page in a single guarded block; absent-vendor + bad-credentials + WP-version-too-low all degrade to admin notices instead of fatals; single-registration guard (`MenuRegistrar::$registered`) lets multiple AcrossAI plugins coexist without stacking duplicate nav rows.
+- Made harder: A1 has a documented exception now; new hires must know that "hooks live in Loader only" is a *default*, not an absolute. The DEC entry above is the mitigation.
+- Reconsider: If the vendor package evolves to expose per-hook registration methods, this DEC's rationale weakens — revisit whether the consumer should still call `new AddonsPage(...)` or route through the Loader instead.
+- Related: `DEC-VENDOR-SETTINGS-TAB-INTEGRATION` (Feature 012 — sibling pattern for consuming the same vendor package's Settings tab surface); `DEC-EXTERNAL-PACKAGE-HOOK-CTOR` (sibling plugin `acrossai-abilities-manager` Feature 038 — the canonical reference block).
+
+**Evidence**
+- `vendor/acrossai-co/main-menu/src/Addons/AddonsPage.php:69-115` — constructor signature (throws contract) + `boot()` hook list.
+- `vendor/acrossai-co/main-menu/src/Addons/MenuRegistrar.php:5-50` — `install_plugins` capability + `self::$registered` cross-plugin dedup guard.
+- `acrossai-abilities-manager/includes/Main.php:316-349` — sibling reference block (Feature 038).
+- `acrossai-mcp-manager/includes/Main.php` — this feature's insertion in `define_admin_hooks()` immediately after the `$settings_menu` wiring.
+
+**Where to look next**
+
+When adding a second self-registering external package: apply this same DEC. When bumping the vendored `acrossai-co/main-menu` package: verify `\AcrossAI_Addon\AddonsPage` FQN + constructor arity are preserved (the `class_exists` guard would silently fall false on a rename, hiding the regression — SC-001 smoke catches it end-to-end).
