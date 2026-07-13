@@ -29,7 +29,9 @@
 
 namespace AcrossAI_MCP_Manager\Includes\MCP;
 
+use AcrossAI_MCP_Manager\Includes\Database\MCPServer\DefaultServerSeeder;
 use AcrossAI_MCP_Manager\Includes\Database\MCPServer\Query as MCPServerQuery;
+use AcrossAI_MCP_Manager\Includes\Database\MCPServer\ToolPolicy;
 use WP\MCP\Infrastructure\ErrorHandling\ErrorLogMcpErrorHandler;
 use WP\MCP\Infrastructure\Observability\NullMcpObservabilityHandler;
 use WP\MCP\Transport\HttpTransport;
@@ -137,6 +139,29 @@ final class Controller {
 			$route     = '' !== $server->server_route ? $server->server_route : $slug;
 			$version   = '' !== $server->server_version ? $server->server_version : 'v1.0.0';
 
+			$tools = ToolPolicy::compose_for_row( $server );
+
+			/**
+			 * Filter the tools list a plugin-registered (database) MCP server exposes.
+			 *
+			 * Fired inside Controller::register_database_servers() per server,
+			 * immediately before $adapter->create_server(). The initial list is
+			 * the union of the row's enabled tool_* columns (protocol slugs) and
+			 * the ability slugs saved in wp_acrossai_mcp_server_tools for this
+			 * server_id. Callbacks may add or remove any slug freely.
+			 *
+			 * NOT fired for the default server (server_slug =
+			 * 'mcp-adapter-default-server'). Hook `mcp_adapter_default_server_config`
+			 * for that path.
+			 *
+			 * @since 0.1.0 (Feature 025)
+			 *
+			 * @param string[] $tools  Ability slugs to register as MCP tools.
+			 * @param \AcrossAI_MCP_Manager\Includes\Database\MCPServer\Row $server The server row being registered.
+			 */
+			$tools = apply_filters( 'acrossai_mcp_manager_server_tools', $tools, $server );
+			$tools = array_values( array_unique( array_map( 'strval', (array) $tools ) ) );
+
 			$result = $adapter->create_server(
 				$slug,
 				$namespace,
@@ -147,11 +172,7 @@ final class Controller {
 				array( HttpTransport::class ),
 				ErrorLogMcpErrorHandler::class,
 				NullMcpObservabilityHandler::class,
-				array(
-					'mcp-adapter/discover-abilities',
-					'mcp-adapter/get-ability-info',
-					'mcp-adapter/execute-ability',
-				),
+				$tools,
 				array(),
 				array()
 			);
@@ -172,6 +193,64 @@ final class Controller {
 				);
 			}
 		}
+	}
+
+	/**
+	 * Callback for the vendor filter `mcp_adapter_default_server_config`.
+	 *
+	 * REPLACES $config['tools'] with the composed slug set for the seeded
+	 * default server row — the enabled `tool_*` columns plus whatever the
+	 * operator saved in wp_acrossai_mcp_server_tools. The schema DEFAULT 1
+	 * on the ALTER (Feature 025 schema bump 1.0.0 → 1.1.0) ensures a fresh
+	 * install exposes all three protocol tools out of the box.
+	 *
+	 * Wired via Loader in `Includes\Main::define_admin_hooks()`. Called once
+	 * per `mcp_adapter_init` firing.
+	 *
+	 * Defensive: returns the input untouched if
+	 *  - the config is not an array,
+	 *  - $config['tools'] is not an array,
+	 *  - the default server row cannot be located by slug (unseeded install
+	 *    — unexpected),
+	 *  - the composed picks array is empty (the operator explicitly removed
+	 *    every tool AND has no curated picks AND declined Reset — vendor
+	 *    defaults are the safer fallback per spec §Edge Cases). See
+	 *    security-review v2 SEC-025-v2-1 for the DB-vs-default-server
+	 *    behavioral asymmetry note.
+	 *
+	 * Does NOT fire `acrossai_mcp_manager_server_tools` — the vendor filter
+	 * is the single extension seam for this path (spec §FR-009).
+	 *
+	 * @since 0.1.0 (Feature 025)
+	 *
+	 * @param mixed $config The vendor-supplied config array.
+	 * @return mixed The config with the composed slug set replacing `tools`, or the input untouched.
+	 */
+	public function filter_default_server_config( $config ) {
+		if ( ! is_array( $config ) || ! isset( $config['tools'] ) || ! is_array( $config['tools'] ) ) {
+			return $config;
+		}
+
+		// SEC-025-v2-3: server_slug index is 'key' not 'unique' (F011 baseline);
+		// MCPServerQuery::query returns first insertion-order match; safe within
+		// manage_options trust boundary — see security-review v2.
+		$rows = MCPServerQuery::instance()->query(
+			array(
+				'server_slug' => DefaultServerSeeder::SLUG,
+				'number'      => 1,
+			)
+		);
+		if ( empty( $rows ) ) {
+			return $config;
+		}
+
+		$tools = ToolPolicy::compose_for_row( $rows[0] );
+		if ( empty( $tools ) ) {
+			return $config;
+		}
+
+		$config['tools'] = $tools;
+		return $config;
 	}
 
 	/**

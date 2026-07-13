@@ -37,6 +37,7 @@ declare( strict_types = 1 );
 namespace AcrossAI_MCP_Manager\Includes\REST;
 
 use AcrossAI_MCP_Manager\Includes\Database\MCPServer\Query as MCPServerQuery;
+use AcrossAI_MCP_Manager\Includes\Database\MCPServer\ToolPolicy;
 use AcrossAI_MCP_Manager\Includes\Database\MCPServerTool\Query as MCPServerToolQuery;
 use AcrossAI_MCP_Manager\Includes\MCP\ToolExposureGate;
 use WP_Error;
@@ -59,18 +60,6 @@ final class ToolsController {
 	 * @var string
 	 */
 	private const NS = 'acrossai-mcp-manager/v1';
-
-	/**
-	 * Slugs never exposed in the pool (protocol tools). Mirrors JS-side
-	 * `EXCLUDED_SLUGS` and `ToolExposureGate::EXCLUDED_SLUGS`.
-	 *
-	 * @var string[]
-	 */
-	private const EXCLUDED_SLUGS = array(
-		'mcp-adapter/discover-abilities',
-		'mcp-adapter/get-ability-info',
-		'mcp-adapter/execute-ability',
-	);
 
 	/**
 	 * Singleton instance.
@@ -201,31 +190,49 @@ final class ToolsController {
 	public function get_tools( WP_REST_Request $request ) {
 		$server_id = (int) $request['server_id'];
 
-		$server_check = $this->require_server( $server_id );
-		if ( is_wp_error( $server_check ) ) {
-			return $server_check;
+		$server_row = $this->fetch_server_row( $server_id );
+		if ( is_wp_error( $server_row ) ) {
+			return $server_row;
 		}
 
+		// F025: response 'tools' is the composed union of enabled protocol columns
+		// and curated rows — see ToolPolicy::compose_for_row.
 		$response = array(
-			'tools' => MCPServerToolQuery::instance()->get_added_slugs( $server_id ),
+			'tools' => ToolPolicy::compose_for_row( $server_row ),
 		);
 
 		$include_abilities = (bool) $request->get_param( 'include_abilities' );
-		if ( $include_abilities && function_exists( 'wp_get_abilities' ) ) {
-			$abilities = array();
-			foreach ( \wp_get_abilities() as $ability ) {
-				$name = (string) $ability->get_name();
-				if ( in_array( $name, self::EXCLUDED_SLUGS, true ) ) {
+		if ( $include_abilities ) {
+			$abilities   = array();
+			$seen_names  = array();
+			if ( function_exists( 'wp_get_abilities' ) ) {
+				foreach ( \wp_get_abilities() as $ability ) {
+					$name              = (string) $ability->get_name();
+					$meta              = $ability->get_meta();
+					$abilities[]       = array(
+						'name'        => $name,
+						'label'       => (string) $ability->get_label(),
+						'description' => (string) $ability->get_description(),
+						'type'        => is_array( $meta ) && isset( $meta['mcp']['type'] ) ? (string) $meta['mcp']['type'] : '',
+						'category'    => (string) $ability->get_category(),
+					);
+					$seen_names[ $name ] = true;
+				}
+			}
+			// F025 runtime-timing fallback: guarantee the three protocol slugs
+			// appear in the catalog so the UI's left "All abilities" pane can
+			// re-add one after the operator removes it via the ConfirmDialog.
+			// The vendor mcp-adapter's `wp_register_ability` for these three
+			// slugs fires on `wp_abilities_api_init`, but its listener attaches
+			// inside Controller::initialize_adapter() (rest_api_init) — too
+			// late for wp_abilities_api_init on REST requests. ToolPolicy is
+			// the canonical source for the metadata; dedup guards against a
+			// future timing fix that DOES land them in wp_get_abilities().
+			foreach ( ToolPolicy::PROTOCOL_TOOL_METADATA as $stub ) {
+				if ( isset( $seen_names[ $stub['name'] ] ) ) {
 					continue;
 				}
-				$meta        = $ability->get_meta();
-				$abilities[] = array(
-					'name'        => $name,
-					'label'       => (string) $ability->get_label(),
-					'description' => (string) $ability->get_description(),
-					'type'        => is_array( $meta ) && isset( $meta['mcp']['type'] ) ? (string) $meta['mcp']['type'] : '',
-					'category'    => (string) $ability->get_category(),
-				);
+				$abilities[] = $stub;
 			}
 			$response['abilities'] = $abilities;
 		}
@@ -243,9 +250,9 @@ final class ToolsController {
 	public function post_tools( WP_REST_Request $request ) {
 		$server_id = (int) $request['server_id'];
 
-		$server_check = $this->require_server( $server_id );
-		if ( is_wp_error( $server_check ) ) {
-			return $server_check;
+		$server_row = $this->fetch_server_row( $server_id );
+		if ( is_wp_error( $server_row ) ) {
+			return $server_row;
 		}
 
 		$tools_param = $request->get_param( 'tools' );
@@ -258,20 +265,18 @@ final class ToolsController {
 			);
 		}
 
-		// Reject excluded protocol tools defense-in-depth.
-		$excluded_hits = array_values( array_intersect( $tools_param, self::EXCLUDED_SLUGS ) );
-		if ( ! empty( $excluded_hits ) ) {
-			return new WP_Error(
-				'acrossai_mcp_excluded_tool_slug',
-				esc_html__( 'Cannot add MCP-adapter protocol tools as per-server tools.', 'acrossai-mcp-manager' ),
-				array(
-					'status'         => 400,
-					'excluded_slugs' => $excluded_hits,
-				)
-			);
-		}
-
 		// Validate against the currently-registered ability catalog (all-or-nothing).
+		// F025: protocol slugs are canonical plugin constants (ToolPolicy::PROTOCOL_TOOLS)
+		// and MUST bypass wp_get_abilities() validation. The vendor mcp-adapter
+		// registers them on wp_abilities_api_init, but its listener attaches inside
+		// Controller::initialize_adapter() (rest_api_init) — which fires AFTER
+		// wp_abilities_api_init on any REST request whose Abilities-API bootstrap
+		// already ran on `init`. That leaves wp_get_abilities() blind to the three
+		// protocol slugs at POST-time. Since ToolPolicy::PROTOCOL_TOOLS is the
+		// authoritative source, catalog resolution is not needed for these slugs.
+		// (SEC-025-v2-2 correction — the v2 review claimed the hook order was safe;
+		// runtime evidence 2026-07-14 disproved that. See F025 plan-review-v3 if
+		// authored.)
 		if ( function_exists( 'wp_get_abilities' ) ) {
 			$registered = array();
 			foreach ( \wp_get_abilities() as $ability ) {
@@ -281,6 +286,10 @@ final class ToolsController {
 			foreach ( $tools_param as $slug ) {
 				$slug_str = (string) $slug;
 				if ( '' === $slug_str ) {
+					continue;
+				}
+				// Protocol slugs are canonical — skip catalog validation.
+				if ( in_array( $slug_str, ToolPolicy::PROTOCOL_TOOLS, true ) ) {
 					continue;
 				}
 				if ( ! isset( $registered[ $slug_str ] ) ) {
@@ -299,9 +308,26 @@ final class ToolsController {
 			}
 		}
 
-		// Apply the diff — transactional replace_set with FOR UPDATE lock.
+		// F025: split the unified payload across the two storage layers.
+		$split         = ToolPolicy::split_payload( $tools_param );
+		$prior_columns = array(
+			'tool_discover_abilities' => (int) $server_row->tool_discover_abilities,
+			'tool_get_ability_info'   => (int) $server_row->tool_get_ability_info,
+			'tool_execute_ability'    => (int) $server_row->tool_execute_ability,
+		);
+
 		try {
-			$applied = MCPServerToolQuery::instance()->replace_set( $server_id, $tools_param );
+			// Layer 1 — flip the three protocol columns in one UPDATE.
+			MCPServerQuery::instance()->update_item( $server_id, $split['columns'] );
+
+			// SEC-025-INFO-2: accepted race window between column update and curated
+			// replace_set — see security-review v1 § two-write POST path. Two concurrent
+			// saves on the same server may leave columns from writer A and curated rows
+			// from writer B. Tools tab is single-operator in practice; window is
+			// milliseconds; reset is one click away.
+
+			// Layer 2 — transactional replace_set for the curated remainder.
+			$curated_applied = MCPServerToolQuery::instance()->replace_set( $server_id, $split['curated'] );
 		} catch ( \Throwable $e ) {
 			error_log( // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- SEC-020-010: log-specific / respond-generic. Log has no user-controlled content.
 				sprintf(
@@ -322,31 +348,61 @@ final class ToolsController {
 		// tool call following this save sees fresh state.
 		ToolExposureGate::flush_cache( $server_id );
 
-		// Fire the change action per applied add + per applied remove. Each
-		// individually wrapped in try/catch so a broken observer never 500s
-		// the response (FR-031 / SEC-020-004).
-		foreach ( $applied['added'] as $slug ) {
+		// F025 FR-016 — fire acrossai_mcp_tools_changed per flipped protocol column
+		// (one bullet per column whose new value differs from pre-save). Reuses the
+		// existing F020 event stream so audit subscribers observe a unified diff.
+		$columns_added   = array();
+		$columns_removed = array();
+		foreach ( ToolPolicy::COLUMN_MAP as $column => $slug ) {
+			$new_value = (int) $split['columns'][ $column ];
+			$old_value = (int) $prior_columns[ $column ];
+			if ( $new_value === $old_value ) {
+				continue;
+			}
+			if ( 1 === $new_value ) {
+				$this->fire_change_action( $server_id, $slug, 'added' );
+				$columns_added[] = $slug;
+			} else {
+				$this->fire_change_action( $server_id, $slug, 'removed' );
+				$columns_removed[] = $slug;
+			}
+		}
+
+		// Curated-side flips continue firing per F020's existing per-slug loop.
+		foreach ( $curated_applied['added'] as $slug ) {
 			$this->fire_change_action( $server_id, (string) $slug, 'added' );
 		}
-		foreach ( $applied['removed'] as $slug ) {
+		foreach ( $curated_applied['removed'] as $slug ) {
 			$this->fire_change_action( $server_id, (string) $slug, 'removed' );
+		}
+
+		// Re-fetch the row so the response's composed 'tools' reflects the write.
+		$refreshed = $this->fetch_server_row( $server_id );
+		if ( is_wp_error( $refreshed ) ) {
+			// Extremely unlikely — the server existed above the write.
+			return $refreshed;
 		}
 
 		return rest_ensure_response(
 			array(
-				'tools' => MCPServerToolQuery::instance()->get_added_slugs( $server_id ),
+				'tools'   => ToolPolicy::compose_for_row( $refreshed ),
+				'added'   => array_values( array_merge( $columns_added, $curated_applied['added'] ) ),
+				'removed' => array_values( array_merge( $columns_removed, $curated_applied['removed'] ) ),
 			)
 		);
 	}
 
 	/**
-	 * Resolve a server row or return a 404 WP_Error.
+	 * Resolve a server Row or return a 404 WP_Error.
+	 *
+	 * F025 refactor: previously returned bool — now returns the Row so callers
+	 * can read the tool_* column state without a second DB round-trip.
 	 *
 	 * @since 0.1.0
 	 * @param int $server_id Server id.
-	 * @return true|WP_Error True when the server exists.
+	 * @return \AcrossAI_MCP_Manager\Includes\Database\MCPServer\Row|WP_Error
 	 */
-	private function require_server( int $server_id ) {
+	private function fetch_server_row( int $server_id ) {
 		$rows = MCPServerQuery::instance()->query(
 			array(
 				'id'     => $server_id,
@@ -360,7 +416,7 @@ final class ToolsController {
 				array( 'status' => 404 )
 			);
 		}
-		return true;
+		return $rows[0];
 	}
 
 	/**

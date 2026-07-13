@@ -30,6 +30,28 @@ This is not a changelog. Do not record routine releases, version bumps, or imple
 
 This is a changelog entry, not a durable lesson. It records what happened, not what was learned.
 
+### 2026-07-14 - F025 Server tools registration hooks — hybrid DB-authoritative tool storage + Tools tab UI + companion filter + vendor filter callback
+
+**Milestone**: DB-authoritative per-server tool storage (hybrid boolean columns + presence rows) + Tools tab UI with operator-removable protocol tools via `ConfirmDialog` + companion-plugin filter for database servers + vendor filter callback for the default server.
+
+**Durable lessons captured**:
+- `DEC-F025-HYBRID-TOOL-STORAGE-PROTOCOL-VS-CURATED` — boolean columns for fixed sets + presence rows for open-ended sets, unioned via single canonical composer (extends F017 ExposureResolver pattern).
+- `DEC-F025-V2-VENDOR-SOURCE-CROSS-CHECK-CADENCE` + `DEC-F025-RUNTIME-EVIDENCE-OVER-STATIC-REVIEW` — extends F020's "v2 for close-in-substance" lesson; static hook analysis is insufficient for vendors whose `add_action` runs inside their own `__construct`.
+- `DEC-F025-TASKS-REVIEW-PRESERVATION-INVARIANT-AND-COVERAGE-MATRIX` — subtractive-edit tasks list preserved invariants; task-reviews produce coverage matrices.
+- `B29` — vendor hook-listener race caused by `add_action` inside `__construct`.
+
+**Notable process observations**:
+- Five distinct security-review passes: plan v1 (3 INFO), plan v2 (1 LOW + 2 INFO), tasks (3 INFO), architecture (0), staged (2 INFO) — all remediated or documented before merge.
+- Runtime evidence 2026-07-14 disproved v2's SEC-025-v2-2 "hook-order safe" verdict — corrected via FR-018 (POST validation bypass) + `ToolPolicy::PROTOCOL_TOOL_METADATA` (GET catalog fallback). Reinforces `DEC-F025-RUNTIME-EVIDENCE-OVER-STATIC-REVIEW`.
+- `/speckit-analyze` after runtime fixes surfaced 5 spec-hygiene drifts (C1, C2, U1, U2, A1) — all closed by adding FR-018 + acceptance-scenario clarifications + contract doc updates.
+
+**Where to look next**
+
+- `specs/025-server-tools-registration-hooks/` (full artifact set)
+- `docs/security-reviews/2026-07-13-025-*` (plan v1 + v2) + `2026-07-14-025-*` (tasks + staged)
+
+---
+
 ### 2026-07-13 - F022 shared Add-ons submenu + umbrella-product Freemius model — 4 upstream vendor releases (main-menu 0.0.15 → 0.0.18) delivered in one branch
 
 - **Why durable**: F022 established the pattern of iterating on an owned vendor package (`acrossai-co/main-menu`) inside a single spec-kit feature — each iteration produced a small, tagged upstream release consumed by a `composer.json` bump in the same feature branch. Four releases (0.0.15 → 0.0.16 → 0.0.17 → 0.0.18) landed under Phases 4b/4c/4d/4e, each with concrete task IDs (T024-T028, T029-T034, T035-T036, T037-T042). Each release captured its evidence via the vendor commit SHA + tag name, cited in the corresponding tasks.md phase. Without this discipline, the "which upstream commit closed which task" trail would evaporate at session end — future maintainers investigating "why does mcp-manager depend on main-menu 0.0.18 specifically" would have no traceable answer. This pattern is now the canonical shape for every future spec-kit feature that iterates on an owned vendor package.

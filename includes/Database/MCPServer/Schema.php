@@ -104,6 +104,29 @@ class Schema extends \BerlinDB\Database\Kern\Schema {
 			'default' => 'v1.0.0',
 		),
 
+		// F025 protocol-tool enablement flags — one boolean column per MCP protocol
+		// tool. Default 1 means "enabled" and, on the ALTER for existing installs,
+		// backfills every pre-F025 row with all three protocol tools enabled.
+		// See ToolPolicy::COLUMN_MAP for the canonical column→slug mapping.
+		array(
+			'name'    => 'tool_discover_abilities',
+			'type'    => 'tinyint',
+			'length'  => '1',
+			'default' => 1,
+		),
+		array(
+			'name'    => 'tool_get_ability_info',
+			'type'    => 'tinyint',
+			'length'  => '1',
+			'default' => 1,
+		),
+		array(
+			'name'    => 'tool_execute_ability',
+			'type'    => 'tinyint',
+			'length'  => '1',
+			'default' => 1,
+		),
+
 		// Audit timestamp — no explicit default; BerlinDB uses '0000-00-00 00:00:00'
 		// for datetime columns. 'created' flag handles auto-timestamping at the
 		// application layer (CURRENT_TIMESTAMP quoted by BerlinDB is invalid DDL).

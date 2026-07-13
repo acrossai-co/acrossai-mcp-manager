@@ -23,28 +23,33 @@ import {
 	useMemo,
 } from '@wordpress/element';
 import { createRoot } from '@wordpress/element';
-import { Button, SearchControl, Spinner, Notice } from '@wordpress/components';
+import {
+	Button,
+	SearchControl,
+	Spinner,
+	Notice,
+	__experimentalConfirmDialog as ConfirmDialog,
+} from '@wordpress/components';
 import apiFetch from '@wordpress/api-fetch';
 import { __, sprintf } from '@wordpress/i18n';
 import { applyFilters } from '@wordpress/hooks';
 import { useSelect } from '@wordpress/data';
 
 /**
- * Slugs never exposed in the left "All abilities" pool — mirrors PHP-side
- * ToolsController::EXCLUDED_SLUGS and ToolExposureGate::EXCLUDED_SLUGS.
- * Three-way duplication acknowledged in plan.md §Complexity Tracking per
- * F017 precedent (DRY tension with A9).
+ * The three MCP protocol slugs — mirror of PHP-side
+ * `ToolPolicy::PROTOCOL_TOOLS` (single canonical PHP source; this JS mirror
+ * kept in step by hand at build time). Used to identify protocol tools for
+ * the Remove-with-warning ConfirmDialog and Reset payload construction.
  *
- * These slugs ARE shown in the right "Added as tools" column as always-added
- * built-ins (see BUILTIN_ABILITIES below) — they're the mcp-adapter protocol
- * tools and are always callable regardless of operator curation (matches the
- * PHP-side ToolExposureGate protocol-bypass semantics at step 3).
+ * F025: no longer filters the left "All abilities" pool — protocol slugs are
+ * first-class entries visible in both panes with the recommended-defaults
+ * color treatment (see TYPE_STYLE.Built-in).
  */
-const EXCLUDED_SLUGS = new Set( [
+const PROTOCOL_TOOL_SLUGS = [
 	'mcp-adapter/discover-abilities',
 	'mcp-adapter/get-ability-info',
 	'mcp-adapter/execute-ability',
-] );
+];
 
 /**
  * The three MCP-adapter protocol tools that ship built-in to every server —
@@ -136,16 +141,27 @@ function AbilityRow( { ability, side, onAction, actionLabel, busy } ) {
 		ability,
 		{ side }
 	);
-	const typeStyle =
-		TYPE_STYLE[ ability.type ] || { bg: '#f0f0f1', fg: '#50575e' };
+	// F025: protocol tools are first-class entries in either pane; they no
+	// longer occupy their own "locked" side. Detect by slug so the visual
+	// treatment ("Built-in" badge + #fef7e0 background) travels with the row
+	// regardless of which pane it's in.
+	const isProtocolTool = PROTOCOL_TOOL_SLUGS.includes( ability.name );
+	const typeStyle = isProtocolTool
+		? TYPE_STYLE[ 'Built-in' ]
+		: TYPE_STYLE[ ability.type ] || { bg: '#f0f0f1', fg: '#50575e' };
 	const rowClass = [ 'acrossai-mcp-tools-row', decoration.className ]
 		.filter( Boolean )
 		.join( ' ' );
-	const isBuiltin = side === 'builtin';
-	const showCheckmark = side === 'added' || isBuiltin;
-	// Muted background for built-ins so they read as "always-on infrastructure"
-	// rather than "operator-curated". Same right-column background family.
-	const rowBg = isBuiltin ? '#fbfaf3' : side === 'added' ? '#f9fcff' : '';
+	const showCheckmark = side === 'added';
+	// F025: protocol rows keep the recommended-defaults tint in both panes.
+	// Non-protocol added rows keep the F020 subtle blue; non-protocol available
+	// rows keep the neutral white.
+	const rowBg = isProtocolTool
+		? '#fef7e0'
+		: side === 'added'
+		? '#f9fcff'
+		: '';
+	const displayType = isProtocolTool ? 'Built-in' : ability.type;
 
 	return createElement(
 		'div',
@@ -169,8 +185,8 @@ function AbilityRow( { ability, side, onAction, actionLabel, busy } ) {
 							width: '22px',
 							height: '22px',
 							borderRadius: '50%',
-							background: isBuiltin ? '#fef7e0' : '#e6f6ec',
-							color: isBuiltin ? '#8a6d00' : '#0a6b3d',
+							background: isProtocolTool ? '#fdefb2' : '#e6f6ec',
+							color: isProtocolTool ? '#8a6d00' : '#0a6b3d',
 							display: 'flex',
 							alignItems: 'center',
 							justifyContent: 'center',
@@ -178,11 +194,8 @@ function AbilityRow( { ability, side, onAction, actionLabel, busy } ) {
 							fontWeight: 700,
 							marginTop: '1px',
 						},
-						title: isBuiltin
-							? __( 'Built-in — always available on every server.', 'acrossai-mcp-manager' )
-							: '',
 					},
-					isBuiltin ? '🔒' : '✓'
+					'✓'
 			  )
 			: null,
 		decoration.prepend || null,
@@ -210,7 +223,7 @@ function AbilityRow( { ability, side, onAction, actionLabel, busy } ) {
 					},
 					ability.label || ability.name
 				),
-				ability.type
+				displayType
 					? createElement(
 							'span',
 							{
@@ -224,7 +237,7 @@ function AbilityRow( { ability, side, onAction, actionLabel, busy } ) {
 									color: typeStyle.fg,
 								},
 							},
-							ability.type
+							displayType
 					  )
 					: null
 			),
@@ -262,31 +275,13 @@ function AbilityRow( { ability, side, onAction, actionLabel, busy } ) {
 				: null,
 			decoration.append || null
 		),
-		isBuiltin
-			? createElement(
-					'span',
-					{
-						style: {
-							flex: 'none',
-							fontSize: '11.5px',
-							fontWeight: 600,
-							color: '#8a6d00',
-							padding: '5px 11px',
-							background: '#fef7e0',
-							border: '1px solid #f0d879',
-							borderRadius: '3px',
-							whiteSpace: 'nowrap',
-						},
-					},
-					__( 'Built-in', 'acrossai-mcp-manager' )
-			  )
-			: createElement( Button, {
-					variant: side === 'added' ? 'secondary' : 'primary',
-					isSmall: true,
-					disabled: !! busy,
-					onClick: () => onAction( ability.name ),
-					children: actionLabel,
-			  } )
+		createElement( Button, {
+			variant: side === 'added' ? 'secondary' : 'primary',
+			isSmall: true,
+			disabled: !! busy,
+			onClick: () => onAction( ability.name ),
+			children: actionLabel,
+		} )
 	);
 }
 
@@ -303,6 +298,11 @@ function ToolsApp( { serverId, serverSlug } ) {
 	const [ saving, setSaving ] = useState( false );
 	const [ error, setError ] = useState( null );
 	const [ abilitiesFromRest, setAbilitiesFromRest ] = useState( [] );
+	// F025 US2: confirmation-dialog gating state for protocol-slug removal.
+	// When set, holds the slug pending confirmation; ConfirmDialog is open.
+	const [ pendingProtocolRemove, setPendingProtocolRemove ] = useState( null );
+	// F025 US3: same gating for the destructive Reset action.
+	const [ pendingReset, setPendingReset ] = useState( false );
 
 	// B22 — Prefer the @wordpress/abilities data store when it exists (v0.x
 	// packages aren't in @wordpress/scripts externals map, so we look up by
@@ -320,7 +320,8 @@ function ToolsApp( { serverId, serverSlug } ) {
 			Array.isArray( abilitiesFromStore ) && abilitiesFromStore.length > 0
 				? abilitiesFromStore
 				: abilitiesFromRest;
-		return source.filter( ( a ) => ! EXCLUDED_SLUGS.has( a.name ) );
+		// F025: no filter on protocol slugs — they're first-class entries in the pool.
+		return source;
 	}, [ abilitiesFromStore, abilitiesFromRest ] );
 
 	// Initial mount: GET /tools?include_abilities=1
@@ -357,13 +358,46 @@ function ToolsApp( { serverId, serverSlug } ) {
 
 	const addedRows = useMemo( () => {
 		const byName = Object.fromEntries( abilities.map( ( a ) => [ a.name, a ] ) );
-		return Array.from( added ).map( ( name ) => byName[ name ] || {
-			name,
-			label: name,
-			description: __( '(ability no longer registered)', 'acrossai-mcp-manager' ),
-			type: '',
-			category: '',
-		} );
+		// F025: build a BUILTIN_ABILITIES metadata fallback for the three
+		// protocol slugs — the vendor registers them via wp_register_ability
+		// so they should appear in the abilities pool, but the fallback keeps
+		// the UI correct if the pool is briefly empty (e.g., during initial
+		// load or if the abilities data store is unavailable).
+		const builtinByName = Object.fromEntries(
+			BUILTIN_ABILITIES.map( ( b ) => [
+				b.name,
+				{
+					name: b.name,
+					label: __( b.labelKey, 'acrossai-mcp-manager' ),
+					description: __( b.descriptionKey, 'acrossai-mcp-manager' ),
+					type: b.type,
+					category: '',
+				},
+			] )
+		);
+		// Order: protocol slugs first (in PROTOCOL_TOOL_SLUGS order — matches
+		// PHP-side ToolPolicy::COLUMN_MAP iteration), then curated in
+		// insertion order returned by the server.
+		const protocolAdded = PROTOCOL_TOOL_SLUGS.filter( ( slug ) =>
+			added.has( slug )
+		);
+		const curatedAdded = Array.from( added ).filter(
+			( slug ) => ! PROTOCOL_TOOL_SLUGS.includes( slug )
+		);
+		return [ ...protocolAdded, ...curatedAdded ].map(
+			( name ) =>
+				byName[ name ] ||
+				builtinByName[ name ] || {
+					name,
+					label: name,
+					description: __(
+						'(ability no longer registered)',
+						'acrossai-mcp-manager'
+					),
+					type: '',
+					category: '',
+				}
+		);
 	}, [ abilities, added ] );
 
 	/**
@@ -405,16 +439,33 @@ function ToolsApp( { serverId, serverSlug } ) {
 		next.add( name );
 		persistSet( next, prev );
 	};
-	const removeAbility = ( name ) => {
+	// F025 US2: internal helper that actually applies a removal. Called
+	// directly for non-protocol slugs; gated behind the ConfirmDialog for
+	// protocol slugs.
+	const applyRemove = ( name ) => {
 		const prev = new Set( added );
 		const next = new Set( added );
 		next.delete( name );
 		persistSet( next, prev );
 	};
-	const removeAll = () => {
-		const prev = new Set( added );
-		persistSet( new Set(), prev );
+	const removeAbility = ( name ) => {
+		if ( PROTOCOL_TOOL_SLUGS.includes( name ) ) {
+			// Gate through the ConfirmDialog (FR-003 / SEC-025-INFO-1).
+			setPendingProtocolRemove( name );
+			return;
+		}
+		// FR-006: non-protocol removals bypass the dialog.
+		applyRemove( name );
 	};
+	// F025 US3: Reset now sets the tool set to exactly the three protocol
+	// slugs — the backend's ToolPolicy::split_payload flips all three columns
+	// to 1 and calls replace_set with an empty curated array, dropping every
+	// non-protocol row atomically.
+	const applyReset = () => {
+		const prev = new Set( added );
+		persistSet( new Set( PROTOCOL_TOOL_SLUGS ), prev );
+	};
+	const openResetDialog = () => setPendingReset( true );
 
 	if ( loading ) {
 		return createElement(
@@ -452,14 +503,13 @@ function ToolsApp( { serverId, serverSlug } ) {
 				'span',
 				null,
 				sprintf(
-					/* translators: 1: added count, 2: total available count, 3: built-in count */
+					/* translators: 1: added count, 2: total available count */
 					__(
-						'%1$d of %2$d abilities added as tools · %3$d built-in always available',
+						'%1$d of %2$d abilities added as tools',
 						'acrossai-mcp-manager'
 					),
 					added.size,
-					totalPool,
-					BUILTIN_ABILITIES.length
+					totalPool
 				)
 			)
 		),
@@ -602,103 +652,82 @@ function ToolsApp( { serverId, serverSlug } ) {
 									fontWeight: 700,
 								},
 								title: __(
-									'3 built-in protocol tools + your curated selection.',
+									'Composed union of enabled built-in defaults and curated abilities.',
 									'acrossai-mcp-manager'
 								),
 							},
-							String( added.size + BUILTIN_ABILITIES.length )
+							String( added.size )
 						)
 					),
 					createElement( Button, {
 						variant: 'secondary',
 						isSmall: true,
-						onClick: removeAll,
-						disabled: added.size === 0 || saving,
+						onClick: openResetDialog,
+						// F025: Reset is always meaningful — even when the pane
+						// looks default, it clears any invisible curated rows
+						// and re-affirms all three protocol columns as 1.
+						disabled: saving,
 						children: __( 'Reset', 'acrossai-mcp-manager' ),
 					} )
 				),
 				createElement(
 					'div',
 					{ style: { maxHeight: '632px', overflow: 'auto', flex: 1 } },
-					// Always-added built-in mcp-adapter protocol tools. Shown at
-					// the TOP of the column so operators see the full picture of
-					// what AI clients can call on this server.
-					createElement(
-						'div',
-						{
-							style: {
-								padding: '8px 16px',
-								fontSize: '11.5px',
-								fontWeight: 600,
-								textTransform: 'uppercase',
-								letterSpacing: '0.06em',
-								color: '#646970',
-								background: '#fafaf5',
-								borderBottom: '1px solid #f0d879',
-							},
-						},
-						__( 'Always available (built-in)', 'acrossai-mcp-manager' )
-					),
-					BUILTIN_ABILITIES.map( ( b ) =>
-						createElement( AbilityRow, {
-							key: b.name,
-							ability: {
-								name: b.name,
-								label: __( b.labelKey, 'acrossai-mcp-manager' ),
-								description: __(
-									b.descriptionKey,
-									'acrossai-mcp-manager'
-								),
-								type: b.type,
-								category: '',
-							},
-							side: 'builtin',
-						} )
-					),
-					// Operator-curated section header — helps distinguish from
-					// built-ins visually. Always rendered even when addedRows is
-					// empty so the empty state has clear context.
-					createElement(
-						'div',
-						{
-							style: {
-								padding: '8px 16px',
-								fontSize: '11.5px',
-								fontWeight: 600,
-								textTransform: 'uppercase',
-								letterSpacing: '0.06em',
-								color: '#646970',
-								background: '#f6f7f7',
-								borderBottom: '1px solid #e0e0e2',
-								borderTop: '1px solid #e0e0e2',
-							},
-						},
-						__( 'Curated tools', 'acrossai-mcp-manager' )
-					),
+					// F025: single unified list — protocol slugs (with #fef7e0
+					// background applied via AbilityRow's isProtocolTool
+					// detection) render first, curated slugs after. The former
+					// separate "Always available" section is gone; operators
+					// can now Remove protocol slugs via the confirmation dialog.
 					addedRows.length === 0
 						? createElement(
+								// FR-017 empty-state warning banner: rendered
+								// INSIDE the pane so operators immediately see
+								// why the pane is empty and how to recover.
 								'div',
-								{ style: { padding: '32px 28px', textAlign: 'center' } },
+								{
+									style: {
+										padding: '20px 24px',
+										background: '#fcf9f0',
+										borderLeft: '4px solid #dba617',
+									},
+								},
 								createElement(
 									'div',
-									{ style: { fontSize: '14px', fontWeight: 600, color: '#50575e' } },
-									__( 'No tools added yet', 'acrossai-mcp-manager' )
+									{
+										style: {
+											fontSize: '14px',
+											fontWeight: 700,
+											color: '#3c434a',
+											marginBottom: '6px',
+										},
+									},
+									__(
+										'This server has no tools',
+										'acrossai-mcp-manager'
+									)
 								),
 								createElement(
 									'div',
 									{
 										style: {
 											fontSize: '13px',
-											color: '#646970',
-											marginTop: '6px',
+											color: '#3c434a',
 											lineHeight: 1.55,
+											marginBottom: '12px',
 										},
 									},
 									__(
-										'Add abilities from the left to expose them as callable MCP tools.',
+										"This server has no tools. AI clients can't discover or execute abilities. Click Reset to restore defaults.",
 										'acrossai-mcp-manager'
 									)
-								)
+								),
+								createElement( Button, {
+									variant: 'primary',
+									isSmall: true,
+									onClick: openResetDialog,
+									disabled: saving,
+									children: __( 'Reset to defaults', 'acrossai-mcp-manager' ),
+								} )
 						  )
 						: addedRows.map( ( a ) =>
 								createElement( AbilityRow, {
@@ -713,31 +742,56 @@ function ToolsApp( { serverId, serverSlug } ) {
 				)
 			)
 		),
-		// Zero-added warning banner (visible only when operator has curated
-		// zero abilities). The three built-in protocol tools remain callable
-		// regardless — the warning is about operator-curated abilities.
-		added.size === 0
+		// F025 US2 — ConfirmDialog for protocol-tool removal (FR-003).
+		pendingProtocolRemove
 			? createElement(
-					'div',
+					ConfirmDialog,
 					{
-						style: {
-							display: 'flex',
-							alignItems: 'flex-start',
-							gap: '12px',
-							background: '#fcf9f0',
-							border: '1px solid #f0d879',
-							borderLeft: '4px solid #dba617',
-							padding: '12px 16px',
-							marginTop: '20px',
+						isOpen: true,
+						onConfirm: () => {
+							const slug = pendingProtocolRemove;
+							setPendingProtocolRemove( null );
+							applyRemove( slug );
 						},
-					},
-					createElement(
-						'div',
-						{ style: { fontSize: '13.5px', color: '#3c434a', lineHeight: 1.55 } },
-						__(
-							'No abilities are added as tools yet. Connected AI clients can still discover the built-in protocol tools shown above, but they won\'t be able to execute any WordPress ability on this server until you add at least one.',
+						onCancel: () => setPendingProtocolRemove( null ),
+						confirmButtonText: __(
+							'Remove anyway',
 							'acrossai-mcp-manager'
-						)
+						),
+						cancelButtonText: __(
+							'Cancel',
+							'acrossai-mcp-manager'
+						),
+					},
+					__(
+						'This tool is required by AI clients to discover and execute WordPress abilities on this server. Removing it may prevent connected AI clients from working correctly. Are you sure you want to remove it?',
+						'acrossai-mcp-manager'
+					)
+			  )
+			: null,
+		// F025 US3 — ConfirmDialog for Reset (destructive: wipes curated picks).
+		pendingReset
+			? createElement(
+					ConfirmDialog,
+					{
+						isOpen: true,
+						onConfirm: () => {
+							setPendingReset( false );
+							applyReset();
+						},
+						onCancel: () => setPendingReset( false ),
+						confirmButtonText: __(
+							'Reset to defaults',
+							'acrossai-mcp-manager'
+						),
+						cancelButtonText: __(
+							'Cancel',
+							'acrossai-mcp-manager'
+						),
+					},
+					__(
+						'Reset the tools for this server to only the three built-in defaults? All curated picks will be removed.',
+						'acrossai-mcp-manager'
 					)
 			  )
 			: null,

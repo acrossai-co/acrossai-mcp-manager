@@ -1411,3 +1411,76 @@ When diagnosing "why is Freemius Account/Contact/Support/Add-ons submenu not app
 **Where to look next**
 
 When Freemius submenus disappear unexpectedly on any AcrossAI plugin: run the sanity SQL first. When adding a new AcrossAI plugin that consumes `acrossai-co/main-menu`: guide the operator to complete opt-in exactly once against the umbrella product (34418 today); after that any additional AcrossAI plugin auto-shares the opt-in state via the umbrella product ID (they call `fs_dynamic_init` for the same product; Freemius returns the existing memoized instance).
+
+---
+
+### 2026-07-14 - DEC-F025-HYBRID-TOOL-STORAGE-PROTOCOL-VS-CURATED
+
+**Status**
+Active — supplements (does NOT supersede) `DEC-TOOL-SELECTION-PRESENCE-MODEL` (F020).
+
+**Why this is durable**
+Second concrete use of the "boolean-with-fallback pattern when a fallback layer exists" carve-out from DEC-TOOL-SELECTION-PRESENCE-MODEL (F017's ExposureResolver was the first). Codifies WHEN a feature should hybrid-store vs. pushing everything into presence rows.
+
+**Decision**
+When a feature stores per-resource state where (a) the state is a UNION of a FIXED cardinality set AND an OPEN-ended set, (b) the fixed set has a well-defined default that must survive existing rows on schema upgrade, AND (c) atomic reset (flip all fixed flags AND clear open-ended) is a first-class operation, THEN store the fixed set as boolean columns on the primary row (`DEFAULT 1` on ALTER = the migration) AND the open-ended set as presence rows in a separate table. Compose the effective set via a single canonical helper (`ToolPolicy::compose_for_row()` in F025's case — mirrors F017's `ExposureResolver::resolve()` per DEC-ABILITY-OVERRIDE-RESOLUTION).
+
+**Tradeoffs**
+- Gained: `ALTER TABLE ADD COLUMN ... DEFAULT 1` IS the migration — no backfill helper. Atomic Reset via one UPDATE + one transactional replace_set([]). Type safety on fixed-set slugs.
+- Made harder: Two writes on POST (column update + curated replace_set) are not wrapped in an outer transaction — small accepted race window (SEC-025-INFO-2).
+- Reconsider: If the fixed set grows or its cardinality becomes uncertain, migrate to unified presence storage with an `is_default` flag.
+
+**Where to look next**
+- `specs/025-server-tools-registration-hooks/data-model.md` §Storage layers 1+2
+- `includes/Database/MCPServer/ToolPolicy.php`
+- `specs/025-server-tools-registration-hooks/plan.md` §Complexity Tracking
+
+---
+
+### 2026-07-14 - DEC-F025-V2-VENDOR-SOURCE-CROSS-CHECK-CADENCE + DEC-F025-RUNTIME-EVIDENCE-OVER-STATIC-REVIEW
+
+**Status**
+Active — extends F020 WORKLOG "run v2 for close-in-substance verification" lesson.
+
+**Why this is durable**
+F020's v2 lesson stopped at "verify against vendor source". F025 v2 DID verify against vendor source and STILL missed a runtime-timing bug — vendor `add_action('wp_abilities_api_init', ...)` in its own `__construct()` runs too late to catch the very action it targets. Static hook analysis is insufficient when the target hook may already have fired. Runtime evidence 2026-07-14 disproved v2's "safe" verdict.
+
+**Decision**
+For any feature consuming a vendor hook contract or vendor return contract:
+
+1. **Vendor cross-check cadence**: EITHER plan.md cites vendor-source line numbers for every contract claim, OR a v2 security review is mandatory before implementation.
+2. **Runtime evidence over static review**: When a v2 review cannot easily observe the actual runtime hook order, the reviewer MUST NOT declare timing "safe" — flag as "requires runtime verification during implementation" and add a runtime smoke check to the implementer's task list.
+3. **Corollary — canonical constants over runtime resolution**: When a vendor slug/name needs to be referenced at runtime, prefer a plugin-owned constant (like `ToolPolicy::PROTOCOL_TOOLS`) over runtime resolution via the vendor's registration mechanism.
+
+**Tradeoffs**
+- Gained: Prevents "v2 declared safe, runtime disproved" bugs (F025 hit this class twice — POST validation + GET catalog).
+- Made harder: Reviewers must be humble about the limits of static analysis over hook-timing code.
+- Reconsider: If the WordPress Abilities API adds a stable "hooks registered by X action" invariant, static analysis may become sufficient again.
+
+**Where to look next**
+- `docs/security-reviews/2026-07-13-025-server-tools-registration-hooks-plan-v2.md` §SEC-025-v2-2
+- `includes/REST/ToolsController.php::post_tools()` FR-018 comment
+- `includes/Database/MCPServer/ToolPolicy.php::PROTOCOL_TOOL_METADATA`
+
+---
+
+### 2026-07-14 - DEC-F025-TASKS-REVIEW-PRESERVATION-INVARIANT-AND-COVERAGE-MATRIX
+
+**Status**
+Active — extends F011 D6 (use imports preserved during subtractive edits).
+
+**Why this is durable**
+Task-review-time preservation checklists prevent "I thought I was just deleting X but I actually removed Y" defects when tasks touch security-sensitive methods (auth boundaries, capability checks, nonce middleware). Coverage matrices are the fastest way to detect a dropped finding when a task-review consumes multiple plan-review artifacts (F025 tasks-review consumed v1 + v2 = 6 plan findings — matrix caught inconsistencies immediately).
+
+**Decision**
+1. **Preservation invariant on subtractive-edit tasks**: any task that DELETES code from a security-sensitive method MUST include an explicit "MUST NOT modify [permission_callback], [nonce middleware], [capability check]" invariant list in the task description. Reviewer confirms the delta against the list before diff sign-off.
+2. **Coverage matrix on task-review artifacts**: every task-review MUST produce a coverage matrix mapping each PRIOR plan-review finding ID to its remediation task ID. If a finding has no task, the matrix surfaces the gap immediately.
+
+**Tradeoffs**
+- Gained: Prevents accidental permission_callback removal during subtractive edits. Prevents dropped security findings between plan-review and task-review.
+- Made harder: Task descriptions get slightly longer; task-reviews get a mandatory matrix section.
+- Reconsider: If the review pipeline gains machine-enforced coverage matrices (linter checks every SEC-* finding has a task ref), the coverage-matrix rule becomes a lint gate.
+
+**Where to look next**
+- `specs/025-server-tools-registration-hooks/tasks.md` T012 (PRESERVATION invariant example)
+- `docs/security-reviews/2026-07-14-025-server-tools-registration-hooks-tasks.md` §"Coverage matrix"
