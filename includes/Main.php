@@ -511,6 +511,7 @@ final class Main {
 		 */
 		$mcp_controller = \AcrossAI_MCP_Manager\Includes\MCP\Controller::instance();
 		$this->loader->add_action( 'rest_api_init', $mcp_controller, 'initialize_adapter' );
+		$this->loader->add_filter( 'mcp_adapter_default_server_config', $mcp_controller, 'filter_default_server_config' );
 
 		/**
 		 * Feature 017 — Per-server Ability Selection.

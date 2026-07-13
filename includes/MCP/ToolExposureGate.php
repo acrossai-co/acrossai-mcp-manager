@@ -34,10 +34,21 @@ defined( 'ABSPATH' ) || exit;
 final class ToolExposureGate {
 
 	/**
-	 * Slugs that F020 never gates — the mcp-adapter protocol tools are the
-	 * discovery mechanism itself and MUST always be callable, regardless of
-	 * the operator's tools-set state. Mirrors the JS-side `EXCLUDED_SLUGS`
-	 * constant in `src/js/tools.js` and the mirror on `ToolsController`.
+	 * Slugs that F020 never gates — the mcp-adapter protocol tools were, at
+	 * F020 shipping time, considered non-curatable and always callable.
+	 *
+	 * VESTIGIAL post-Feature 025 (2026-07-14) — SEC-025-INFO-3:
+	 * Under F025's DB-authoritative model, protocol slugs are excluded from
+	 * the `tools/list` response when the corresponding `tool_*` column on the
+	 * server row is `0`. The adapter refuses `tools/call` on unregistered
+	 * tools at the tool-lookup layer regardless of this bypass. This constant
+	 * is retained as a belt-and-braces safety net for AI clients that cached
+	 * a slug from an earlier session and hit the gate before the adapter's
+	 * own lookup rejects the call.
+	 *
+	 * Do NOT cite this constant as precedent for new bypass rules in future
+	 * enforcement gates. The canonical PHP source for the three protocol
+	 * slugs is `AcrossAI_MCP_Manager\Includes\Database\MCPServer\ToolPolicy::PROTOCOL_TOOLS`.
 	 *
 	 * @var string[]
 	 */

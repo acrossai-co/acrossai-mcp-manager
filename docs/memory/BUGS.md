@@ -933,3 +933,44 @@ When enabling any Freemius auto-submenu on an AcrossAI plugin:
 **Where to look next**
 
 When a new Freemius auto-submenu is proposed (e.g. Freemius adds a `menu.affiliation` or `menu.gdpr` in a future SDK release): grep the SDK immediately for the second-level flag before declaring the enable "done". If the second flag isn't yet exposed on `AddonsPage`, plan a `acrossai-co/main-menu` bump using the same override pattern as `fs_has_addons` (main-menu 0.0.18).
+
+---
+
+### 2026-07-14 - B29 — Vendor `add_action` inside `__construct` misses actions that already fired
+
+**Status**
+Active — F025 evidence 2026-07-14.
+
+**Why this is durable**
+Third-party WordPress packages routinely wire `add_action` calls inside their class `__construct()` or `init()` methods. If those classes are instantiated inside another hook's callback (e.g., our `Controller::initialize_adapter()` on `rest_api_init`), then any `add_action` for hooks that FIRE BEFORE the outer callback runs will silently miss — the listener attaches AFTER its target action already fired. `wp_get_ability()` returned empty at F025 POST-time for exactly this reason.
+
+**Pattern**
+
+```php
+// Vendor code — Plugin::__construct() (we instantiate via ::instance() inside our rest_api_init).
+class Plugin {
+    public function __construct() {
+        // Fires during WP `init` — already fired by the time our rest_api_init runs.
+        add_action( 'wp_abilities_api_init', array( $this, 'register_default_abilities' ) );
+    }
+}
+```
+
+Symptom: `wp_get_abilities()` (or equivalent lookup) returns fewer entries than expected at REST/AJAX time. The missing entries were supposed to be registered by an action that fires EARLIER than the outer callback where the vendor is instantiated.
+
+**Prevention / Detection**
+
+1. Any REST route validating a vendor-registered slug via `wp_get_ability()` MUST include a manual smoke test (curl the endpoint) — static hook analysis is insufficient.
+2. When a plugin-owned canonical source exists for the slug (like F025's `ToolPolicy::PROTOCOL_TOOLS`), prefer it over `wp_get_abilities()` for validation.
+3. For vendor packages whose init pattern uses `add_action` inside `__construct`, document the required outer hook order OR bootstrap on `plugins_loaded` P0 for hooks that must catch `init`.
+
+**Fixed by (F025)**
+
+- FR-018: POST validation bypasses `wp_get_abilities()` for canonical protocol slugs.
+- `ToolPolicy::PROTOCOL_TOOL_METADATA`: GET catalog fallback for reader-side visibility.
+
+**Where to look next**
+
+- `vendor/wordpress/mcp-adapter/includes/Core/McpAdapter.php:120`
+- `includes/REST/ToolsController.php` FR-018 comments
+- `docs/security-reviews/2026-07-13-025-server-tools-registration-hooks-plan-v2.md` §SEC-025-v2-2

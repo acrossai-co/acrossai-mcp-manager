@@ -34,7 +34,7 @@ class Table extends \BerlinDB\Database\Kern\Table {
 	 *
 	 * @var string
 	 */
-	protected $version = '1.0.0';
+	protected $version = '1.1.0';
 
 	/**
 	 * WordPress option key that tracks the installed schema version.
