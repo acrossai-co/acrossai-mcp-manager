@@ -4,10 +4,17 @@ on:
   push:
     branches: [main]
   pull_request:
-    paths:
-      - 'package.json'
-      - 'package-lock.json'
-      - '.github/workflows/validate-packages.yml'
+    # NOTE: intentionally NO `paths:` filter.
+    #
+    # Branch protection requires this check name (`WordPress Package
+    # Hierarchy (Constitution §VI/§VII)`). When a workflow is path-filtered
+    # AND branch-protection-required, GitHub reports "Expected — Waiting for
+    # status to be reported" indefinitely on PRs that don't touch the
+    # filtered paths — blocking every unrelated PR (F022 hit this exact trap
+    # 2026-07-13).
+    #
+    # `npm run validate-packages` costs ~30s per PR. See B27 memory entry
+    # for the general pattern.
 
 permissions: {}
 

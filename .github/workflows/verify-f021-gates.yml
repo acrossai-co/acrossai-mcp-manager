@@ -4,13 +4,18 @@ on:
   push:
     branches: [main]
   pull_request:
-    paths:
-      - 'includes/OAuth/**'
-      - 'includes/Connectors/**'
-      - 'includes/Database/OAuth*/**'
-      - 'admin/Partials/ServerTabs/AIConnectorsTab.php'
-      - 'bin/verify-f021-gates.sh'
-      - '.github/workflows/verify-f021-gates.yml'
+    # NOTE: intentionally NO `paths:` filter.
+    #
+    # Branch protection requires this check name (`F021 grep gates (A1 /
+    # layering / column widths / raw secrets)`). When a workflow is path-
+    # filtered AND branch-protection-required, GitHub reports "Expected —
+    # Waiting for status to be reported" indefinitely on PRs that don't
+    # touch the filtered paths — blocking every unrelated PR (F022 hit
+    # this exact trap 2026-07-13).
+    #
+    # `bin/verify-f021-gates.sh` runs whole-repo greps, so firing on every
+    # PR costs ~5s. Cheap; buys deterministic branch-protection compat.
+    # See B27 memory entry for the general pattern.
 
 permissions: {}
 
