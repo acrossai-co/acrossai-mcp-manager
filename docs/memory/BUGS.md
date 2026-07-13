@@ -883,3 +883,53 @@ Concrete remediation options in order of preference:
 **Where to look next**
 
 Before applying branch protection: `gh api repos/{owner}/{repo}/actions/runs?per_page=1 --jq '.workflow_runs[0].check_run_url'` and inspect the actual check names GitHub assigns. For every matrix workflow, decide: pin the meta-job, or omit and rely on CODEOWNERS. Never pin raw matrix-cell names unless the matrix values are frozen at the plugin's supported-version floor (rare).
+
+---
+
+### B28 — Freemius auto-submenus require BOTH `menu.<key>` AND the corresponding `has_<key>` / `is_<key>` at `fs_dynamic_init()` top level (silent no-render otherwise)
+
+**Status**: Active (Feature 022 — 2026-07-13)
+**Scope**: Every consumer of the Freemius WordPress SDK (any AcrossAI plugin using `\AcrossAI_Addon\AddonsPage` from `acrossai-co/main-menu`, plus any future direct Freemius consumer).
+**Tags**: `freemius, two-level-enablement, menu-config, fs_dynamic_init, silent-no-render, generalizable`
+
+**Symptom**
+
+Setting `menu.<key> => true` in the Freemius `fs_dynamic_init()` config array produces zero visible effect for many keys — the submenu row simply does not appear under the plugin's parent menu, with no error log line, no admin notice, and no PHP warning. F022 hit this exact failure for the Add-ons row: `fs_menu.addons => true` was passed via the `acrossai-co/main-menu` 0.0.16 `fs_menu` override, but the Add-ons submenu remained invisible on wp-admin for ~5 rounds of diagnosis before the SDK-level gate was found.
+
+**Root cause**
+
+The Freemius SDK enables auto-submenus via a **two-level check** that is not documented in the SDK-config reference. Each `menu.<key>` boolean is AND'd with an independent top-level fs_dynamic_init capability flag at render time. Both must be `true` for the row to appear:
+
+| `menu.<key>` | Also gated on (top-level fs_dynamic_init) | SDK code path |
+|---|---|---|
+| `menu.addons` | `has_addons => true` | `class-freemius.php:18964` — `if ( $this->has_addons() ) { ... add_submenu_item('addons', ...) }` |
+| `menu.pricing`, `menu.upgrade` | `has_paid_plans => true` (and premium-plan config) | premium-flow gates around `_pricing_page_render` / `_upgrade_page_render` |
+| `menu.account` | `is_registered() === true` (opt-in complete) | `class-freemius.php:18913` — `if ( ! WP_FS__DEMO_MODE && $this->is_registered() ) { ... add_submenu_item('account', ...) }` |
+| `menu.contact` | (no additional flag — just `menu.contact === true`) | direct `add_submenu_item()` call, no capability gate |
+| `menu.support` | (no additional flag — just `menu.support === true`) | direct `add_submenu_item()` call, no capability gate |
+
+The `contact` and `support` keys are the ONLY ones that work with a single-level enablement — every other key needs a second flag.
+
+**Decision (Prevention Recipe)**
+
+When enabling any Freemius auto-submenu on an AcrossAI plugin:
+
+1. Set the `menu.<key>` boolean via `AddonsPage`'s `fs_menu` override in `includes/Main.php`.
+2. Grep the SDK for the render gate on that key: `grep -n "'<key>'\|has_<key>\|is_<key>\|_<key>_page_render" vendor/freemius/wordpress-sdk/includes/class-freemius.php | head -20`.
+3. If a second-level flag is required and no override key exists on `AddonsPage`, extend the vendor (see F022 Phase 4e — `fs_has_addons` was added exactly this way in main-menu 0.0.18).
+4. Verify at least one submenu row renders in wp-admin after opt-in completes; NEVER ship a "menu enabled" change without visual confirmation.
+
+**Tradeoffs / Prevention**
+- Gained: no more silent-no-render debugging arcs on Freemius menu changes.
+- Reconsider: if Freemius simplifies the SDK to single-flag enablement in a future release, this table becomes obsolete — verify the gate list before assuming the table is current.
+- Related: `DEC-ADDONS-PAGE-VENDOR-CTOR-BOOT` (F022 corollary documents the `fs_menu` + `fs_has_addons` override API on `AddonsPage`); `DEC-FREEMIUS-DOUBLE-OPTIN-GATES-ACCOUNT` (F022 — covers the `is_registered()` half of the `menu.account` gate).
+
+**Evidence**
+- `vendor/freemius/wordpress-sdk/includes/class-freemius.php:18964` — Add-ons render gate.
+- `vendor/freemius/wordpress-sdk/includes/class-freemius.php:18913` — Account render gate.
+- F022 branch commits `ba27058` (plugin-side fix — pass `fs_has_addons => true`) and `a6a35ff` (vendor-side fix — expose `fs_has_addons` override in main-menu 0.0.18) — both trace back to this failure mode.
+- Session log 2026-07-13 shows ~5 rounds of "why isn't Add-ons showing" diagnosis before the SDK gate was located.
+
+**Where to look next**
+
+When a new Freemius auto-submenu is proposed (e.g. Freemius adds a `menu.affiliation` or `menu.gdpr` in a future SDK release): grep the SDK immediately for the second-level flag before declaring the enable "done". If the second flag isn't yet exposed on `AddonsPage`, plan a `acrossai-co/main-menu` bump using the same override pattern as `fs_has_addons` (main-menu 0.0.18).

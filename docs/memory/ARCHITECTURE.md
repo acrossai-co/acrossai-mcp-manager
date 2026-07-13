@@ -433,3 +433,51 @@ Don't call `Query::add_item([...])` directly from a feature class for audit writ
 
 **Where to look next**
 `docs/memory/INDEX.md` A11 + A14 carve-out family; `specs/006-rest-cli-auth/spec.md` §Q1 Clarification for the boundary rationale.
+
+---
+
+### A16 — Every AcrossAI plugin consuming an `acrossai-co/*` vendor package MUST declare an explicit `repositories` VCS entry in `composer.json` [Feature-022, 2026-07-13]
+
+**Status**: Active (Feature 022)
+**Scope**: Every AcrossAI plugin whose `composer.json` requires ANY `acrossai-co/*` package (currently: mcp-manager, abilities-manager, model-manager, buddyboss-abilities, connectors, core-abilities, plus every future plugin in the ecosystem).
+**Tags**: `composer, vendor, vcs-repository, packagist-lag, acrossai-co, generalizable`
+
+**Constraint**
+
+For every `acrossai-co/<package>` line in `composer.json`'s `require`, `composer.json` MUST also declare a corresponding VCS entry in `repositories`:
+
+```json
+"repositories": [
+    { "type": "vcs", "url": "https://github.com/acrossai-co/main-menu" },
+    { "type": "vcs", "url": "https://github.com/acrossai-co/<other-package>" }
+]
+```
+
+The VCS entry tells composer to resolve the package directly from GitHub (using git tags as the version source) instead of from Packagist.
+
+**Why this is durable**
+
+Packagist syncs new tags from linked GitHub repos on a webhook, but the sync is not instantaneous — F022 hit two consecutive races where composer refused to resolve just-pushed tags immediately after `git push origin <tag>`:
+
+- 2026-07-12: `composer update acrossai-co/main-menu` failed with `"found ... 0.0.14"` immediately after tag `0.0.15` was pushed. Fixed by adding the VCS entry.
+- 2026-07-13: same race repeated on tag `0.0.18` (fresh product-side change), self-resolved because the VCS entry was already in place from the earlier fix.
+
+Without the VCS entry, every AcrossAI plugin bumping an `acrossai-co/*` dep has a non-deterministic window (seconds to minutes) where `composer update` returns stale results. The fix is one JSON line; the pain of forgetting it is real.
+
+**Tradeoffs**
+- Gained: deterministic resolution of `acrossai-co/*` versions immediately after tag push; no more "why is composer stuck on the old version" debugging.
+- Made harder: `composer.json` grows one line per owned-vendor dep. Trivial cost.
+- Reconsider: if AcrossAI publishes vendor packages through a private Packagist mirror with immediate-sync guarantees, this constraint becomes obsolete. Also skip for `acrossai-co/*` packages that are genuinely public on Packagist AND rarely tag (once/quarter or less).
+
+**Future mistake prevented**
+
+Don't just bump the `require` version and run `composer update` — check that a `repositories` VCS entry exists for that package first. If composer returns "not found" or "no matching version", the missing VCS entry is almost always the cause, not a broken tag.
+
+**Evidence**
+- F022 `composer.json` at `022-addons-page-registration` HEAD contains the entry `{ "type": "vcs", "url": "https://github.com/acrossai-co/main-menu" }` — added in commit `d8bb5d8` (T027).
+- Session logs 2026-07-12 (initial race with 0.0.15) and 2026-07-13 (0.0.18 bump proceeded instantly because VCS entry was pre-existing).
+- Pattern parallel: `wpboilerplate/wpb-access-control` uses the same VCS-entry approach in `composer.json` (that entry predates F022).
+
+**Where to look next**
+
+When onboarding a new AcrossAI plugin: audit its `composer.json` `repositories` array for a VCS entry per `acrossai-co/*` require. When adding a new `acrossai-co/*` dependency to an existing plugin: add BOTH the `require` line AND the `repositories` VCS entry in the same commit — never split them across two PRs.
