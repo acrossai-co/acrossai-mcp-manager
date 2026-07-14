@@ -554,6 +554,22 @@ final class Main {
 		$this->loader->add_filter( 'mcp_adapter_pre_tool_call', $tool_exposure_gate, 'gate_tool_call_by_curation', 30, 4 );
 
 		/**
+		 * Vendor override for the three mcp-adapter default abilities — per-server
+		 * visibility. TEMPORARY module, sunset by upstream
+		 * https://github.com/WordPress/mcp-adapter/issues/243.
+		 *
+		 * Priority 40 — after F015 access control (10), F017 ability exposure (20),
+		 * F020 tool curation (30). Deny-precedence honored per
+		 * DEC-F020-TOOL-ENFORCEMENT-PRIORITY.
+		 *
+		 * Grep: ACROSSAI_MCP_MANAGER_VENDOR_OVERRIDE_243
+		 * See VendorAbilityInterceptor::ACROSSAI_MCP_MANAGER_VENDOR_OVERRIDE_243.
+		 */
+		$vendor_ability_interceptor = \AcrossAI_MCP_Manager\Includes\VendorOverrides\VendorAbilityInterceptor::instance();
+		$this->loader->add_filter( 'mcp_adapter_pre_tool_call', $vendor_ability_interceptor, 'maybe_block_execute', 40, 4 );
+		$this->loader->add_filter( 'mcp_adapter_tool_call_result', $vendor_ability_interceptor, 'filter_result_by_server', 40, 5 );
+
+		/**
 		 * Feature 021 — Admin OAuth credential generator REST route.
 		 *
 		 * `/wp-json/acrossai-mcp-manager/v1/oauth/generate-client` — POST from
