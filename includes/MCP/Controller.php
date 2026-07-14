@@ -149,21 +149,26 @@ final class Controller {
 			 *
 			 * Fired inside Controller::register_database_servers() per server,
 			 * immediately before $adapter->create_server(). The initial list is
-			 * the union of THREE sources:
-			 *   1. The row's enabled tool_* columns (F025 — protocol slugs).
-			 *   2. Ability slugs saved in wp_acrossai_mcp_server_tools (F020 — curated).
-			 *   3. F017-effective, tool-typed abilities (F026) — every ability where
-			 *      ExposureResolver::resolve( $server_id, $slug, $meta ) === true AND
-			 *      mcp.type is 'tool' (or unspecified). Row-in-wp_acrossai_mcp_server_abilities
-			 *      beats meta.mcp.public per DEC-ABILITY-OVERRIDE-RESOLUTION.
+			 * the union of TWO sources:
+			 *   1. The row's enabled tool_* columns (F025 — three vendor built-in slugs).
+			 *   2. Ability slugs saved in wp_acrossai_mcp_server_tools (F020 — operator's
+			 *      explicit picks from the Tools tab).
 			 * Callbacks may add or remove any slug freely.
+			 *
+			 * NOT included in the pre-filter list: abilities where
+			 * `meta.mcp.public = true` (or `is_exposed = 1` per-server override)
+			 * are NOT advertised as tools directly. AI clients access them
+			 * through the three built-in meta tools whose callbacks were swapped
+			 * to plugin-owned versions (commit 070ffe2) that honor per-server
+			 * visibility. Only the Tools tab (F020) controls tool advertisement;
+			 * the Abilities tab (F017) controls ability visibility inside the
+			 * three meta tools.
 			 *
 			 * NOT fired for the default server (server_slug =
 			 * 'mcp-adapter-default-server'). Hook `mcp_adapter_default_server_config`
 			 * for that path.
 			 *
 			 * @since 0.1.0 (Feature 025)
-			 * @since 0.1.0 (Feature 026 — widened composed set + type filter)
 			 *
 			 * @param string[] $tools  Ability slugs to register as MCP tools.
 			 * @param \AcrossAI_MCP_Manager\Includes\Database\MCPServer\Row $server The server row being registered.

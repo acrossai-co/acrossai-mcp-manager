@@ -180,10 +180,19 @@ class ToolPolicyTest extends WP_UnitTestCase {
 	}
 
 	// -----------------------------------------------------------------------
-	// F026 cases — ToolPolicy::compose_effective_tools_for_row()
+	// F026 cases (post-2026-07-15 revert) — ToolPolicy::compose_effective_tools_for_row()
+	//
+	// F026 v1 shipped with abilities being auto-widened into tools/list at
+	// server-registration time when mcp.public = true (or is_exposed = 1).
+	// That widening was reverted on 2026-07-15: abilities are no longer
+	// advertised directly as tools. AI clients reach them through the three
+	// built-in meta tools (whose callbacks respect Abilities-tab visibility
+	// via commit 070ffe2). The pre-2026-07-15 "*_includes_*_ability_*" tests
+	// were inverted to pin the new behavior; the "*_excludes_*" tests still
+	// hold as-is.
 	// -----------------------------------------------------------------------
 
-	public function test_compose_effective_includes_public_ability_with_no_override(): void {
+	public function test_compose_effective_excludes_public_ability_with_no_override_post_revert(): void {
 		if ( ! function_exists( 'wp_register_ability' ) ) {
 			$this->markTestSkipped( 'Abilities API not bootstrapped in this test harness.' );
 		}
@@ -196,7 +205,11 @@ class ToolPolicyTest extends WP_UnitTestCase {
 
 		$composed = ToolPolicy::compose_effective_tools_for_row( $row );
 
-		$this->assertContains( 'f026-test/public-a', $composed );
+		$this->assertNotContains(
+			'f026-test/public-a',
+			$composed,
+			'Post-2026-07-15 revert: mcp.public = true abilities are NOT widened into tools/list at registration.'
+		);
 	}
 
 	public function test_compose_effective_excludes_public_ability_with_disabled_override(): void {
@@ -213,7 +226,7 @@ class ToolPolicyTest extends WP_UnitTestCase {
 		$this->assertNotContains( 'f026-test/public-b', $composed );
 	}
 
-	public function test_compose_effective_includes_non_public_ability_with_enabled_override(): void {
+	public function test_compose_effective_excludes_non_public_ability_with_enabled_override_post_revert(): void {
 		if ( ! function_exists( 'wp_register_ability' ) ) {
 			$this->markTestSkipped( 'Abilities API not bootstrapped in this test harness.' );
 		}
@@ -224,7 +237,11 @@ class ToolPolicyTest extends WP_UnitTestCase {
 
 		$composed = ToolPolicy::compose_effective_tools_for_row( $row );
 
-		$this->assertContains( 'f026-test/private-c', $composed );
+		$this->assertNotContains(
+			'f026-test/private-c',
+			$composed,
+			'Post-2026-07-15 revert: is_exposed = 1 per-server override does NOT widen tools/list either — abilities are reached through the meta tools.'
+		);
 	}
 
 	public function test_compose_effective_excludes_non_public_ability_with_no_override(): void {

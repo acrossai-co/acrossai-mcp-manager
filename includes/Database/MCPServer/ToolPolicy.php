@@ -135,38 +135,33 @@ final class ToolPolicy {
 	}
 
 	/**
-	 * Compose the effective tool list for a server row, INCLUDING F017
-	 * per-server ability exposure state (Feature 026).
+	 * Compose the effective tool list for a server row at MCP server-registration
+	 * time.
 	 *
-	 * Union of THREE sources:
+	 * Returns:
 	 *   1. Enabled protocol columns (F025) — three tool_* boolean columns.
 	 *   2. Curated ability slugs (F020) — presence rows in wp_acrossai_mcp_server_tools.
-	 *   3. F017-effective, type-filtered abilities (F026) — every ability where
-	 *      ExposureResolver::resolve( $server_id, $slug, $meta ) === true AND
-	 *      mcp.type is 'tool' (or unspecified — the vendor's default). The type
-	 *      filter mirrors vendor DefaultServerFactory::discover_abilities_by_type()
-	 *      so resource/prompt-typed abilities are NOT advertised as tools.
 	 *
-	 * Fail-open: `AbilityDiscovery::for_server()` returns [] when
-	 * wp_get_abilities() is unavailable, degrading source #3 to empty.
+	 * **NOT included** (F026 scope revert, 2026-07-15): abilities where
+	 * `meta.mcp.public = true` (or `is_exposed = 1` per-server override) are
+	 * NO LONGER advertised directly in `tools/list`. AI clients access them
+	 * through the three built-in meta tools (`mcp-adapter/discover-abilities`,
+	 * `.../get-ability-info`, `.../execute-ability`) whose callbacks now honor
+	 * per-server visibility via commit 070ffe2's `wp_register_ability_args`
+	 * swap. This keeps `tools/list` scoped to the operator's Tools-tab picks
+	 * and prevents ability slugs from leaking into the tool advertisement
+	 * surface.
 	 *
-	 * Used by Controller::register_database_servers() and
-	 * Controller::filter_default_server_config() — the two server-registration
-	 * paths. NOT used by ToolsController::get_tools() (the REST GET stays on
-	 * compose_for_row() so the Tools tab UI reflects operator picks only).
+	 * Currently a straight passthrough to `compose_for_row()`; kept as a
+	 * sibling method so both server-registration call sites in Controller
+	 * can be re-routed in one place if the widening semantic ever comes back.
 	 *
 	 * @since 0.1.0 (Feature 026)
 	 * @param Row $row The server row.
-	 * @return string[] The composed tool list including F017-effective tool-typed abilities.
+	 * @return string[] Protocol columns + F020 curated slugs, deduped.
 	 */
 	public static function compose_effective_tools_for_row( Row $row ): array {
-		$tools = self::compose_for_row( $row );
-		$tools = array_merge(
-			$tools,
-			AbilityDiscovery::for_server( (int) $row->id, AbilityDiscovery::TYPE_TOOL )
-		);
-
-		return array_values( array_unique( array_map( 'strval', $tools ) ) );
+		return self::compose_for_row( $row );
 	}
 
 	/**

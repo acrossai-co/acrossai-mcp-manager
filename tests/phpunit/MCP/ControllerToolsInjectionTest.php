@@ -219,30 +219,34 @@ class ControllerToolsInjectionTest extends WP_UnitTestCase {
 		$this->assertSame( array(), $observed, 'Filter-side changes must NOT fire acrossai_mcp_tools_changed — only POST-side flips emit the event.' );
 	}
 
-	// F026 case — register_database_servers produces F017-widened composed set ---
+	// F026 v1 revert (2026-07-15) — register_database_servers must NOT widen ---
+	// The tools composer no longer includes mcp.public = true abilities. AI
+	// clients reach them through the three built-in meta tools whose callbacks
+	// respect Abilities-tab visibility (commit 070ffe2's callback swap).
 
-	public function test_register_database_servers_produces_f017_widened_composed_set(): void {
+	public function test_register_database_servers_does_not_widen_tools_with_f017_effective_abilities(): void {
 		if ( ! function_exists( 'wp_register_ability' ) ) {
 			$this->markTestSkipped( 'Abilities API not bootstrapped in this test harness.' );
 		}
 
 		$server_id = (int) MCPServerQuery::instance()->add_item( array(
-			'server_name'            => 'F026 widened composer test',
-			'server_slug'            => 'f026-widened-test',
+			'server_name'            => 'F026 revert composer test',
+			'server_slug'            => 'f026-revert-test',
 			'description'            => '',
 			'is_enabled'             => 1,
 			'registered_from'        => 'database',
 			'server_route_namespace' => 'mcp',
-			'server_route'           => 'f026-widened-test',
+			'server_route'           => 'f026-revert-test',
 			'server_version'         => 'v1.0.0',
 		) );
 
-		// Seed a public tool-typed ability — should appear in the F026 composed set.
+		// Seed a public tool-typed ability — must NOT appear in the composed set
+		// post-2026-07-15 revert.
 		\wp_register_ability(
-			'f026-widened/public-tool',
+			'f026-revert/public-tool',
 			array(
 				'label'       => 'F026 Public Tool',
-				'description' => 'F026 test — public ability should widen composed set',
+				'description' => 'F026 test — public ability MUST NOT widen tools/list post-revert',
 				'category'    => 'test',
 				'meta'        => array( 'mcp' => array( 'public' => true, 'type' => 'tool' ) ),
 				'input_schema' => array( 'type' => 'object', 'properties' => new \stdClass() ),
@@ -255,7 +259,11 @@ class ControllerToolsInjectionTest extends WP_UnitTestCase {
 		$row        = $rows[0];
 		$pre_filter = ToolPolicy::compose_effective_tools_for_row( $row );
 
-		$this->assertContains( 'f026-widened/public-tool', $pre_filter, 'F026 composer must include public abilities (mcp.public = true) with no override.' );
+		$this->assertNotContains(
+			'f026-revert/public-tool',
+			$pre_filter,
+			'Post-2026-07-15 revert: mcp.public = true abilities MUST NOT appear in tools/list. They are reached through the three built-in meta tools.'
+		);
 	}
 
 	// F026 resources/prompts filter emission -------------------------------

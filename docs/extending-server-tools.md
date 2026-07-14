@@ -12,9 +12,11 @@ Each MCP server exposes two orthogonal tool storage layers on the plugin side:
 - **Protocol tools** — the three MCP-adapter default tools (`mcp-adapter/discover-abilities`, `mcp-adapter/get-ability-info`, `mcp-adapter/execute-ability`) are enabled per-server via three `tinyint(1) NOT NULL DEFAULT 1` columns on `wp_acrossai_mcp_servers`: `tool_discover_abilities`, `tool_get_ability_info`, `tool_execute_ability`. `1` = enabled, `0` = the operator explicitly removed it via the Tools tab.
 - **Curated abilities** — any additional WordPress ability the operator picked in the Tools tab lives as a presence row in `wp_acrossai_mcp_server_tools` (Feature 020 storage).
 
-At MCP-adapter server-registration time (`mcp_adapter_init` action), `ToolPolicy::compose_effective_tools_for_row( $row )` unions the two layers PLUS the F017-effective ability set (Feature 026) into a single deduped array of ability slugs. That array is what the filter sees. The three sources are an internal implementation detail — filter callbacks receive one uniform tool list without any distinction.
+At MCP-adapter server-registration time (`mcp_adapter_init` action), `ToolPolicy::compose_effective_tools_for_row( $row )` returns the two layers deduped and array_values-normalized. That array is what the tool filter sees.
 
-The REST GET `/tools` endpoint continues to call the F025 `ToolPolicy::compose_for_row()` — it deliberately reflects the operator's Tools-tab picks only (protocol + curated), never the F017 Abilities-tab overrides.
+**Scope note (2026-07-15 revert)**: F026 v1's tools-widening (which added `meta.mcp.public = true` abilities to this list at registration time) was reverted. `tools/list` now reflects only the operator's Tools-tab picks. Abilities with `mcp.public = true` (or `is_exposed = 1` per-server override) are accessible to AI clients through the three built-in meta tools — `mcp-adapter/discover-abilities`, `mcp-adapter/get-ability-info`, `mcp-adapter/execute-ability` — whose callbacks were swapped to plugin-owned versions (commit `070ffe2`) that honor the Abilities-tab per-server visibility. Resources and prompts still widen — see the `..._server_resources` and `..._server_prompts` filter sections below.
+
+The REST GET `/tools` endpoint continues to call `ToolPolicy::compose_for_row()` — it and `compose_effective_tools_for_row()` are now functionally identical.
 
 ## 2. Filter contract
 
@@ -37,10 +39,10 @@ apply_filters(
 
 **Arguments**:
 
-- `$tools`: the composed union of THREE sources (Feature 026), deduped and `array_values()`-normalized:
-  1. Enabled protocol columns (in `ToolPolicy::COLUMN_MAP` key order).
-  2. Curated slugs (`MCPServerToolQuery::get_added_slugs()` insertion order).
-  3. F017-effective, **tool-typed** abilities — every WordPress ability where `ExposureResolver::resolve( $server_id, $slug, $meta ) === true` AND `mcp.type === 'tool'` (or unset — defaults to 'tool' per vendor semantic). Row-in-`wp_acrossai_mcp_server_abilities` beats `meta.mcp.public` per `DEC-ABILITY-OVERRIDE-RESOLUTION`.
+- `$tools`: the composed union of TWO sources, deduped and `array_values()`-normalized:
+  1. Enabled protocol columns (in `ToolPolicy::COLUMN_MAP` key order) — the three vendor built-in slugs.
+  2. Curated slugs (`MCPServerToolQuery::get_added_slugs()` insertion order) — operator's Tools-tab picks.
+  Abilities with `mcp.public = true` are NOT in this list — they're accessible via the three built-in meta tools whose callbacks respect per-server Abilities-tab visibility (see the scope note in §1).
 - `$server`: the BerlinDB `Row` object for the server being registered. Callbacks may gate on `$server->id`, `$server->server_slug`, `$server->server_name`, or read the enablement columns directly.
 
 ### `acrossai_mcp_manager_server_resources` and `acrossai_mcp_manager_server_prompts` (plugin filters — database servers only) — Feature 026
@@ -71,7 +73,7 @@ The pre-filter list for each is exclusively the F017-effective, type-filtered sl
 
 ### `mcp_adapter_default_server_config` (vendor filter — default server only)
 
-Consumed by the plugin's `Controller::filter_default_server_config()` at default priority 10. Hook this filter at priority > 10 to run AFTER the plugin's callback, or < 10 to run before (in which case the plugin's REPLACE step will overwrite the `tools` / `resources` / `prompts` keys). Since Feature 026, the plugin REPLACES all three keys (tools, resources, prompts) with F017-effective, type-filtered composed sets when the default server row exists in `wp_acrossai_mcp_servers`.
+Consumed by the plugin's `Controller::filter_default_server_config()` at default priority 10. Hook this filter at priority > 10 to run AFTER the plugin's callback, or < 10 to run before (in which case the plugin's REPLACE step will overwrite the `tools` / `resources` / `prompts` keys). The plugin REPLACES `$config['tools']` with the protocol columns + F020 curated slugs, and `$config['resources']` / `$config['prompts']` with F017-effective sets, when the default server row exists in `wp_acrossai_mcp_servers`.
 
 Signature (vendor-owned): `apply_filters( 'mcp_adapter_default_server_config', array $config ): array`. See `vendor/wordpress/mcp-adapter/includes/Servers/DefaultServerFactory.php:89` for the source.
 
@@ -137,22 +139,24 @@ add_filter(
 );
 ```
 
-## 7. Interaction with the Abilities tab (Feature 026)
+## 7. Interaction with the Abilities tab
 
-Since Feature 026, the pre-filter composed set includes every WordPress ability where `ExposureResolver::resolve( $server_id, $ability_slug, $meta ) === true`. The precedence is:
+The Abilities tab (`?tab=abilities`) controls per-server ability visibility via `wp_acrossai_mcp_server_abilities`. The precedence resolved by `ExposureResolver::resolve()` is:
 
 1. Row in `wp_acrossai_mcp_server_abilities` for this `(server_id, ability_slug)` → its `is_exposed` value wins.
 2. Else fall back to the ability's `meta.mcp.public` — `true` includes, missing / `false` excludes.
 
-Practical consequences:
+**Where this decision applies now:**
 
-- Toggling an ability OFF in the Abilities tab (persists an `is_exposed = 0` row) removes it from the pre-filter composed set on the NEXT server-registration cycle — even if the ability has `meta.mcp.public = true`. Companion filter callbacks see the already-narrowed set.
-- Toggling an ability ON in the Abilities tab (persists an `is_exposed = 1` row) includes it in the pre-filter composed set — even if `meta.mcp.public` is missing / `false`. This is by design (per-server override wins). See `SEC-026-INFO-3` in `docs/security-reviews/2026-07-14-026-abilities-into-tool-registration-plan.md` for the trust-model rationale.
-- The vendor mcp-adapter typically registers three protocol abilities (`mcp-adapter/discover-abilities`, `mcp-adapter/get-ability-info`, `mcp-adapter/execute-ability`) via `wp_register_ability()`. Whether these show up in the F017-effective source depends on the ability's `meta.mcp.public`. On this codebase they surface through the Feature 025 `tool_*` columns (protocol source #1), so the final composed set is the same either way — `array_unique` handles the overlap.
-- **Timing note (SEC-026-INFO-1 / SEC-026-v2-2)**: `wp_get_abilities()` returns only abilities registered by the time `mcp_adapter_init` fires. Third-party abilities registered during `wp_abilities_api_init` (on `init`) are present; abilities registered later (e.g. inside a `wp_loaded` callback or a REST route handler) will NOT appear on that request. There is no re-composition after registration — the composed set is a snapshot at registration time.
-- **Fail-open (SEC-026-v2-1)**: if `wp_get_abilities()` is unavailable (the Abilities API is not bootstrapped), `compose_effective_tools_for_row()` returns exactly what `compose_for_row()` would (protocol + curated). Server registration never blocks on F017.
+- **The three built-in meta tools** (`mcp-adapter/discover-abilities`, `.../get-ability-info`, `.../execute-ability`) — plugin-owned callbacks (commit `070ffe2`) call `ExposureResolver::resolve()` inside their `check_permission()` / `execute()`. Toggling an ability OFF on the Abilities tab hides it from `discover-abilities`' output and blocks `execute-ability` from running it. See `includes/Abilities/*.php`.
+- **`resources/list` and `prompts/list`** — the resources/prompts filters below still widen with F017-effective abilities of the matching type.
+- **F017's `AbilityExposureGate`** at `mcp_adapter_pre_tool_call` priority 20 — direct calls to `tools/call` on an ability's own slug are still gated per-server.
 
-The Tools tab UI is deliberately unchanged. It continues to reflect the operator's Tools-tab picks (protocol + curated) only. The Abilities tab is the sole surface for F017 override management.
+**Where this decision does NOT apply (as of 2026-07-15 revert):**
+
+- **The `tools/list` advertisement** — abilities are no longer widened into `tools/list` at registration time. Only the F025 protocol columns + F020 curated slugs appear. Rationale: abilities are accessible through the three meta tools whose plugin-owned callbacks already respect Abilities-tab visibility; advertising them again as direct tools would duplicate the surface and confuse the "what's a tool vs. what's an ability" mental model.
+
+The Tools tab UI is deliberately unchanged. It reflects the operator's Tools-tab picks (protocol + curated) only. The Abilities tab is the sole surface for F017 override management.
 
 ## 8. Throw safety note
 
