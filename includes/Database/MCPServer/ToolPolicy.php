@@ -135,6 +135,41 @@ final class ToolPolicy {
 	}
 
 	/**
+	 * Compose the effective tool list for a server row, INCLUDING F017
+	 * per-server ability exposure state (Feature 026).
+	 *
+	 * Union of THREE sources:
+	 *   1. Enabled protocol columns (F025) — three tool_* boolean columns.
+	 *   2. Curated ability slugs (F020) — presence rows in wp_acrossai_mcp_server_tools.
+	 *   3. F017-effective, type-filtered abilities (F026) — every ability where
+	 *      ExposureResolver::resolve( $server_id, $slug, $meta ) === true AND
+	 *      mcp.type is 'tool' (or unspecified — the vendor's default). The type
+	 *      filter mirrors vendor DefaultServerFactory::discover_abilities_by_type()
+	 *      so resource/prompt-typed abilities are NOT advertised as tools.
+	 *
+	 * Fail-open: `AbilityDiscovery::for_server()` returns [] when
+	 * wp_get_abilities() is unavailable, degrading source #3 to empty.
+	 *
+	 * Used by Controller::register_database_servers() and
+	 * Controller::filter_default_server_config() — the two server-registration
+	 * paths. NOT used by ToolsController::get_tools() (the REST GET stays on
+	 * compose_for_row() so the Tools tab UI reflects operator picks only).
+	 *
+	 * @since 0.1.0 (Feature 026)
+	 * @param Row $row The server row.
+	 * @return string[] The composed tool list including F017-effective tool-typed abilities.
+	 */
+	public static function compose_effective_tools_for_row( Row $row ): array {
+		$tools = self::compose_for_row( $row );
+		$tools = array_merge(
+			$tools,
+			AbilityDiscovery::for_server( (int) $row->id, AbilityDiscovery::TYPE_TOOL )
+		);
+
+		return array_values( array_unique( array_map( 'strval', $tools ) ) );
+	}
+
+	/**
 	 * Split a REST POST body's `tools` array into the two storage layers.
 	 *
 	 * Returns:

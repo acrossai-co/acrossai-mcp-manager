@@ -16,9 +16,11 @@
 
 namespace AcrossAI_MCP_Manager\Tests\MCP;
 
+use AcrossAI_MCP_Manager\Includes\Database\MCPServer\AbilityDiscovery;
 use AcrossAI_MCP_Manager\Includes\Database\MCPServer\DefaultServerSeeder;
 use AcrossAI_MCP_Manager\Includes\Database\MCPServer\Query as MCPServerQuery;
 use AcrossAI_MCP_Manager\Includes\Database\MCPServer\ToolPolicy;
+use AcrossAI_MCP_Manager\Includes\Database\MCPServerAbility\ExposureResolver;
 use AcrossAI_MCP_Manager\Includes\MCP\Controller;
 use WP_UnitTestCase;
 
@@ -29,6 +31,7 @@ class ControllerToolsInjectionTest extends WP_UnitTestCase {
 	public function setUp(): void {
 		parent::setUp();
 		$this->truncate_tables();
+		ExposureResolver::_reset_cache_for_tests();
 	}
 
 	public function tearDown(): void {
@@ -216,6 +219,184 @@ class ControllerToolsInjectionTest extends WP_UnitTestCase {
 		$this->assertSame( array(), $observed, 'Filter-side changes must NOT fire acrossai_mcp_tools_changed — only POST-side flips emit the event.' );
 	}
 
+	// F026 case — register_database_servers produces F017-widened composed set ---
+
+	public function test_register_database_servers_produces_f017_widened_composed_set(): void {
+		if ( ! function_exists( 'wp_register_ability' ) ) {
+			$this->markTestSkipped( 'Abilities API not bootstrapped in this test harness.' );
+		}
+
+		$server_id = (int) MCPServerQuery::instance()->add_item( array(
+			'server_name'            => 'F026 widened composer test',
+			'server_slug'            => 'f026-widened-test',
+			'description'            => '',
+			'is_enabled'             => 1,
+			'registered_from'        => 'database',
+			'server_route_namespace' => 'mcp',
+			'server_route'           => 'f026-widened-test',
+			'server_version'         => 'v1.0.0',
+		) );
+
+		// Seed a public tool-typed ability — should appear in the F026 composed set.
+		\wp_register_ability(
+			'f026-widened/public-tool',
+			array(
+				'label'       => 'F026 Public Tool',
+				'description' => 'F026 test — public ability should widen composed set',
+				'category'    => 'test',
+				'meta'        => array( 'mcp' => array( 'public' => true, 'type' => 'tool' ) ),
+				'input_schema' => array( 'type' => 'object', 'properties' => new \stdClass() ),
+				'output_schema' => array( 'type' => 'object', 'properties' => new \stdClass() ),
+				'execute_callback' => static fn () => array(),
+			)
+		);
+
+		$rows       = MCPServerQuery::instance()->query( array( 'id' => $server_id, 'number' => 1 ) );
+		$row        = $rows[0];
+		$pre_filter = ToolPolicy::compose_effective_tools_for_row( $row );
+
+		$this->assertContains( 'f026-widened/public-tool', $pre_filter, 'F026 composer must include public abilities (mcp.public = true) with no override.' );
+	}
+
+	// F026 resources/prompts filter emission -------------------------------
+
+	public function test_acrossai_mcp_manager_server_resources_filter_receives_f017_effective_resource_set(): void {
+		if ( ! function_exists( 'wp_register_ability' ) ) {
+			$this->markTestSkipped( 'Abilities API not bootstrapped in this test harness.' );
+		}
+
+		$server_id = (int) MCPServerQuery::instance()->add_item( array(
+			'server_name'            => 'F026 resources filter test',
+			'server_slug'            => 'f026-resources-test',
+			'description'            => '',
+			'is_enabled'             => 1,
+			'registered_from'        => 'database',
+			'server_route_namespace' => 'mcp',
+			'server_route'           => 'f026-resources-test',
+			'server_version'         => 'v1.0.0',
+		) );
+
+		\wp_register_ability(
+			'f026-widened/public-resource',
+			array(
+				'label'       => 'F026 Public Resource',
+				'description' => 'F026 test — public resource ability',
+				'category'    => 'test',
+				'meta'        => array( 'mcp' => array( 'public' => true, 'type' => 'resource' ) ),
+				'input_schema' => array( 'type' => 'object', 'properties' => new \stdClass() ),
+				'output_schema' => array( 'type' => 'object', 'properties' => new \stdClass() ),
+				'execute_callback' => static fn () => array(),
+			)
+		);
+
+		$capture  = new \stdClass();
+		$capture->calls = 0;
+		$capture->arg   = null;
+		$callback = function ( $resources, $server ) use ( $capture ) {
+			$capture->calls += 1;
+			$capture->arg    = $resources;
+			return $resources;
+		};
+		add_filter( 'acrossai_mcp_manager_server_resources', $callback, 10, 2 );
+
+		$pre_filter = AbilityDiscovery::for_server( $server_id, AbilityDiscovery::TYPE_RESOURCE );
+		apply_filters( 'acrossai_mcp_manager_server_resources', $pre_filter, (object) array( 'id' => $server_id ) );
+
+		remove_filter( 'acrossai_mcp_manager_server_resources', $callback, 10 );
+
+		$this->assertSame( 1, $capture->calls );
+		$this->assertContains( 'f026-widened/public-resource', $capture->arg );
+	}
+
+	public function test_acrossai_mcp_manager_server_prompts_filter_receives_f017_effective_prompt_set(): void {
+		if ( ! function_exists( 'wp_register_ability' ) ) {
+			$this->markTestSkipped( 'Abilities API not bootstrapped in this test harness.' );
+		}
+
+		$server_id = (int) MCPServerQuery::instance()->add_item( array(
+			'server_name'            => 'F026 prompts filter test',
+			'server_slug'            => 'f026-prompts-test',
+			'description'            => '',
+			'is_enabled'             => 1,
+			'registered_from'        => 'database',
+			'server_route_namespace' => 'mcp',
+			'server_route'           => 'f026-prompts-test',
+			'server_version'         => 'v1.0.0',
+		) );
+
+		\wp_register_ability(
+			'f026-widened/public-prompt',
+			array(
+				'label'       => 'F026 Public Prompt',
+				'description' => 'F026 test — public prompt ability',
+				'category'    => 'test',
+				'meta'        => array( 'mcp' => array( 'public' => true, 'type' => 'prompt' ) ),
+				'input_schema' => array( 'type' => 'object', 'properties' => new \stdClass() ),
+				'output_schema' => array( 'type' => 'object', 'properties' => new \stdClass() ),
+				'execute_callback' => static fn () => array(),
+			)
+		);
+
+		$capture  = new \stdClass();
+		$capture->arg = null;
+		$callback = function ( $prompts, $server ) use ( $capture ) {
+			$capture->arg = $prompts;
+			return $prompts;
+		};
+		add_filter( 'acrossai_mcp_manager_server_prompts', $callback, 10, 2 );
+
+		$pre_filter = AbilityDiscovery::for_server( $server_id, AbilityDiscovery::TYPE_PROMPT );
+		apply_filters( 'acrossai_mcp_manager_server_prompts', $pre_filter, (object) array( 'id' => $server_id ) );
+
+		remove_filter( 'acrossai_mcp_manager_server_prompts', $callback, 10 );
+
+		$this->assertContains( 'f026-widened/public-prompt', $capture->arg );
+	}
+
+	// F026 default-server config REPLACE for resources/prompts -------------
+
+	public function test_filter_default_server_config_replaces_resources_and_prompts_when_default_row_exists(): void {
+		if ( ! function_exists( 'wp_register_ability' ) ) {
+			$this->markTestSkipped( 'Abilities API not bootstrapped in this test harness.' );
+		}
+
+		$this->seed_default_server();
+
+		\wp_register_ability(
+			'f026-default/public-resource',
+			array(
+				'label' => 'r', 'description' => 'r', 'category' => 'test',
+				'meta' => array( 'mcp' => array( 'public' => true, 'type' => 'resource' ) ),
+				'input_schema' => array( 'type' => 'object', 'properties' => new \stdClass() ),
+				'output_schema' => array( 'type' => 'object', 'properties' => new \stdClass() ),
+				'execute_callback' => static fn () => array(),
+			)
+		);
+		\wp_register_ability(
+			'f026-default/public-prompt',
+			array(
+				'label' => 'p', 'description' => 'p', 'category' => 'test',
+				'meta' => array( 'mcp' => array( 'public' => true, 'type' => 'prompt' ) ),
+				'input_schema' => array( 'type' => 'object', 'properties' => new \stdClass() ),
+				'output_schema' => array( 'type' => 'object', 'properties' => new \stdClass() ),
+				'execute_callback' => static fn () => array(),
+			)
+		);
+
+		$config = array(
+			'server_id' => 'x',
+			'tools'     => array( 'mcp-adapter/discover-abilities' ),
+			'resources' => array( 'vendor-auto-discovered/resource' ),
+			'prompts'   => array( 'vendor-auto-discovered/prompt' ),
+		);
+		$result = Controller::instance()->filter_default_server_config( $config );
+
+		$this->assertContains( 'f026-default/public-resource', $result['resources'] );
+		$this->assertNotContains( 'vendor-auto-discovered/resource', $result['resources'], 'REPLACE semantic — vendor-auto-discovered items must be removed.' );
+		$this->assertContains( 'f026-default/public-prompt', $result['prompts'] );
+		$this->assertNotContains( 'vendor-auto-discovered/prompt', $result['prompts'] );
+	}
+
 	private function seed_default_server( array $overrides = array() ): int {
 		$data = array_merge(
 			array(
@@ -239,5 +420,8 @@ class ControllerToolsInjectionTest extends WP_UnitTestCase {
 		$wpdb->query( 'TRUNCATE TABLE `' . $wpdb->prefix . 'acrossai_mcp_servers`' );
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 		$wpdb->query( 'TRUNCATE TABLE `' . $wpdb->prefix . 'acrossai_mcp_server_tools`' );
+		// F026: also truncate F017 storage to prevent cross-test cache pollution.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$wpdb->query( 'TRUNCATE TABLE `' . $wpdb->prefix . 'acrossai_mcp_server_abilities`' );
 	}
 }

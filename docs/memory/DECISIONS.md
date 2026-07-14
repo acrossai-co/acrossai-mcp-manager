@@ -1484,3 +1484,80 @@ Task-review-time preservation checklists prevent "I thought I was just deleting 
 **Where to look next**
 - `specs/025-server-tools-registration-hooks/tasks.md` T012 (PRESERVATION invariant example)
 - `docs/security-reviews/2026-07-14-025-server-tools-registration-hooks-tasks.md` §"Coverage matrix"
+
+---
+
+### 2026-07-14 - DEC-F026-SIBLING-COMPOSER-EXTENSION-PATTERN
+
+**Status**
+Active — validated by F026 v1 (method-level) and F026 v2 (class-level).
+
+**Why this is durable**
+Extends a canonical composer while keeping consumers scoped to the semantic they
+want. Naïve alternatives (bool flag param, class rename, in-place widening) all
+create call-site ambiguity or force silent-behavior changes on unrelated consumers.
+
+**Decision**
+When extending a canonical composer, add a sibling — at the method level if the
+new semantic still lives in the same class; at the class level if the new scope
+outgrows the class's naming. Never overload with a flag argument. Never rename
+the original class to broaden its scope.
+
+Examples in this repo:
+1. **Method-level (F026 v1)**: `ToolPolicy::compose_effective_tools_for_row()`
+   added as a sibling to `compose_for_row()`. REST GET stays on the original;
+   server-registration paths switch to the widened form.
+   See `includes/Database/MCPServer/ToolPolicy.php:162`.
+2. **Class-level (F026 v2)**: `AbilityDiscovery` added as a sibling to `ToolPolicy`
+   when the composer needed to cover resources + prompts (types `ToolPolicy`'s
+   protocol-column layer doesn't apply to). Would have polluted `ToolPolicy`'s
+   naming and constants. See `includes/Database/MCPServer/AbilityDiscovery.php:37`.
+
+**Tradeoffs**
+- Gained: Zero behavior drift on consumers of the original composer. Call sites
+  self-document which semantic they want.
+- Made harder: Two names to learn per composer family.
+- Reconsider: If a repo has many parallel composers (5+), a naming convention
+  (e.g. `_effective_for_X`) plus a lint gate becomes more valuable than manual
+  sibling additions.
+
+**Where to look next**
+- `includes/Database/MCPServer/ToolPolicy.php` (sibling method)
+- `includes/Database/MCPServer/AbilityDiscovery.php` (sibling class)
+- `specs/026-abilities-into-tool-registration/spec.md` §"Scope expansion: F026 v2"
+
+---
+
+### 2026-07-14 - DEC-F026-ADVERTISEMENT-VS-CALL-TIME-DEFENSE-IN-DEPTH
+
+**Status**
+Active — foundational to the F017 + F025/F026 threat model.
+
+**Why this is durable**
+The advertisement-time composer (F025/F026) and the call-time gate
+(`AbilityExposureGate` at `mcp_adapter_pre_tool_call` priority 20) are
+INDEPENDENT enforcement layers. A companion filter can widen the advertisement
+(F025 confused-deputy caveat, SEC-025-INFO-1); the call-time gate still blocks
+execution. Operator's Abilities-tab decision remains authoritative at
+`tools/call` time regardless of filter mutation.
+
+**Decision**
+Never remove either layer on the assumption the other is sufficient. Concretely:
+- Never drop the F017 call-time gate at `mcp_adapter_pre_tool_call` priority 20.
+- Never drop the F026-time composer's use of `ExposureResolver::resolve()`.
+- Never route composition through a bypass path that skips `ExposureResolver`.
+
+**Tradeoffs**
+- Gained: Filter-side confused-deputy attacks cannot exfiltrate ability
+  execution — they can only add a misleading advertisement.
+- Made harder: Two enforcement layers to reason about; documentation must
+  explain both.
+- Reconsider: If the vendor mcp-adapter absorbs per-server exposure natively
+  (obviating F017), the composer-side pass could be re-derived from the vendor
+  state. Until then, both layers stay.
+
+**Where to look next**
+- `includes/Database/MCPServerAbility/AbilityExposureGate.php` (call-time layer)
+- `includes/Database/MCPServer/AbilityDiscovery.php` (advertisement-time layer)
+- `docs/extending-server-tools.md` §"Interaction with the Abilities tab"
+- `SEC-025-INFO-1` (the caveat this decision mitigates)

@@ -14,6 +14,8 @@ namespace AcrossAI_MCP_Manager\Tests\Database\MCPServer;
 use AcrossAI_MCP_Manager\Includes\Database\MCPServer\Query as MCPServerQuery;
 use AcrossAI_MCP_Manager\Includes\Database\MCPServer\Row;
 use AcrossAI_MCP_Manager\Includes\Database\MCPServer\ToolPolicy;
+use AcrossAI_MCP_Manager\Includes\Database\MCPServerAbility\ExposureResolver;
+use AcrossAI_MCP_Manager\Includes\Database\MCPServerAbility\Query as MCPServerAbilityQuery;
 use AcrossAI_MCP_Manager\Includes\Database\MCPServerTool\Query as MCPServerToolQuery;
 use WP_UnitTestCase;
 
@@ -26,6 +28,7 @@ class ToolPolicyTest extends WP_UnitTestCase {
 	public function setUp(): void {
 		parent::setUp();
 		$this->truncate_tables();
+		ExposureResolver::_reset_cache_for_tests();
 		$this->server_id = (int) MCPServerQuery::instance()->add_item(
 			array(
 				'server_name'            => 'ToolPolicyTest server',
@@ -170,5 +173,112 @@ class ToolPolicyTest extends WP_UnitTestCase {
 		$wpdb->query( 'TRUNCATE TABLE `' . $wpdb->prefix . 'acrossai_mcp_servers`' );
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 		$wpdb->query( 'TRUNCATE TABLE `' . $wpdb->prefix . 'acrossai_mcp_server_tools`' );
+		// F026: also truncate F017 storage so per-server override rows don't
+		// leak between tests. Complements ExposureResolver::_reset_cache_for_tests().
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$wpdb->query( 'TRUNCATE TABLE `' . $wpdb->prefix . 'acrossai_mcp_server_abilities`' );
+	}
+
+	// -----------------------------------------------------------------------
+	// F026 cases — ToolPolicy::compose_effective_tools_for_row()
+	// -----------------------------------------------------------------------
+
+	public function test_compose_effective_includes_public_ability_with_no_override(): void {
+		if ( ! function_exists( 'wp_register_ability' ) ) {
+			$this->markTestSkipped( 'Abilities API not bootstrapped in this test harness.' );
+		}
+		$this->register_scratch_ability( 'f026-test/public-a', true );
+		$row = $this->fetch_row( array(
+			'tool_discover_abilities' => 0,
+			'tool_get_ability_info'   => 0,
+			'tool_execute_ability'    => 0,
+		) );
+
+		$composed = ToolPolicy::compose_effective_tools_for_row( $row );
+
+		$this->assertContains( 'f026-test/public-a', $composed );
+	}
+
+	public function test_compose_effective_excludes_public_ability_with_disabled_override(): void {
+		if ( ! function_exists( 'wp_register_ability' ) ) {
+			$this->markTestSkipped( 'Abilities API not bootstrapped in this test harness.' );
+		}
+		$this->register_scratch_ability( 'f026-test/public-b', true );
+		MCPServerAbilityQuery::instance()->upsert( $this->server_id, 'f026-test/public-b', false );
+		ExposureResolver::_reset_cache_for_tests(); // Cache miss after upsert.
+		$row = $this->fetch_row();
+
+		$composed = ToolPolicy::compose_effective_tools_for_row( $row );
+
+		$this->assertNotContains( 'f026-test/public-b', $composed );
+	}
+
+	public function test_compose_effective_includes_non_public_ability_with_enabled_override(): void {
+		if ( ! function_exists( 'wp_register_ability' ) ) {
+			$this->markTestSkipped( 'Abilities API not bootstrapped in this test harness.' );
+		}
+		$this->register_scratch_ability( 'f026-test/private-c', false );
+		MCPServerAbilityQuery::instance()->upsert( $this->server_id, 'f026-test/private-c', true );
+		ExposureResolver::_reset_cache_for_tests();
+		$row = $this->fetch_row();
+
+		$composed = ToolPolicy::compose_effective_tools_for_row( $row );
+
+		$this->assertContains( 'f026-test/private-c', $composed );
+	}
+
+	public function test_compose_effective_excludes_non_public_ability_with_no_override(): void {
+		if ( ! function_exists( 'wp_register_ability' ) ) {
+			$this->markTestSkipped( 'Abilities API not bootstrapped in this test harness.' );
+		}
+		$this->register_scratch_ability( 'f026-test/private-d', false );
+		$row = $this->fetch_row( array(
+			'tool_discover_abilities' => 0,
+			'tool_get_ability_info'   => 0,
+			'tool_execute_ability'    => 0,
+		) );
+
+		$composed = ToolPolicy::compose_effective_tools_for_row( $row );
+
+		$this->assertNotContains( 'f026-test/private-d', $composed );
+	}
+
+	public function test_compose_effective_excludes_public_resource_typed_ability_from_tool_list(): void {
+		if ( ! function_exists( 'wp_register_ability' ) ) {
+			$this->markTestSkipped( 'Abilities API not bootstrapped in this test harness.' );
+		}
+		// A resource-typed public ability must NOT leak into the tools composed set.
+		// Guards the F026 type-filter bug fix — advertising a resource as a tool
+		// causes tools/call to 404 at invocation time.
+		$this->register_scratch_ability( 'f026-test/public-resource', true, 'resource' );
+		$row = $this->fetch_row( array(
+			'tool_discover_abilities' => 0,
+			'tool_get_ability_info'   => 0,
+			'tool_execute_ability'    => 0,
+		) );
+
+		$composed = ToolPolicy::compose_effective_tools_for_row( $row );
+
+		$this->assertNotContains( 'f026-test/public-resource', $composed );
+	}
+
+	private function register_scratch_ability( string $slug, bool $mcp_public, string $type = 'tool' ): void {
+		\wp_register_ability(
+			$slug,
+			array(
+				'label'       => ucfirst( basename( $slug ) ),
+				'description' => 'F026 scratch ability',
+				'category'    => 'test',
+				'meta'        => array(
+					'mcp' => array(
+						'public' => $mcp_public,
+						'type'   => $type,
+					),
+				),
+				'input_schema' => array( 'type' => 'object', 'properties' => new \stdClass() ),
+				'output_schema' => array( 'type' => 'object', 'properties' => new \stdClass() ),
+				'execute_callback' => static fn () => array(),
+			)
+		);
 	}
 }

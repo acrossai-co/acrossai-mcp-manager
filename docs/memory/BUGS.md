@@ -974,3 +974,48 @@ Symptom: `wp_get_abilities()` (or equivalent lookup) returns fewer entries than 
 - `vendor/wordpress/mcp-adapter/includes/Core/McpAdapter.php:120`
 - `includes/REST/ToolsController.php` FR-018 comments
 - `docs/security-reviews/2026-07-13-025-server-tools-registration-hooks-plan-v2.md` §SEC-025-v2-2
+
+---
+
+### 2026-07-14 - B30 — Plugin composer shadowing vendor discovery must mirror the vendor's type-filter semantic exactly
+
+**Status**
+Active — new bug pattern surfaced during F026 v1 → v2 fold-in.
+
+**Why this is durable**
+When plugin code composes a slug list that will be handed to a vendor API which
+INTERNALLY dispatches by ability type (tool vs resource vs prompt), the plugin
+composer MUST filter by the same `mcp.type` key the vendor's own discovery
+helper uses — including its `?? 'tool'` default when unset. Missing this
+filter causes cross-type advertisement: e.g. a `mcp.type === 'resource'`
+ability leaks into `tools/list`, then `tools/call` on it rejects at
+invocation time because the vendor's call-time dispatcher can't find it in
+the tool registry.
+
+**Symptom**
+- `tools/list` includes ability slugs that `tools/call` immediately rejects
+  with `_doing_it_wrong` or 404.
+- `resources/list` and `prompts/list` are empty despite public resource/prompt
+  abilities being registered.
+
+**Root cause**
+Vendor `DefaultServerFactory::discover_abilities_by_type( 'tool' )` filters by
+`$meta['mcp']['type'] ?? 'tool'`. F026 v1's `compose_effective_tools_for_row()`
+missed the filter — it included every ability where `ExposureResolver::resolve()`
+was true. Fixed in F026 v2 by adding `AbilityDiscovery::for_server( $id, $type )`
+which mirrors the vendor's `?? 'tool'` default.
+
+**Prevention**
+- When authoring a composer that shadows or supplements a vendor discovery
+  helper, first read the vendor helper's filter chain end-to-end. Mirror EVERY
+  filter step (including `?? 'default'` fallbacks) in the plugin composer.
+- Write at least one test case per vendor-recognized type that registers a
+  scratch ability with that type and asserts it appears in ONLY the matching
+  composer output — not the others. F026 v2 added
+  `test_for_server_tool_type_includes_only_tool_typed_public_abilities` etc.
+
+**Where to look next**
+- `vendor/wordpress/mcp-adapter/includes/Servers/DefaultServerFactory.php:141`
+  (canonical vendor semantic)
+- `includes/Database/MCPServer/AbilityDiscovery.php:59` (mirror)
+- `tests/phpunit/Database/MCPServer/AbilityDiscoveryTest.php` (per-type coverage cases)
