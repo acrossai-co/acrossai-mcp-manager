@@ -10,6 +10,8 @@ namespace AcrossAI_MCP_Manager\Tests\Abilities;
 use AcrossAI_MCP_Manager\Includes\Abilities\CurrentServerHolder;
 use AcrossAI_MCP_Manager\Includes\Abilities\Discover;
 use AcrossAI_MCP_Manager\Includes\Database\MCPServer\Query as MCPServerQuery;
+use AcrossAI_MCP_Manager\Includes\Database\MCPServerAbility\ExposureResolver;
+use AcrossAI_MCP_Manager\Includes\Database\MCPServerAbility\Query as MCPServerAbilityQuery;
 use WP\MCP\Core\McpServer;
 use WP_UnitTestCase;
 
@@ -21,6 +23,7 @@ class DiscoverTest extends WP_UnitTestCase {
 		parent::setUp();
 		$this->truncate_tables();
 		CurrentServerHolder::instance()->clear();
+		ExposureResolver::_reset_cache_for_tests();
 		remove_all_filters( 'acrossai_mcp_is_ability_exposed' );
 		remove_all_filters( 'mcp_adapter_discover_abilities_capability' );
 	}
@@ -197,8 +200,69 @@ class DiscoverTest extends WP_UnitTestCase {
 	}
 
 	// -----------------------------------------------------------------
+	// F017 per-server override integration (regression for the bug
+	// where apply_exposure_filter's default was only meta.mcp.public,
+	// ignoring is_exposed=1 rows).
+	// -----------------------------------------------------------------
+
+	public function test_execute_includes_non_public_ability_with_f017_override_when_holder_set(): void {
+		$this->maybe_skip_abilities_api();
+
+		$server_id = $this->seed_server( 'discover-f017-server-1' );
+		CurrentServerHolder::instance()->set( $this->fake_server( 'discover-f017-server-1' ) );
+
+		// Ability is NOT statically public — the plugin's Abilities-tab UX
+		// says it should still be exposed for this server via the F017 row.
+		$this->register_scratch_ability( 'discover-test/f017-widened', false, 'tool' );
+		MCPServerAbilityQuery::instance()->upsert( $server_id, 'discover-test/f017-widened', true );
+		ExposureResolver::_reset_cache_for_tests(); // Cache miss after upsert.
+
+		$names = array_column( Discover::execute()['abilities'], 'name' );
+		$this->assertContains(
+			'discover-test/f017-widened',
+			$names,
+			'apply_exposure_filter default must consult ExposureResolver::resolve, not just meta.mcp.public — is_exposed=1 override should include the ability.'
+		);
+	}
+
+	public function test_execute_excludes_public_ability_with_f017_override_disabled_when_holder_set(): void {
+		$this->maybe_skip_abilities_api();
+
+		$server_id = $this->seed_server( 'discover-f017-server-2' );
+		CurrentServerHolder::instance()->set( $this->fake_server( 'discover-f017-server-2' ) );
+
+		// Ability IS statically public — but the operator hid it for this
+		// server via the Abilities tab (is_exposed=0). Should be excluded.
+		$this->register_scratch_ability( 'discover-test/f017-narrowed', true, 'tool' );
+		MCPServerAbilityQuery::instance()->upsert( $server_id, 'discover-test/f017-narrowed', false );
+		ExposureResolver::_reset_cache_for_tests();
+
+		$names = array_column( Discover::execute()['abilities'], 'name' );
+		$this->assertNotContains(
+			'discover-test/f017-narrowed',
+			$names,
+			'is_exposed=0 override must hide even a normally-public ability.'
+		);
+	}
+
+	// -----------------------------------------------------------------
 	// Helpers
 	// -----------------------------------------------------------------
+
+	private function seed_server( string $slug ): int {
+		return (int) MCPServerQuery::instance()->add_item(
+			array(
+				'server_name'            => 'DiscoverTest F017',
+				'server_slug'            => $slug,
+				'description'            => '',
+				'is_enabled'             => 1,
+				'registered_from'        => 'database',
+				'server_route_namespace' => 'mcp',
+				'server_route'           => $slug,
+				'server_version'         => 'v1.0.0',
+			)
+		);
+	}
 
 	private function maybe_skip_abilities_api(): void {
 		if ( ! function_exists( 'wp_register_ability' ) ) {
@@ -236,5 +300,7 @@ class DiscoverTest extends WP_UnitTestCase {
 		global $wpdb;
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 		$wpdb->query( 'TRUNCATE TABLE `' . $wpdb->prefix . 'acrossai_mcp_servers`' );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$wpdb->query( 'TRUNCATE TABLE `' . $wpdb->prefix . 'acrossai_mcp_server_abilities`' );
 	}
 }
