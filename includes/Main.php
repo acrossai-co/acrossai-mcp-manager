@@ -554,20 +554,34 @@ final class Main {
 		$this->loader->add_filter( 'mcp_adapter_pre_tool_call', $tool_exposure_gate, 'gate_tool_call_by_curation', 30, 4 );
 
 		/**
-		 * Vendor override for the three mcp-adapter default abilities — per-server
-		 * visibility. TEMPORARY module, sunset by upstream
-		 * https://github.com/WordPress/mcp-adapter/issues/243.
+		 * Feature — plugin-owned replacements for the three vendor default MCP
+		 * abilities (`mcp-adapter/discover-abilities`, `.../get-ability-info`,
+		 * `.../execute-ability`).
 		 *
-		 * Priority 40 — after F015 access control (10), F017 ability exposure (20),
-		 * F020 tool curation (30). Deny-precedence honored per
-		 * DEC-F020-TOOL-ENFORCEMENT-PRIORITY.
+		 * Swaps their callbacks at registration time via `wp_register_ability_args`
+		 * (WP core hook) so the abilities keep vendor's schema/label/description
+		 * but run our code — which emits `acrossai_mcp_is_ability_exposed` with
+		 * the current server_id.
 		 *
-		 * Grep: ACROSSAI_MCP_MANAGER_VENDOR_OVERRIDE_243
-		 * See VendorAbilityInterceptor::ACROSSAI_MCP_MANAGER_VENDOR_OVERRIDE_243.
+		 * The `CurrentServerHolder` singleton is populated during
+		 * `rest_pre_dispatch` (priority 5) when the incoming REST route matches a
+		 * registered MCP server, and cleared during `rest_post_dispatch` /
+		 * `shutdown` (priority 999). Our replacement callbacks read from it via
+		 * `AbilityHelpers::apply_exposure_filter()`.
+		 *
+		 * Supersedes the previous vendor-abilities interceptor module (deleted
+		 * in the same change — see git history for the prior post-hoc approach).
 		 */
-		$vendor_ability_interceptor = \AcrossAI_MCP_Manager\Includes\VendorOverrides\VendorAbilityInterceptor::instance();
-		$this->loader->add_filter( 'mcp_adapter_pre_tool_call', $vendor_ability_interceptor, 'maybe_block_execute', 40, 4 );
-		$this->loader->add_filter( 'mcp_adapter_tool_call_result', $vendor_ability_interceptor, 'filter_result_by_server', 40, 5 );
+		$callback_replacer = \AcrossAI_MCP_Manager\Includes\Abilities\CallbackReplacer::instance();
+		$this->loader->add_filter( 'wp_register_ability_args', $callback_replacer, 'replace_callbacks', 10, 2 );
+
+		$current_server_holder = \AcrossAI_MCP_Manager\Includes\Abilities\CurrentServerHolder::instance();
+		// `rest_pre_dispatch` is a filter that returns $result; priority 5 to
+		// fire before any short-circuiting handlers at default 10.
+		$this->loader->add_filter( 'rest_pre_dispatch', $current_server_holder, 'capture_from_request', 5, 3 );
+		$this->loader->add_filter( 'rest_post_dispatch', $current_server_holder, 'clear', 999, 1 );
+		// Safety net for fatal-error / early-exit paths.
+		$this->loader->add_action( 'shutdown', $current_server_holder, 'clear', 999 );
 
 		/**
 		 * Feature 021 — Admin OAuth credential generator REST route.
