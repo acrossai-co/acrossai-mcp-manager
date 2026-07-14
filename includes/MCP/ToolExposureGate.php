@@ -37,6 +37,17 @@ final class ToolExposureGate {
 	 * Slugs that F020 never gates — the mcp-adapter protocol tools were, at
 	 * F020 shipping time, considered non-curatable and always callable.
 	 *
+	 * **Both forms are listed** because the string that arrives at the
+	 * `mcp_adapter_pre_tool_call` filter is the vendor-SANITIZED tool name
+	 * (`WP\MCP\Domain\Utils\McpNameSanitizer::sanitize_name` replaces `/`
+	 * with `-` at registration time — see
+	 * `vendor/wordpress/mcp-adapter/includes/Domain/Utils/McpNameSanitizer.php:73`).
+	 * The canonical PHP source for the three protocol slugs is
+	 * `ToolPolicy::PROTOCOL_TOOLS` which stores the raw ability form (with
+	 * slashes); the sanitized (hyphen) form is what AI clients see in
+	 * `tools/list` and what they send back on `tools/call`. Listing both
+	 * ensures the bypass matches regardless of which form flowed through.
+	 *
 	 * VESTIGIAL post-Feature 025 (2026-07-14) — SEC-025-INFO-3:
 	 * Under F025's DB-authoritative model, protocol slugs are excluded from
 	 * the `tools/list` response when the corresponding `tool_*` column on the
@@ -47,15 +58,19 @@ final class ToolExposureGate {
 	 * own lookup rejects the call.
 	 *
 	 * Do NOT cite this constant as precedent for new bypass rules in future
-	 * enforcement gates. The canonical PHP source for the three protocol
-	 * slugs is `AcrossAI_MCP_Manager\Includes\Database\MCPServer\ToolPolicy::PROTOCOL_TOOLS`.
+	 * enforcement gates.
 	 *
 	 * @var string[]
 	 */
 	public const EXCLUDED_SLUGS = array(
+		// Raw ability form (canonical, matches ToolPolicy::PROTOCOL_TOOLS).
 		'mcp-adapter/discover-abilities',
 		'mcp-adapter/get-ability-info',
 		'mcp-adapter/execute-ability',
+		// Vendor-sanitized form — what actually arrives at gate time.
+		'mcp-adapter-discover-abilities',
+		'mcp-adapter-get-ability-info',
+		'mcp-adapter-execute-ability',
 	);
 
 	/**
