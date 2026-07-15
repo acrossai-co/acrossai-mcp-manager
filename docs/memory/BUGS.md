@@ -974,3 +974,174 @@ Symptom: `wp_get_abilities()` (or equivalent lookup) returns fewer entries than 
 - `vendor/wordpress/mcp-adapter/includes/Core/McpAdapter.php:120`
 - `includes/REST/ToolsController.php` FR-018 comments
 - `docs/security-reviews/2026-07-13-025-server-tools-registration-hooks-plan-v2.md` §SEC-025-v2-2
+
+---
+
+### 2026-07-14 - B30 — Plugin composer shadowing vendor discovery must mirror the vendor's type-filter semantic exactly
+
+**Status**
+Active — new bug pattern surfaced during F026 v1 → v2 fold-in.
+
+**Why this is durable**
+When plugin code composes a slug list that will be handed to a vendor API which
+INTERNALLY dispatches by ability type (tool vs resource vs prompt), the plugin
+composer MUST filter by the same `mcp.type` key the vendor's own discovery
+helper uses — including its `?? 'tool'` default when unset. Missing this
+filter causes cross-type advertisement: e.g. a `mcp.type === 'resource'`
+ability leaks into `tools/list`, then `tools/call` on it rejects at
+invocation time because the vendor's call-time dispatcher can't find it in
+the tool registry.
+
+**Symptom**
+- `tools/list` includes ability slugs that `tools/call` immediately rejects
+  with `_doing_it_wrong` or 404.
+- `resources/list` and `prompts/list` are empty despite public resource/prompt
+  abilities being registered.
+
+**Root cause**
+Vendor `DefaultServerFactory::discover_abilities_by_type( 'tool' )` filters by
+`$meta['mcp']['type'] ?? 'tool'`. F026 v1's `compose_effective_tools_for_row()`
+missed the filter — it included every ability where `ExposureResolver::resolve()`
+was true. Fixed in F026 v2 by adding `AbilityDiscovery::for_server( $id, $type )`
+which mirrors the vendor's `?? 'tool'` default.
+
+**Prevention**
+- When authoring a composer that shadows or supplements a vendor discovery
+  helper, first read the vendor helper's filter chain end-to-end. Mirror EVERY
+  filter step (including `?? 'default'` fallbacks) in the plugin composer.
+- Write at least one test case per vendor-recognized type that registers a
+  scratch ability with that type and asserts it appears in ONLY the matching
+  composer output — not the others. F026 v2 added
+  `test_for_server_tool_type_includes_only_tool_typed_public_abilities` etc.
+
+**Where to look next**
+- `vendor/wordpress/mcp-adapter/includes/Servers/DefaultServerFactory.php:141`
+  (canonical vendor semantic)
+- `includes/Database/MCPServer/AbilityDiscovery.php:59` (mirror)
+- `tests/phpunit/Database/MCPServer/AbilityDiscoveryTest.php` (per-type coverage cases)
+
+---
+
+### 2026-07-15 - B31 — Vendor tool-name sanitization silently breaks slug-compare bypass constants
+
+**Status**
+Active — new bug pattern surfaced during F026 v3 refactor arc when the three built-in meta tools became first-class execution paths.
+
+**Why this is durable**
+When a plugin gate compares `$tool_name` (as passed to
+`mcp_adapter_pre_tool_call`) against a constant list of "always-bypass" slugs,
+it MUST account for vendor's `McpNameSanitizer::sanitize_name` which swaps `/`
+→ `-` in ability slugs at MCP tool registration time
+(`vendor/wordpress/mcp-adapter/includes/Domain/Utils/McpNameSanitizer.php:73`).
+The client-facing tool name — what appears in `tools/list` and what the AI
+client sends back on `tools/call` — is the HYPHEN form, while the raw ability
+slug (registered via `wp_register_ability()`) is the SLASH form. Bypass
+constants that list only the slash form never match.
+
+**Symptom**
+- Gate rejects a call with a `WP_Error` like `acrossai_mcp_tool_not_added`
+  ("This tool is not enabled on this MCP server.") on a slug that's explicitly
+  in the plugin's own "always-allowed" list.
+- Symptom only manifests when the plugin's own code actually invokes the
+  vendor-registered tool via `tools/call`. Pre-invocation, the tool exists in
+  the vendor registry (indexed by the sanitized name) but the gate rejects it
+  before dispatch.
+
+**Root cause**
+Vendor `RegisterAbilityAsMcpTool::build_tool_data()` (`vendor/.../Domain/Tools/
+RegisterAbilityAsMcpTool.php:211`) calls
+`McpNameSanitizer::sanitize_name($this->ability->get_name())` and stores the
+sanitized result as the tool DTO's `name`. Vendor's `McpComponentRegistry::
+add_mcp_tool()` keys `$mcp_tools[$sanitized_name] = $tool`. So the
+end-to-end tool name — client-facing AND filter-facing — is the sanitized
+form. F020 `ToolExposureGate::EXCLUDED_SLUGS` originally listed only the raw
+form; bypass never matched; F020 denied all three built-in meta tools.
+
+**Prevention**
+- When authoring a gate that compares `$tool_name` against a bypass constant
+  (or against a slug-set from the DB), list BOTH forms explicitly, or apply
+  `McpNameSanitizer::sanitize_name` to the constant at compare time. Prefer
+  the both-forms approach — it avoids vendor coupling at gate time and makes
+  the intent explicit in the source.
+- Write at least one test case per bypassed slug that calls the gate with
+  the SANITIZED form and asserts it passes through. F020's test class
+  (`tests/phpunit/MCP/ToolExposureGateTest.php`) does this per protocol slug.
+- General principle: whenever plugin code compares a slug-derived string
+  against a value that flows through a vendor-provided normalization
+  pipeline, read the vendor's pipeline end-to-end before writing the
+  compare. This gap survived undetected for months because pre-070ffe2
+  nobody actually invoked the affected tools via `tools/call`.
+
+**Where to look next**
+- `vendor/wordpress/mcp-adapter/includes/Domain/Utils/McpNameSanitizer.php:73`
+  (canonical sanitizer)
+- `vendor/wordpress/mcp-adapter/includes/Domain/Tools/RegisterAbilityAsMcpTool.php:211`
+  (where sanitization is applied)
+- `includes/MCP/ToolExposureGate.php:55` (fixed EXCLUDED_SLUGS constant)
+- `tests/phpunit/MCP/ToolExposureGateTest.php` (regression guard)
+- Commit `69e689c` (the fix)
+
+---
+
+### 2026-07-15 - B32 — Filter defaults MUST express the plugin's canonical semantic (never a partial derivation)
+
+**Status**
+Active — new bug pattern surfaced during F026 v3 fix arc (commit `e0189b0`).
+
+**Why this is durable**
+When plugin code fires `apply_filters()` with a default value, that default
+IS the authoritative expression of the plugin's semantic when no callback
+intervenes. If the default is a partial derivation (e.g., "check a static
+metadata flag" instead of "consult the canonical resolver"), consumers see
+the SHORTCUT behavior — the correct behavior only kicks in if they know to
+hook the filter and re-add the missing logic. This silently ignores any
+higher-precedence rules (per-server overrides, deprecation shims, feature
+flags) that the resolver would have honored.
+
+**Symptom**
+- Feature reads "correctly" when a canonical function is called directly
+  (e.g., `ExposureResolver::resolve()` returns the right answer), but
+  reads "incorrectly" through a filter-mediated path (e.g., a filter whose
+  default is `meta.mcp.public` only).
+- User-facing count / list is a strict subset of what the operator expects.
+  Operator-configured per-server overrides are silently ignored.
+- Distinguishing tell: adding a `var_dump` at the filter default computation
+  shows the wrong value; removing/replacing that computation with a call to
+  the canonical resolver fixes it.
+
+**Root cause**
+Filter author reasoned "the DEFAULT is the trivial static case; anyone who
+wants richer behavior can hook the filter to add it". This works for opt-in
+enhancements (color themes, formatting) but FAILS for enforcement semantics
+(authorization, per-tenant visibility, per-server overrides) — those must
+be baked into the default because the plugin owns the semantic, not the
+caller.
+
+**Prevention**
+- When designing a filter that gates security or per-context enforcement
+  decisions (visibility, exposure, ownership, capability), the DEFAULT MUST
+  be the canonical resolver's output.
+- If a canonical resolver exists in the plugin (e.g., `ExposureResolver::
+  resolve()` per `DEC-ABILITY-OVERRIDE-RESOLUTION`), the filter default
+  MUST call it — even if that seems redundant, because callers depending on
+  the filter's decision cannot know the resolver exists.
+- Write at least one test case that seeds the CANONICAL state (e.g., a
+  per-server override row) and asserts the filter's output honors it
+  WITHOUT any test-registered callback intervening. This is the exact case
+  that catches the bug.
+- **General principle**: filters exist to let callers ADD or MUTATE the
+  plugin's decision, not to let the plugin outsource its decision to
+  callers.
+
+**Where to look next**
+- `includes/Abilities/AbilityHelpers.php:61-108` (`apply_exposure_filter`
+  post-fix — default = `ExposureResolver::resolve()`)
+- `includes/Database/MCPServerAbility/ExposureResolver.php` (canonical
+  resolver)
+- Commit `e0189b0` (the fix)
+- `tests/phpunit/Abilities/DiscoverTest.php` — cases
+  `test_execute_includes_non_public_ability_with_f017_override_when_holder_set`
+  and `test_execute_excludes_public_ability_with_f017_override_disabled_when_holder_set`
+  (regression guards)
+- `DEC-ABILITY-OVERRIDE-RESOLUTION` (the canonical-resolver principle this
+  bug pattern violated)

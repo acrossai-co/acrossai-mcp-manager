@@ -135,6 +135,36 @@ final class ToolPolicy {
 	}
 
 	/**
+	 * Compose the effective tool list for a server row at MCP server-registration
+	 * time.
+	 *
+	 * Returns:
+	 *   1. Enabled protocol columns (F025) — three tool_* boolean columns.
+	 *   2. Curated ability slugs (F020) — presence rows in wp_acrossai_mcp_server_tools.
+	 *
+	 * **NOT included** (F026 scope revert, 2026-07-15): abilities where
+	 * `meta.mcp.public = true` (or `is_exposed = 1` per-server override) are
+	 * NO LONGER advertised directly in `tools/list`. AI clients access them
+	 * through the three built-in meta tools (`mcp-adapter/discover-abilities`,
+	 * `.../get-ability-info`, `.../execute-ability`) whose callbacks now honor
+	 * per-server visibility via commit 070ffe2's `wp_register_ability_args`
+	 * swap. This keeps `tools/list` scoped to the operator's Tools-tab picks
+	 * and prevents ability slugs from leaking into the tool advertisement
+	 * surface.
+	 *
+	 * Currently a straight passthrough to `compose_for_row()`; kept as a
+	 * sibling method so both server-registration call sites in Controller
+	 * can be re-routed in one place if the widening semantic ever comes back.
+	 *
+	 * @since 0.1.0 (Feature 026)
+	 * @param Row $row The server row.
+	 * @return string[] Protocol columns + F020 curated slugs, deduped.
+	 */
+	public static function compose_effective_tools_for_row( Row $row ): array {
+		return self::compose_for_row( $row );
+	}
+
+	/**
 	 * Split a REST POST body's `tools` array into the two storage layers.
 	 *
 	 * Returns:
