@@ -344,11 +344,26 @@ final class CliController {
 			}
 		}
 
+		/*
+		 * `id` field carries the SLUG string — matches the client-facing
+		 * identifier the CLI passes via `--server=<slug>` and displays back
+		 * to the user. The `@acrossai/mcp-manager` CLI matches with
+		 * `servers.find( s => s.id === serverId )` (see
+		 * `src/serverValidator.js:24`), so `id` MUST be the slug, not the
+		 * integer PK. The `slug` alias is preserved as a redundant / forward-
+		 * compat field: if any future consumer wants an explicit `slug` key,
+		 * it's already there.
+		 *
+		 * The integer PK is intentionally NOT exposed in the response — no
+		 * documented consumer needs it, and hiding it keeps the API's
+		 * identifier surface single-string (slug) instead of dual (int+slug).
+		 */
 		return new WP_REST_Response(
 			array(
 				'servers' => array(
 					array(
-						'id'          => (int) $row->id,
+						'id'          => (string) $row->server_slug,
+						'slug'        => (string) $row->server_slug,
 						'name'        => (string) $row->server_name,
 						'description' => (string) $row->description,
 						'enabled'     => (bool) $row->is_enabled,

@@ -388,3 +388,56 @@ Remaining residual findings deferred to follow-up: **SEC-003** (broadened authz 
 | Build pipeline | `@wordpress/scripts` emits `build/css/frontend.css` + `build/css/frontend.asset.php` from a `src/frontend.css` entry point | ⚠ Build entry MAY need to be added to webpack/wp-scripts config — confirm at plan phase |
 
 **Cross-phase note**: this Phase 7 module's `get_base_url()` static helper is the ONE shared call site with Phase 6. Phase 6's `CliController::auth_start()` consumes it to compose the `auth_url` returned to the CLI. If `get_base_url()` were ever changed to `admin_url(...)`, Phase 6's `auth_url` would point at `/wp-admin/`, where this page is not registered — the CLI flow breaks. The "never change to admin_url" constraint in FR-006 is load-bearing across two phases.
+
+---
+
+## F007 v2 amendments (2026-07-15)
+
+**Trigger**: operator feedback that (a) the four FrontendAuth screens rendered as bare `<h1>` + `<p>` with no branding, and (b) the R3 base-URL-only login-redirect UX ("return to terminal, copy auth URL again, re-open it") had unacceptable friction. Two behavior changes shipped without breaking existing FRs — all v1 FRs above remain accurate for their historical scope.
+
+### FR-020 (new) — Branded card layout for FrontendAuth screens
+
+All four FrontendAuth screens rendered by `render_page_shell()` — Authorize CLI Access, CLI Authorization Approved, Missing Authentication Parameters, CLI Login Not Enabled — MUST wrap the body content in a branded card via a new private helper `FrontendAuth::render_branded_card( string $variant, string $title, string $body_html, ?array $cta = null ): void`.
+
+Variants: `'consent'` (blue accent, Authorize screen), `'success'` (green, Approved), `'warning'` (amber, kill-switch), `'info'` (grey, Missing-params fallback). Unknown variant → `'info'`.
+
+The card structure MUST expose class-name contract for CSS: `.acrossai-mcp-frontend`, `.acrossai-mcp-frontend--<variant>`, `.acrossai-mcp-frontend__card`, `.acrossai-mcp-frontend__stripe`, `.acrossai-mcp-frontend__brand`, `.acrossai-mcp-frontend__title`, `.acrossai-mcp-frontend__body`, `.acrossai-mcp-frontend__cta`, `.acrossai-mcp-frontend__button`. Class-name namespace scoped under `acrossai-mcp-frontend__*` so admin AI Connectors CSS (F021) does not collide.
+
+Styling shipped in `src/scss/frontend.scss` (~250 lines): palette values duplicated from `ai-connectors.scss` (no shared partials — frontend is a standalone enqueue per FR-013). Responsive breakpoint at 480px. The FR-011 inline `<style>` safety-net is retained but reduced to a minimal reset (font, background, `margin: 0`, `padding: 0`, `min-height: 100vh`) — it MUST NOT set `max-width` / `margin: auto` on body because it prints AFTER `wp_print_styles()` and would win the cascade, causing vertical scrollbar overflow.
+
+### FR-021 (new) — R3 amendment: preserve `?action=cli_auth&code=X` through login redirect
+
+FR-007 step 3's original R3 rationale (base-URL-only redirect to sidestep URL-encoding round-trip + `//` scheme-relative injection concerns) is REVISED. Amended behavior:
+
+When `is_user_logged_in()` is `false` on an incoming FrontendAuth request:
+- Extract `$_GET['action']` and `$_GET['code']` (sanitize as before).
+- If `action === 'cli_auth'` AND `code` matches `/^[a-f0-9]{32}$/`, preserve those two params in the redirect target passed to `wp_login_url()`.
+- Otherwise, fall back to the base-URL-only redirect per original R3 conservatism.
+
+Mitigations for R3 v1's original concerns:
+1. **`_wpnonce` round-trip brittleness** — NOT APPLICABLE. `_wpnonce` was never in the initial `?action=cli_auth` URL from the CLI; the approve URL's `_wpnonce` is minted fresh server-side by `handle_cli_auth` on return.
+2. **`//` scheme-relative injection via `code`** — MITIGATED by the hex regex applied BEFORE `add_query_arg`. Hex chars cannot contain `/`. CLI codes are always 32-char hex per `CliController::handle_auth_start` (server-generated MD5-style hashes).
+3. **`server` param** — NOT preserved. Fetched from the transient by `peek_pending_server( $code )` per SEC-001. Keeping it out of the URL is strictly safer AND simpler.
+
+**INV-R3-HEX load-bearing invariant**: the `/^[a-f0-9]{32}$/` regex is the sole line of defence against R3 v1's original `//` injection concern. Any future refactor that loosens the pattern (e.g., accepts `-` for UUID-format codes) MUST be paired with a `security-constraints.md` addendum demonstrating equivalent injection-safety AND a review of `CliController::handle_auth_start` to confirm the generator still emits conforming values.
+
+Regression-guarded by three PHPUnit cases in `tests/phpunit/FrontendAuth/MaybeRenderPageTest.php`:
+- `test_login_redirect_preserves_action_and_code_when_code_is_valid_hex`
+- `test_login_redirect_falls_back_to_base_when_code_is_not_hex`
+- `test_login_redirect_falls_back_to_base_when_action_missing`
+
+### FR-022 (bug fix, `9356ee2`) — Inline safety-net MUST NOT constrain body
+
+The inline `<style>` safety-net in `render_page_shell` (FR-011 last bullet) MUST NOT set body-level layout properties (`max-width`, `margin: auto`, vertical padding). It prints AFTER the external CSS `<link>` in the HTML head, so equal-specificity `body` selectors WIN over the external design — which caused the vertical-scrollbar overflow bug (100vh + 10em > 100vh document height) that shipped with the initial v2 branded card.
+
+The safety-net's role is now strictly a legibility fallback (font, color, background, margin/padding reset) if `frontend.css` 404s. All layout ownership belongs to the external SCSS.
+
+### Cross-references
+
+- `public/Partials/FrontendAuth.php` — `maybe_render_page` (R3 amendment), `render_branded_card` (helper), `handle_cli_auth` / `handle_approved` / `render_disabled_notice` (refactored to use helper), `render_page_shell` (safety-net reduced).
+- `src/scss/frontend.scss` — new branded card design.
+- `build/css/frontend.css` + `-rtl.css` + `.asset.php` — rebuilt.
+- `research.md §"R3 amendment 2026-07-15"` — full rationale + rejected alternatives.
+- `security-constraints.md §"Post-2026-07-15 addendum"` — INV-R3-HEX invariant statement.
+- `tasks.md §"Phase 9"` — shipped-work log with commit refs.
+- Commits: `743b698` (feat: branded card + R3 amendment), `9356ee2` (fix: safety-net reset).

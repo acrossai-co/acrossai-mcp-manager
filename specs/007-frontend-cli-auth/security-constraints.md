@@ -105,3 +105,24 @@ The 2 clarifications (FR-016 text-domain mandate; FR-013 step 5 RTL `wp_style_ad
 ✅ **Plan PASSES security review.** All Constitution §III items are addressed; the one documented deviation (broadened `manage_options`) is justified at plan time and bounded by App-Password user-scoping. The kill-switch + nonce + sanitize/escape + nocache_headers chain forms a defense-in-depth posture appropriate for a single-user consent surface.
 
 No security-architecture conflicts surfaced. Proceed to architecture review.
+
+---
+
+## Post-2026-07-15 addendum — Hex-format load-bearing invariant (R3 amendment)
+
+Commit shipping the R3 amendment (`FrontendAuth::maybe_render_page` login-redirect preserves `?action=cli_auth&code=X`) introduces exactly one new security invariant:
+
+> **INV-R3-HEX**: The `code` value included in the redirect target passed to `wp_login_url()` MUST match `/^[a-f0-9]{32}$/`. Non-conforming values MUST fall back to the base-URL-only redirect.
+
+**Threat it mitigates**: `wp_safe_redirect()` validates that the target host is on WordPress's allow-list. If `code` contained a `//` sequence and were included unvalidated in `?redirect_to=...`, an attacker could construct a URL that, after WordPress's decoding, resembles a scheme-relative reference (`//attacker.example/…`). The hex regex makes this impossible — no hex char is `/`.
+
+**Why hex specifically**: CLI codes are generated server-side via `CliController::handle_auth_start` as 32-char MD5-style hashes. Any incoming `code` that doesn't match this format is either tampered or from a stale/unrelated URL — falling back to base-URL preserves R3 v1's original conservatism for those cases.
+
+**Regression risk**: if the regex is later loosened (e.g., to accept `-` for UUID-format codes), the injection concern from R3 v1 §Rationale bullet 3 comes back. Any change to the regex MUST be paired with an updated proof that the new character class is scheme-safe under `wp_safe_redirect()`'s validation semantic — AND the `CliController::handle_auth_start` generator MUST be reviewed to ensure it still emits values conforming to the new pattern.
+
+**Regression test**: `tests/phpunit/FrontendAuth/MaybeRenderPageTest.php` includes 3 cases that pin this branch:
+- `test_login_redirect_preserves_action_and_code_when_code_is_valid_hex`
+- `test_login_redirect_falls_back_to_base_when_code_is_not_hex`
+- `test_login_redirect_falls_back_to_base_when_action_missing`
+
+If any of these break during a future refactor, do NOT loosen the assertions — investigate whether the regex was accidentally weakened.

@@ -150,3 +150,19 @@ The plan **demonstrates** these patterns by design:
 OWASP 2025 categories with no findings: A01-A03, A05-A10. A04 has two informational entries (F1 + F2 — both documented design trade-offs with non-blocking mitigations). A09 has one entry (F3 — best-effort audit). Neither represents a security weakness.
 
 CWE: N/A — no vulnerability CWEs apply at the plan stage.
+
+---
+
+## Post-2026-07-15 addendum — `/servers` `id` identifier-semantic change (no security impact)
+
+Commits `42e82c1` + `6c4778b` change the `/servers` response's `id` field from the integer database primary key (`$row->id`) to the server's slug string (`$row->server_slug`). Security posture assessment:
+
+- **No new REST route** — same endpoint, same permission_callback (session-token bearer), same rate-limit surface.
+- **No new writes** — read-only endpoint continues to be read-only.
+- **No new attacker-influenced input** — the response shape change is on the OUTPUT side; the caller's session token still enforces the Q4 single-server binding (only the consented server appears in the response).
+- **No information disclosure** — the slug `$row->server_slug` was ALREADY exposed elsewhere in the response body (via `mcp_url` which contains `<ns>/<route>` where route is usually derived from slug). Making it the primary identifier does not leak new information.
+- **Integer PK now hidden** — the DB primary key is no longer emitted anywhere in the API surface. Strictly a REDUCTION in information exposure (defensive win, though minor — the PK was never sensitive).
+- **Downstream CLI impact** — the `@acrossai/mcp-manager` npm package's server-match logic (`s.id === serverId`) now succeeds where it previously failed. No security implications; a legitimate CLI flow that was broken now works.
+- **`slug` alias field** — redundant with `id` (same value). Kept as forward-compat for consumers that prefer an explicit slug field name. Adding a field is additive; no security surface change.
+
+No new CWEs introduced. No existing constraints relaxed. LOW risk (unchanged).
