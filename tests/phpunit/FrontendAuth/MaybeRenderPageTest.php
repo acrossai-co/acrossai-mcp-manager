@@ -161,4 +161,107 @@ class MaybeRenderPageTest extends WP_UnitTestCase {
 		$b = FrontendAuth::instance();
 		$this->assertSame( $a, $b );
 	}
+
+	// --------------------------------------------------------------------
+	// R3 amendment (2026-07-15) — preserve ?action=cli_auth&code=<hex>
+	// in the redirect target when logged out, with hex-format validation.
+	// --------------------------------------------------------------------
+
+	public function test_login_redirect_preserves_action_and_code_when_code_is_valid_hex(): void {
+		set_query_var( FrontendAuth::QUERY_VAR, '1' );
+		wp_set_current_user( 0 );
+		$valid_hex_code = 'd83b9450d3686ff64cf546546cb82189'; // 32-char hex — CLI-generated shape.
+		$_GET           = array(
+			'action' => 'cli_auth',
+			'code'   => $valid_hex_code,
+			'server' => 'mcp-adapter-default-server', // MUST NOT be preserved per SEC-001.
+		);
+
+		$redirect_target = $this->intercept_next_redirect();
+
+		$this->assertNotNull( $redirect_target );
+		$this->assertStringContainsString( 'wp-login.php', $redirect_target );
+
+		// Extract and decode the redirect_to param embedded inside the login URL.
+		$query = wp_parse_url( $redirect_target, PHP_URL_QUERY );
+		parse_str( (string) $query, $parsed );
+		$this->assertArrayHasKey( 'redirect_to', $parsed );
+		$decoded_target = $parsed['redirect_to'];
+
+		$this->assertStringContainsString( 'action=cli_auth', $decoded_target );
+		$this->assertStringContainsString( 'code=' . $valid_hex_code, $decoded_target );
+		// SEC-001: `server` MUST NOT be in the preserved URL.
+		$this->assertStringNotContainsString( 'server=', $decoded_target );
+	}
+
+	public function test_login_redirect_falls_back_to_base_when_code_is_not_hex(): void {
+		set_query_var( FrontendAuth::QUERY_VAR, '1' );
+		wp_set_current_user( 0 );
+		$_GET = array(
+			'action' => 'cli_auth',
+			'code'   => 'not-hex-at-all', // Contains hyphens; not 32 chars.
+		);
+
+		$redirect_target = $this->intercept_next_redirect();
+
+		$this->assertNotNull( $redirect_target );
+		$this->assertStringContainsString( 'wp-login.php', $redirect_target );
+
+		$query = wp_parse_url( $redirect_target, PHP_URL_QUERY );
+		parse_str( (string) $query, $parsed );
+		$this->assertArrayHasKey( 'redirect_to', $parsed );
+		$decoded_target = $parsed['redirect_to'];
+
+		// Load-bearing invariant: non-hex code MUST fall through to base-URL only.
+		$this->assertStringNotContainsString( 'action=cli_auth', $decoded_target );
+		$this->assertStringNotContainsString( 'code=', $decoded_target );
+	}
+
+	public function test_login_redirect_falls_back_to_base_when_action_missing(): void {
+		set_query_var( FrontendAuth::QUERY_VAR, '1' );
+		wp_set_current_user( 0 );
+		$_GET = array(
+			// No `action` param at all — must not preserve `code` alone.
+			'code' => 'd83b9450d3686ff64cf546546cb82189',
+		);
+
+		$redirect_target = $this->intercept_next_redirect();
+
+		$this->assertNotNull( $redirect_target );
+		$this->assertStringContainsString( 'wp-login.php', $redirect_target );
+
+		$query = wp_parse_url( $redirect_target, PHP_URL_QUERY );
+		parse_str( (string) $query, $parsed );
+		$decoded_target = $parsed['redirect_to'] ?? '';
+
+		$this->assertStringNotContainsString( 'action=', $decoded_target );
+		$this->assertStringNotContainsString( 'code=', $decoded_target );
+	}
+
+	/**
+	 * Intercept the next wp_redirect() call and return its target URL.
+	 * Filter throws to abort the exit that would follow the redirect.
+	 */
+	private function intercept_next_redirect(): ?string {
+		$redirect_target = null;
+		add_filter(
+			'wp_redirect',
+			static function ( $location ) use ( &$redirect_target ) {
+				$redirect_target = $location;
+				throw new \RuntimeException( 'redirect_intercepted' );
+			},
+			10,
+			1
+		);
+
+		ob_start();
+		try {
+			FrontendAuth::instance()->maybe_render_page();
+		} catch ( \RuntimeException $e ) {
+			// expected — redirect was intercepted before exit.
+		}
+		ob_end_clean();
+
+		return $redirect_target;
+	}
 }
