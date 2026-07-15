@@ -481,3 +481,51 @@ Don't just bump the `require` version and run `composer update` — check that a
 **Where to look next**
 
 When onboarding a new AcrossAI plugin: audit its `composer.json` `repositories` array for a VCS entry per `acrossai-co/*` require. When adding a new `acrossai-co/*` dependency to an existing plugin: add BOTH the `require` line AND the `repositories` VCS entry in the same commit — never split them across two PRs.
+
+---
+
+### 2026-07-15 - A17 — Request-scoped WP REST context capture (rest_pre_dispatch + shutdown safety-net)
+
+**Status**
+Active — F026 v3 shipping pattern; applicable to any plugin callback that
+needs REST-request-scoped context.
+
+**Constraint**
+When a plugin callback runs during REST-request dispatch but does NOT
+receive the invoking `WP_REST_Request` (or its derived context) as an
+argument — for example, an ability's `execute_callback` bound via WP core's
+Abilities API — capture the needed context BEFORE dispatch using a
+request-scoped singleton:
+
+1. `add_filter( 'rest_pre_dispatch', 'capture_callback', 5, 3 )` —
+   priority 5 to fire before any short-circuiting handlers at default 10.
+   Callback signature: `( mixed $result, WP_REST_Server $server,
+   WP_REST_Request $request )`. Match `$request->get_route()` against
+   known route patterns, populate the singleton, return `$result` unchanged.
+2. `add_filter( 'rest_post_dispatch', 'clear_callback', 999, 1 )` —
+   normal-path cleanup.
+3. `add_action( 'shutdown', 'clear_callback', 999 )` — **safety net**.
+   Without this, long-lived PHP processes (Roadrunner, FrankenPHP, wp-env
+   with keep-alive) leak the captured state across requests when a fatal
+   error kills the request before `rest_post_dispatch` fires.
+
+The singleton's `set()` method takes the context object; `clear()` takes
+an optional passthrough (returned unchanged for use as a filter callback).
+
+**Why this is durable**
+The WordPress core abilities framework, and many similar dispatched-callback
+patterns (custom REST endpoints handed off to service classes, cron
+callbacks invoked from REST-triggered `wp_schedule_single_event`, etc.),
+receive only `$input` — never the request context. The three-hook capture
+pattern is the correct answer in every case. Missing the `shutdown` binding
+is the number-one silent bug in ad-hoc versions of this pattern.
+
+Reference implementation: `includes/Abilities/CurrentServerHolder.php`
+(with a slug → integer PK cache invalidated at capture time to survive
+mid-request server registrations).
+
+**Where to look next**
+- `includes/Abilities/CurrentServerHolder.php` (canonical singleton)
+- `includes/Main.php:578-583` (wiring — three hooks at priorities 5/999/999)
+- `DEC-F026-WP-REGISTER-ABILITY-ARGS-CALLBACK-SWAP` (D25 — the reason
+  A17 exists in this codebase; the callback swap creates the need)

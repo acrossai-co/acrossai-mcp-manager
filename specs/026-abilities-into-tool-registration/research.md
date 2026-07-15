@@ -126,3 +126,71 @@ The Plan-mode conversation on 2026-07-14 (two rounds of AskUserQuestion after th
 - F025's `research.md` (`specs/025-server-tools-registration-hooks/research.md`) consulted as a parallel-shape reference — same numbered-decision structure applies.
 - Zero web research required — every decision was locally sourced from user directives + prior features' patterns.
 - No `[NEEDS CLARIFICATION]` markers in the spec at any point.
+
+---
+
+## F026 v3 decisions (2026-07-15)
+
+Post-shipping design decisions from the refactor + revert arc. Each links to the commit that carried it out.
+
+### Decision 7 — Callback swap via `wp_register_ability_args` over unregister+re-register (commit `070ffe2`)
+
+**Chosen**: hook WP core's `wp_register_ability_args` filter and swap `execute_callback` + `permission_callback` on the three vendor slugs at registration time. Vendor's schema/label/description/category/annotations are preserved.
+
+**Rationale**:
+- No priority race, no `_doing_it_wrong` noise.
+- Zero vendor callback duplication → no schema-drift risk if the vendor updates its abilities.
+- Third-party plugins that hooked the vendor's original ability instances continue to work unchanged.
+- `~120 LOC` of new module code vs. `~600–800 LOC` for unregister + full class copies.
+
+**Alternatives considered**:
+1. **Unregister + re-register with plugin-owned copies** (user's original request) — rejected after Plan-agent analysis. Detailed trade-offs in `docs/planings-tasks/026-abilities-into-tool-registration.md` and this feature's git history around 2026-07-14→15.
+2. **Post-hoc intercept via `mcp_adapter_pre_tool_call` + `mcp_adapter_tool_call_result`** (commit `4ca9db4`, superseded) — shipped as an interim step but had metadata-enumeration hazard because the ability still executed fully before being post-filtered. Callback-swap enforces BEFORE execution.
+
+**Source of decision**: user AskUserQuestion answer during plan mode on 2026-07-15, "Yes — replace with unregister + re-register" was overridden by intermediate plan-agent pressure-test that surfaced the callback-swap approach as strictly superior on the trade-offs matrix.
+
+### Decision 8 — Revert F026 v1 tools-widening (commit `0e122e2`)
+
+**Chosen**: `tools/list` returns only the F025 protocol columns + F020 curated slugs. Abilities are NOT advertised as top-level tools. AI clients reach them through the three built-in meta tools (whose callbacks respect Abilities-tab visibility via Decision 7).
+
+**Rationale**:
+- Fixes the Tools-tab UI vs `tools/list` mismatch (operator saw 3 tools, AI saw 3 + N).
+- Cleaner mental model: tools = operator's Tools-tab picks; abilities = introspectable via meta tools.
+- Symmetric with F017's own design intent — F017 was per-server visibility, not per-server tool advertising.
+- Preserves F026 v2's resources/prompts widening (no equivalent meta tools exist for those types).
+
+**Alternatives considered**:
+1. **Keep F026 v1 widening** — rejected on operator feedback.
+2. **Drop F020 curated tools too** (only 3 built-ins in `tools/list`) — rejected via AskUserQuestion; F020 is operator-authored intent and should be preserved.
+
+**Source of decision**: user AskUserQuestion answer on 2026-07-15, "Yes — revert F026 tools-widening (Recommended)" + "Leave as-is (Recommended)" for resources/prompts.
+
+### Decision 9 — `AbilityHelpers::apply_exposure_filter` default = `ExposureResolver::resolve()` (commit `e0189b0`)
+
+**Chosen**: the `acrossai_mcp_is_ability_exposed` filter's default value comes from `ExposureResolver::resolve( $server_id, $slug, $meta )` when an MCP request context is available (via `CurrentServerHolder`), fallback to `meta.mcp.public` when not (CLI, cron, direct `wp_get_ability()->execute()`).
+
+**Rationale**:
+- The Abilities tab is the operator's per-server override surface — the plugin MUST honor it by default. Requiring companion code to hook the filter would leak F017's semantics into every downstream consumer.
+- `DEC-ABILITY-OVERRIDE-RESOLUTION` mandates a single canonical resolver — re-deriving exposure inline was a violation.
+- Fixes the "1 of 6 abilities returned" bug the operator hit on 2026-07-15.
+
+**Alternatives considered**:
+1. **Keep `meta.mcp.public` as the default, wire an internal filter callback to add F017** — rejected. Adds indirection without benefit; the filter shape stays the same either way.
+2. **Bake F017 into `Discover::execute()` directly, skip the filter for the default** — rejected. The filter is the extension seam for companion code; the default value is the right layer to encode the plugin's per-server semantic.
+
+**Source of decision**: operator bug report + code inspection on 2026-07-15.
+
+### Decision 10 — F020 `EXCLUDED_SLUGS` accepts vendor-sanitized names (commit `69e689c`)
+
+**Chosen**: `ToolExposureGate::EXCLUDED_SLUGS` lists both the raw ability form (`mcp-adapter/discover-abilities`) and the vendor-sanitized form (`mcp-adapter-discover-abilities`).
+
+**Rationale**:
+- Vendor's `McpNameSanitizer::sanitize_name` swaps `/` → `-` when registering an ability as an MCP tool. The client-facing tool name (what arrives at `mcp_adapter_pre_tool_call` as `$tool_name`) is the hyphen form.
+- The pre-existing raw-form-only list never matched — F020 rejected all three built-in meta tools with `acrossai_mcp_tool_not_added`.
+- The gap survived undetected because pre-`070ffe2` nobody actually invoked the meta tools via `tools/call` — they were vendor plumbing.
+
+**Alternatives considered**:
+1. **Sanitize at compare time** (call `McpNameSanitizer::sanitize_name` on both sides in the gate) — rejected. Adds vendor coupling at gate time; constant is simpler.
+2. **Use `wp_get_ability()` to reverse-resolve the sanitized name → raw slug** — rejected. Sanitizer isn't reversible (`/` → `-` is destructive).
+
+**Source of decision**: operator bug report on 2026-07-15 ("This tool is not enabled on this MCP server") + code trace.

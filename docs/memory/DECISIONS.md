@@ -1531,33 +1531,122 @@ Examples in this repo:
 ### 2026-07-14 - DEC-F026-ADVERTISEMENT-VS-CALL-TIME-DEFENSE-IN-DEPTH
 
 **Status**
-Active — foundational to the F017 + F025/F026 threat model.
+Active — foundational to the F017 + F025/F026 threat model. **Refined 2026-07-15** after F026 v3 refactor arc: the "advertisement-time" layer's shape changed but the two-layer defense principle still holds.
 
 **Why this is durable**
-The advertisement-time composer (F025/F026) and the call-time gate
-(`AbilityExposureGate` at `mcp_adapter_pre_tool_call` priority 20) are
-INDEPENDENT enforcement layers. A companion filter can widen the advertisement
-(F025 confused-deputy caveat, SEC-025-INFO-1); the call-time gate still blocks
-execution. Operator's Abilities-tab decision remains authoritative at
-`tools/call` time regardless of filter mutation.
+The advertisement-time enforcement and the call-time gate are INDEPENDENT
+enforcement layers. A companion filter can widen the advertisement; the
+call-time gate still blocks execution. Operator's Abilities-tab decision
+remains authoritative regardless of filter mutation.
+
+**Current layer shape (as of 2026-07-15 refactor)**:
+- **Advertisement-time layer (post-070ffe2 + 0e122e2)** — enforcement now lives
+  inside the three plugin-owned meta-tool callbacks (`Discover::execute`,
+  `GetAbilityInfo::check_permission`, `Execute::check_permission`) via
+  `AbilityHelpers::apply_exposure_filter` → `ExposureResolver::resolve()`.
+  The registration-time composer (`ToolPolicy::compose_effective_tools_for_row`)
+  no longer widens `tools/list` with F017-effective abilities — that widening
+  was reverted because it conflated "what's a tool" with "what's discoverable".
+- **Call-time layer (unchanged)** — F017 `AbilityExposureGate` at
+  `mcp_adapter_pre_tool_call` priority 20. Direct calls to an ability's own
+  slug still gated per-server.
+
+**Historical layer shape (F026 v1, superseded 2026-07-15)**:
+- Advertisement-time layer lived in `ToolPolicy::compose_effective_tools_for_row`
+  merging `AbilityDiscovery::for_server(TYPE_TOOL)`. This is now reverted to a
+  passthrough of `compose_for_row()`. Resources/prompts widening in the same
+  file still uses the merge for the two sibling `Controller` call sites.
 
 **Decision**
 Never remove either layer on the assumption the other is sufficient. Concretely:
 - Never drop the F017 call-time gate at `mcp_adapter_pre_tool_call` priority 20.
-- Never drop the F026-time composer's use of `ExposureResolver::resolve()`.
-- Never route composition through a bypass path that skips `ExposureResolver`.
+- Never drop `apply_exposure_filter`'s use of `ExposureResolver::resolve()`
+  inside the three plugin-owned meta-tool callbacks (F026 v3 shape).
+- Never route ability-exposure decisions through a bypass path that skips
+  `ExposureResolver`.
+- **New corollary (F026 v3)**: **exposure ≠ authorization.** A companion filter
+  widening exposure via `acrossai_mcp_is_ability_exposed` MUST NOT bypass the
+  target ability's own `permission_callback`. `Execute::check_permission`
+  enforces this by ordering (auth → exposure filter → target permission_callback).
 
 **Tradeoffs**
 - Gained: Filter-side confused-deputy attacks cannot exfiltrate ability
-  execution — they can only add a misleading advertisement.
+  execution — they can only add a misleading advertisement (and only inside the
+  meta-tool responses post-v3, not directly in `tools/list`).
 - Made harder: Two enforcement layers to reason about; documentation must
-  explain both.
-- Reconsider: If the vendor mcp-adapter absorbs per-server exposure natively
-  (obviating F017), the composer-side pass could be re-derived from the vendor
-  state. Until then, both layers stay.
+  explain both. The v3 shape has an additional layer (target ability's
+  `permission_callback`) that must be preserved.
+- Reconsider: If upstream mcp-adapter#244 lands, the plugin-owned meta-tool
+  callbacks can be replaced with a single filter callback on the upstream
+  `mcp_adapter_is_ability_exposed` filter. The advertisement-time layer
+  location changes, but the two-layer principle stays.
 
 **Where to look next**
-- `includes/Database/MCPServerAbility/AbilityExposureGate.php` (call-time layer)
-- `includes/Database/MCPServer/AbilityDiscovery.php` (advertisement-time layer)
-- `docs/extending-server-tools.md` §"Interaction with the Abilities tab"
-- `SEC-025-INFO-1` (the caveat this decision mitigates)
+- `includes/MCP/AbilityExposureGate.php` (call-time layer, unchanged)
+- `includes/Abilities/AbilityHelpers.php` (advertisement-time layer, v3)
+- `includes/Abilities/Discover.php`, `GetAbilityInfo.php`, `Execute.php`
+- `docs/extending-server-tools.md` §7 "Interaction with the Abilities tab"
+- `SEC-025-INFO-1` (the confused-deputy caveat this decision mitigates)
+- Test regression guard: `ExecuteTest::test_filter_widening_does_not_bypass_target_permission_callback`
+
+---
+
+### 2026-07-15 - DEC-F026-WP-REGISTER-ABILITY-ARGS-CALLBACK-SWAP
+
+**Status**
+Active — F026 v3 shipping pattern for overriding vendor-registered abilities.
+
+**Why this is durable**
+When a plugin needs to swap the `execute_callback` / `permission_callback`
+on an ability registered by a vendor package while keeping the vendor's
+schema/label/description/category/annotations intact, hook WP core's
+`wp_register_ability_args` filter (fires inside `WP_Abilities_Registry::
+register()` at `wp-includes/abilities-api/class-wp-abilities-registry.php:129`).
+Match on the ability slug and return `$args` with rebound callbacks.
+
+**Decision**
+Use `wp_register_ability_args` for callback-swap over these rejected
+alternatives:
+
+1. **Unregister + re-register with plugin-owned copies** — duplicates ~600
+   LOC of vendor callback code; schema-drift risk when vendor updates the
+   ability before your override is refreshed; breaks any third-party
+   plugin that hooked the vendor's original ability instances.
+2. **Priority-race registration** — register at `wp_abilities_api_init`
+   priority 5 to preempt vendor's priority 10. Emits `_doing_it_wrong` on
+   every request in WP_DEBUG mode. Noisy.
+3. **Disable vendor's server entirely** (`add_filter( 'mcp_adapter_
+   create_default_server', '__return_false' )`) — clean but removes the
+   default `/wp-json/wp/v2/mcp` route entirely.
+4. **Post-hoc intercept via `mcp_adapter_pre_tool_call` +
+   `mcp_adapter_tool_call_result`** — vendor ability still executes fully,
+   then result is filtered. Wasted work + metadata-enumeration hazard if
+   the post-filter misfires. F026 shipped this as an interim step
+   (commit `4ca9db4`) and immediately superseded it (`070ffe2`).
+
+Reference implementation: `includes/Abilities/CallbackReplacer.php`
+(hook `wp_register_ability_args` priority 10, slug→[class, perm, exec] map,
+pass-through for non-vendor slugs).
+
+**Tradeoffs**
+- Gained: Zero vendor code duplication; vendor schema evolves independently
+  without breaking the plugin; sibling code that hooked vendor abilities
+  continues to work; enforcement happens BEFORE ability execution (via
+  bound `permission_callback`), avoiding the post-hoc rewrite hazard.
+- Made harder: Requires a per-request context holder (see `A17`) because
+  vendor callbacks don't receive the invoking McpServer instance.
+- Reconsider: When vendor mcp-adapter#244 lands (adds
+  `mcp_adapter_is_ability_exposed` filter with McpServer context), the
+  whole `includes/Abilities/` folder can be replaced with a ~40-line
+  companion filter callback.
+
+**Where to look next**
+- `includes/Abilities/CallbackReplacer.php` (canonical implementation)
+- `includes/Abilities/AbilityHelpers.php` (shared trait for the three
+  swapped-callback classes)
+- Commit `070ffe2` (F026 v3 refactor)
+- `docs/planings-tasks/026-abilities-into-tool-registration.md`
+  §"Post-shipping arc" (trade-off table)
+- Companion architecture pattern: `A17` (request-scoped WP REST context
+  capture) — required because the swapped callbacks don't receive
+  McpServer context

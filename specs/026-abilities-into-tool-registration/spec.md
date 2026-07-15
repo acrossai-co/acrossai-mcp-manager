@@ -225,3 +225,41 @@ Same shape as US4 but for `mcp.type === 'prompt'` abilities and the `prompts` ar
 
 - **What if a companion plugin previously depended on database servers having empty `resources` / `prompts` arrays?** Behavioral change: DB servers now advertise F017-effective, type-filtered abilities. Companion plugins can hook `acrossai_mcp_manager_server_resources` / `..._server_prompts` at any priority and `return array();` to restore the old empty-array behavior per-server.
 - **What if two abilities share a slug across different types?** Ability slugs are globally unique per WordPress core's `wp_register_ability()`. If a hypothetical duplicate did exist, `AbilityDiscovery::for_server()` would return only the type-matched one on each call, and dedup within the array is preserved.
+
+---
+
+## Scope reversal + refactor arc: F026 v3 (2026-07-15)
+
+**Trigger**: Operator feedback that the Tools tab UI ("3 Built-in") did not match what AI clients saw in `tools/list` (3 + N public abilities per F026 v1 widening).
+
+**Outcome**: The mechanism for making Abilities-tab per-server toggles authoritative was moved from build-time (registration composition) to call-time (plugin-owned meta tool callbacks). Enforcement is functionally equivalent, but the model is cleaner:
+
+- **Old (F026 v1+v2)**: registration composer widened `tools/list` with F017-effective abilities. Abilities were advertised as their own tools.
+- **New (F026 v3)**: registration composer only advertises F025 protocol + F020 curated. Abilities are reached through the three built-in meta tools (`mcp-adapter/discover-abilities`, `.../get-ability-info`, `.../execute-ability`) whose callbacks were swapped to plugin-owned versions that consult `ExposureResolver::resolve()`.
+
+Resources and prompts widening is UNCHANGED — no equivalent meta tools exist for those types.
+
+### Reversed / superseded
+
+- **US1 outcome ("F017-effective abilities appear in `tools/list`")** — REVERSED. Abilities no longer appear directly in `tools/list`; they're funneled through the three meta tools.
+- **FR-014** (the `mcp.type === 'tool'` filter added in F026 v2) — still holds as a defensive check, but now moot for `tools/list` since the composer no longer emits abilities at all.
+- **`ToolPolicy::compose_effective_tools_for_row()`** — is now a straight passthrough to `compose_for_row()` (F025 protocol + F020 curated only). Kept as a sibling method so both Controller call sites can be re-routed in one place if widening ever returns.
+
+### New Functional Requirements (post-revert)
+
+- **FR-020**: Plugin-owned callbacks MUST be swapped for the three vendor built-in ability slugs at registration time via WP core's `wp_register_ability_args` filter. Vendor's schema/label/description/category/annotations MUST be preserved.
+- **FR-021**: The current MCP server context MUST be captured on `rest_pre_dispatch` (priority 5) into a request-scoped singleton `CurrentServerHolder`. It MUST be cleared on `rest_post_dispatch` AND `shutdown` (priority 999) to prevent leakage across requests in long-lived PHP processes.
+- **FR-022**: The plugin-owned callbacks MUST fire a filter `acrossai_mcp_is_ability_exposed( bool $is_exposed, WP_Ability $ability, ?int $server_id, string $context )` where `$context` is one of `'discover' | 'get_info' | 'execute'` and the default is `ExposureResolver::resolve( $server_id, $slug, $meta )` when an MCP request context is available, or `meta.mcp.public` otherwise.
+- **FR-023**: The security invariant "exposure ≠ authorization" MUST hold: a companion filter widening exposure MUST NOT bypass the target ability's own `permission_callback`. Enforced by ordering in `Execute::check_permission` (auth → exposure filter → target permission_callback).
+- **FR-024** (bug fix, `69e689c`): F020 `ToolExposureGate::EXCLUDED_SLUGS` MUST match both the raw ability form (`mcp-adapter/...`) and the vendor-sanitized form (`mcp-adapter-...`) of each of the three built-in tools, because the vendor's `McpNameSanitizer` swaps `/` → `-` when registering an ability as an MCP tool.
+- **FR-025** (bug fix, `e0189b0`): `AbilityHelpers::apply_exposure_filter()` MUST use `ExposureResolver::resolve()` for its filter default (not `meta.mcp.public` alone), per `DEC-ABILITY-OVERRIDE-RESOLUTION`.
+
+### Commit arc
+
+| Commit | Layer | Change |
+|---|---|---|
+| `4ca9db4` | vendor-override | Ship intercept module (later superseded) |
+| `070ffe2` | callback-swap | Replace intercept with `wp_register_ability_args` callback swap; introduce `includes/Abilities/` |
+| `0e122e2` | scope-revert | Stop widening `tools/list` with F017-effective abilities |
+| `69e689c` | bugfix | F020 `EXCLUDED_SLUGS` accepts vendor-sanitized names |
+| `e0189b0` | bugfix | `AbilityHelpers` uses `ExposureResolver` for filter default |

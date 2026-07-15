@@ -58,3 +58,19 @@ Every finding is INFORMATIONAL or LOW; none block implementation. All are folded
 ## Not blocking implementation
 
 Proceed directly to `/speckit-architecture-guard-violation-detection` (Step 5 of the parent governed-plan workflow). The three INFO findings are inline TODOs for TASK-4 (docs update), not gates.
+
+---
+
+## Post-2026-07-15 addendum — no security invariants added or relaxed
+
+The F026 v3 refactor arc (commits `4ca9db4` → `e0189b0`) changed the mechanism but not the security posture:
+
+- Advertisement-time enforcement moved to call-time enforcement (via 070ffe2's plugin-owned meta-tool callbacks). Same F017 semantic honored, just at a different point in the request flow.
+- F017 `AbilityExposureGate` at `mcp_adapter_pre_tool_call` priority 20 UNCHANGED — direct calls to an ability's own slug still gated per-server.
+- Two pre-existing bugs fixed:
+  - `69e689c` — F020 `EXCLUDED_SLUGS` didn't match vendor-sanitized names. This was denying legitimate meta-tool calls (availability). Fixed by expanding the constant to include both raw and sanitized forms.
+  - `e0189b0` — `AbilityHelpers::apply_exposure_filter` defaulted to `meta.mcp.public` only, silently ignoring Abilities-tab per-server overrides on the meta-tool discovery path (integrity of operator intent). Fixed by defaulting to `ExposureResolver::resolve()`.
+- **Critical new invariant** added by 070ffe2 (documented in `spec.md §FR-023`): **exposure ≠ authorization**. A companion filter widening exposure via `acrossai_mcp_is_ability_exposed` MUST NOT bypass the target ability's own `permission_callback`. Enforced by ordering in `Execute::check_permission` (auth → exposure filter → target permission_callback). Regression-guarded by `ExecuteTest::test_filter_widening_does_not_bypass_target_permission_callback`.
+- No new REST routes, no new writes, no new capabilities, no new secrets, no vendor code changes. Constitutional §III (Security First) still holds.
+
+The security-review artifacts under `docs/security-reviews/2026-07-14-026-*.md` remain valid for the F026 v1 design they analyzed. A fresh review has NOT been commissioned for the v3 shape because the change is a mechanism swap within an already-reviewed threat model, not a new capability surface. If a follow-up security review is desired, invoke `/speckit-security-review-branch` against the current HEAD.

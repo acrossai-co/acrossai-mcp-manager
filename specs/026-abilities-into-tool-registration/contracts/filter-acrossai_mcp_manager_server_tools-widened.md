@@ -1,9 +1,34 @@
-# Contract: `acrossai_mcp_manager_server_tools` filter (widened by F026)
+# Contract: `acrossai_mcp_manager_server_tools` filter — F026 widening REVERTED (2026-07-15)
+
+> ⚠️ **STATUS: SUPERSEDED for the tools widening path.**
+>
+> F026 v1's tools-widening (documented below in the pre-revert sections) was reversed by commit `0e122e2` on 2026-07-15. The pre-filter composed set is now the F025 shape only — `(enabled protocol columns) ∪ (curated slugs from wp_acrossai_mcp_server_tools)`. AI clients access `mcp.public = true` abilities and F017-effective overrides through the three built-in meta tools whose callbacks respect per-server visibility (see `docs/extending-server-tools.md §7` + `includes/Abilities/*`).
+>
+> The two sibling filters (`acrossai_mcp_manager_server_resources`, `acrossai_mcp_manager_server_prompts`) shipped in F026 v2 are UNCHANGED — they still receive the F017-effective, type-filtered set for resources and prompts (no equivalent meta tools exist).
+>
+> The new plugin-owned filter shape introduced by commits `070ffe2` + `e0189b0` is:
+>
+> ```php
+> apply_filters(
+>     'acrossai_mcp_is_ability_exposed',
+>     bool         $is_exposed,   // ExposureResolver::resolve() when server_id present, else meta.mcp.public
+>     \WP_Ability  $ability,
+>     ?int         $server_id,    // current MCP server DB PK, or null (CLI/cron)
+>     string       $context       // 'discover' | 'get_info' | 'execute'
+> );
+> ```
+>
+> Fires from inside the three plugin-owned meta-tool callbacks (`Discover::execute`, `GetAbilityInfo::check_permission`, `Execute::check_permission`). Migration path from the old widened filter: switch from `array_merge`/`array_diff` on slug-list to per-ability decisions on `$ability->get_name()`. See `docs/extending-server-tools.md §7` for examples.
+>
+> The historical F026 v1 contract is retained below for git-blame + memory continuity.
+
+---
 
 **Type**: WordPress filter (`apply_filters` / `add_filter`)
 **Introduced**: Feature 025 (F025).
 **Amended**: Feature 026 (F026) — widens the pre-filter composed set from `(protocol + curated)` to `(protocol + curated + F017-effective abilities)`.
-**Stability**: `@since 0.1.0 (F025)` — signature unchanged; strict-superset input change is backwards-compatible for all existing consumers.
+**REVERTED**: 2026-07-15 by commit `0e122e2` — the widening is undone; contract returns to F025 shape.
+**Stability**: `@since 0.1.0 (F025)` — signature unchanged throughout; strict-superset input change (F026) was backwards-compatible; strict-subset input change (revert) is also backwards-compatible for consumers that only added slugs.
 
 ## What DIDN'T change
 

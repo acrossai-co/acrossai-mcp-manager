@@ -124,3 +124,17 @@ Not produced by `/speckit-plan`. `docs/planings-tasks/026-abilities-into-tool-re
 ## Agent Context Update
 
 `CLAUDE.md` at the plugin root does not carry `<!-- SPECKIT START -->` / `<!-- SPECKIT END -->` markers — the plugin's agent-context file is `AGENTS.md`, which `CLAUDE.md` `@`-references. No pointer update is required; the active plan file is discoverable via `.specify/feature.json` (`{"feature_directory": "specs/026-abilities-into-tool-registration"}`), which now points to this `plan.md`.
+
+---
+
+## Post-shipping revert + refactor (2026-07-15)
+
+This plan documented F026 v1's tools-widening design. That design shipped as `15c229a` (F026 v1) + F026 v2 fold-in, then was substantially reshaped on 2026-07-15:
+
+- `4ca9db4` — interim vendor-override intercept module (superseded by `070ffe2`).
+- `070ffe2` — replace intercept with plugin-owned callback swap via WP core's `wp_register_ability_args`; new `includes/Abilities/` folder (6 classes).
+- `0e122e2` — revert F026 v1's tools-widening. `tools/list` no longer includes F017-effective abilities; they're accessed through the three built-in meta tools.
+- `69e689c` — fix F020 `EXCLUDED_SLUGS` for vendor-sanitized names.
+- `e0189b0` — fix `AbilityHelpers::apply_exposure_filter` to use `ExposureResolver::resolve` for its default.
+
+The Constitution Check above was performed against F026 v1's design. It has NOT been re-run for the post-2026-07-15 shape. Consult `spec.md §"Scope reversal + refactor arc"` for the current FRs and `research.md §"F026 v3 decisions"` for the new design decisions. When re-running Constitution Check would be useful (e.g. before merging a follow-up PR that touches these paths), invoke `/speckit-plan` or `/speckit.architecture-guard.governed-plan` afresh.

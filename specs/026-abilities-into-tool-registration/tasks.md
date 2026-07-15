@@ -225,3 +225,53 @@ With multiple developers:
 - **SEC-026-INFO-3** (v1) → T008 (`mcp.public = true` opt-in note in `docs/extending-server-tools.md`)
 - **SEC-026-v2-1** (v2) → T010 (spec §Edge Cases amendment)
 - **SEC-026-v2-2** (v2) → T008 (ability registration timing note in `docs/extending-server-tools.md`)
+
+---
+
+## Phase 8: F026 v3 — refactor arc + scope reversal + bug fixes (added 2026-07-15)
+
+**Purpose**: Reshape the ability-exposure mechanism after operator feedback on F026 v2's tools-widening behavior. Move enforcement from advertisement-time (registration composition) to call-time (plugin-owned meta tools). Fix two pre-existing bugs surfaced by the new call-time path.
+
+**Commits in this phase** (chronological):
+
+- [X] T026 `4ca9db4` **feat(vendor-override)** — Ship an intercept-only `VendorAbilityInterceptor` module at `includes/VendorOverrides/`. Hooks vendor's `mcp_adapter_pre_tool_call` (priority 40) and `mcp_adapter_tool_call_result` (priority 40) to block/rewrite the three built-in meta tools per-server. Includes 12 PHPUnit cases + a plugin-owned filter `acrossai_mcp_manager_vendor_override_effective_slugs`. **Sunset marker**: `ACROSSAI_MCP_MANAGER_VENDOR_OVERRIDE_243`.
+
+  **Now superseded** — see T027. Left the commit in history so the design trade-off (intercept vs. callback-swap) is documented.
+
+- [X] T027 `070ffe2` **refactor(abilities)** — Replace the intercept module with a plugin-owned callback-swap via WP core's `wp_register_ability_args` filter. Creates `includes/Abilities/` folder with 6 classes:
+  - `CurrentServerHolder` — request-scoped singleton; captures server on `rest_pre_dispatch` priority 5, clears on `rest_post_dispatch` + `shutdown` priority 999.
+  - `AbilityHelpers` — trait with `mcp_type()`, `is_meta_public()`, `apply_exposure_filter()`.
+  - `Discover`, `GetAbilityInfo`, `Execute` — plugin-owned callbacks for the three vendor slugs.
+  - `CallbackReplacer` — hooks `wp_register_ability_args`, swaps `execute_callback` + `permission_callback` on the three vendor slugs; passes through all others.
+
+  Wires 4 new hooks in `Main.php`. Deletes `includes/VendorOverrides/*`, `tests/phpunit/VendorOverrides/*`, `docs/planings-tasks/026-vendor-abilities-override.md`, and the 2 old `add_filter` lines. Adds 6 PHPUnit test classes (30+ cases) covering callback swap, holder lifecycle, per-context filter emission, filter widen/narrow, ability-type filter, exposure vs authorization boundary, and reflection-based callback binding.
+
+  New filter: `acrossai_mcp_is_ability_exposed( bool $is_exposed, WP_Ability $ability, ?int $server_id, string $context )` — shape mirrors upstream mcp-adapter#244 for future migration.
+
+- [X] T028 `0e122e2` **revert(026)** — Stop widening `tools/list` with F017-effective abilities at server-registration time. `ToolPolicy::compose_effective_tools_for_row()` is now a straight passthrough to `compose_for_row()` (F025 protocol columns + F020 curated only). AI clients reach abilities exclusively through the three built-in meta tools whose callbacks respect the Abilities tab (via T027's callback swap).
+
+  Rationale: F026 v1's widening caused a mismatch — the Tools tab UI showed 3 "Built-in" tools but `tools/list` returned 3 + N public abilities, confusing the "what's a tool vs. what's an ability" mental model. Reverting keeps `tools/list` scoped to operator's Tools-tab picks.
+
+  Resources and prompts widening in `Controller::register_database_servers()` and `Controller::filter_default_server_config()` is UNCHANGED (F026 v2 kept — no equivalent meta tools for those types).
+
+  Test inversions: 2 `test_compose_effective_includes_*` cases in `ToolPolicyTest` → renamed to `_excludes_*_post_revert` and inverted. The `test_register_database_servers_produces_f017_widened_composed_set` case in `ControllerToolsInjectionTest` → renamed to `_does_not_widen_*` and inverted.
+
+- [X] T029 `69e689c` **fix(020)** — Pre-existing gap in F020 `ToolExposureGate::EXCLUDED_SLUGS` bypass. The constant listed the raw ability form (with `/`), but at gate time `$tool_name` is the vendor-sanitized form (with `-` — vendor's `McpNameSanitizer::sanitize_name` swaps `/` → `-` when registering an ability as an MCP tool). Bypass never matched; F020 denied all three built-in meta tools with `acrossai_mcp_tool_not_added` ("This tool is not enabled on this MCP server.").
+
+  Gap survived because pre-T027 nobody actually invoked the meta tools via `tools/call` — they were vendor-internal plumbing. T027 made them first-class execution paths, immediately surfacing the F020 bug.
+
+  Fix: expanded `EXCLUDED_SLUGS` to 6 entries — both raw and sanitized forms. Added new test class `tests/phpunit/MCP/ToolExposureGateTest.php` with 6 cases (bypass matching for both forms, non-protocol slug still denied, deny-precedence).
+
+- [X] T030 `e0189b0` **fix(abilities)** — Gap in T027's `AbilityHelpers::apply_exposure_filter()`. The filter's default was `meta.mcp.public` only — never consulted `ExposureResolver::resolve()`. So the Abilities-tab per-server toggles (F017 `is_exposed = 1` rows) were silently ignored. Only globally-public abilities passed through `Discover::execute()`; operators saw 1-of-N abilities returned.
+
+  Fix: `apply_exposure_filter()` now calls `ExposureResolver::resolve( $server_id, $slug, $meta )` when `CurrentServerHolder` returns a non-null server_id. That resolver is F017's canonical function — honors row-in-table override AND `meta.mcp.public` fallback per `DEC-ABILITY-OVERRIDE-RESOLUTION`. Filter contract unchanged; only the DEFAULT value changes from `meta.mcp.public` to the F017-resolved output.
+
+  Added 2 regression cases to `DiscoverTest`: `test_execute_includes_non_public_ability_with_f017_override_when_holder_set` and `test_execute_excludes_public_ability_with_f017_override_disabled_when_holder_set`.
+
+**Obsoletion notes** on earlier tasks:
+
+- **T003, T004** (Phase 3 US1) — `Controller.php` line-swap tasks. Post-T028, both lines still call `compose_effective_tools_for_row()` but the method is now a passthrough. Behavior described in T003/T004 ("advertise F017-effective abilities in `tools/list`") is no longer active for tools; still active for resources/prompts via T018/T019.
+- **T005, T006** — Test cases inverted in T028. See T028 for the inversion details.
+- **T009** — REST GET `/tools` verification still valid (unchanged behavior).
+
+**Checkpoint**: F026 v3 complete. Advertisement path scoped to Tools-tab picks. Call path through the three meta tools honors Abilities-tab visibility. Two pre-existing bugs (F020 sanitizer bypass, F017 resolver gap) fixed. Total commits: 4ca9db4, 070ffe2, 0e122e2, 69e689c, e0189b0.

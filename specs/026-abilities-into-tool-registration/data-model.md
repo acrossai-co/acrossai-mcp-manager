@@ -149,3 +149,69 @@ New F026 fixture requirements:
 - Test helper to write an F017 override row: `MCPServerAbility\Query::instance()->upsert( $server_id, $slug, $is_exposed );`.
 
 The four new `test_compose_effective_*` cases and one new `test_register_database_servers_produces_f017_widened_composed_set()` case exercise the matrix in spec §User Story 1 §Acceptance Scenarios.
+
+---
+
+## F026 v3 additions (2026-07-15) — `includes/Abilities/` module
+
+New folder `includes/Abilities/` (6 classes) shipped by commit `070ffe2`, later refined by `e0189b0`. This is the plugin-owned replacement for the vendor's three built-in ability callbacks — it does NOT unregister anything, only swaps `execute_callback` + `permission_callback` at ability-registration time.
+
+### Class inventory
+
+| Class | Kind | Responsibility |
+|---|---|---|
+| `CurrentServerHolder` | Singleton | Request-scoped state. Captures the active MCP server on `rest_pre_dispatch` (priority 5), clears on `rest_post_dispatch` + `shutdown` (priority 999). Exposes `get_server_id(): ?int` returning the F011 integer PK. |
+| `AbilityHelpers` | Trait | Shared helpers used by the three ability classes: `mcp_type()`, `is_meta_public()`, `apply_exposure_filter()`. The last one is the enforcement pivot — consults `ExposureResolver::resolve()` (post-`e0189b0`) and fires `acrossai_mcp_is_ability_exposed`. |
+| `Discover` | Final | Plugin-owned callbacks for `mcp-adapter/discover-abilities`. Iterates `wp_get_abilities()`, filters by `mcp.type = 'tool'`, gates each via `apply_exposure_filter(..., 'discover')`, returns `{ abilities: [{name, label, description}, ...] }`. |
+| `GetAbilityInfo` | Final | Plugin-owned callbacks for `mcp-adapter/get-ability-info`. Auth + capability + ability-exists checks in `check_permission`, then exposure gate with context `'get_info'`. Returns full vendor-parity info on allow, `WP_Error` on hide (no metadata leak). |
+| `Execute` | Final | Plugin-owned callbacks for `mcp-adapter/execute-ability`. Three-layer `check_permission`: auth + capability → exposure filter (context `'execute'`) → target ability's own `permission_callback`. Uses vendor `AbilityArgumentNormalizer::normalize()`. |
+| `CallbackReplacer` | Singleton | Hooks WP core's `wp_register_ability_args` at priority 10. Vendor-slug → callback-class map (const `VENDOR_ABILITIES`). Passes through any non-vendor slug untouched. |
+
+### Filter contract
+
+The classes emit exactly one plugin-owned filter:
+
+```php
+apply_filters(
+    'acrossai_mcp_is_ability_exposed',
+    bool         $is_exposed,   // ExposureResolver::resolve() when server_id present, else meta.mcp.public
+    \WP_Ability  $ability,      // the ability being checked
+    ?int         $server_id,    // current MCP server DB PK, or null (CLI/cron)
+    string       $context       // 'discover' | 'get_info' | 'execute'
+);
+```
+
+Shape mirrors upstream `WordPress/mcp-adapter#244` so the future migration is a ~40-line callback rewire.
+
+### Call flow — `tools/call` on the default server
+
+1. AI client → `POST /wp-json/mcp/mcp-adapter-default-server/mcp` with `params.name = "mcp-adapter-discover-abilities"` (vendor-sanitized form).
+2. `rest_pre_dispatch` priority 5 → `CurrentServerHolder::capture_from_request` matches the route to a registered `McpServer`, stores it.
+3. Vendor `ToolsHandler::call_tool()` extracts `$tool_name = "mcp-adapter-discover-abilities"`, fires `mcp_adapter_pre_tool_call`:
+   - F015 (10): access-control passes.
+   - F017 (20): `wp_get_ability("mcp-adapter-discover-abilities")` returns null (registered slug has `/`), fail-opens.
+   - F020 (30): `EXCLUDED_SLUGS` matches the sanitized form (post-`69e689c`), bypasses.
+4. Vendor dispatches to the ability. WP core calls the ability's `permission_callback` → our `Discover::check_permission` (via `070ffe2`'s callback swap) → auth + capability pass.
+5. WP core calls the ability's `execute_callback` → our `Discover::execute`:
+   - Iterates `wp_get_abilities()`.
+   - For each: type-filter (must be `mcp.type = 'tool'`), then `apply_exposure_filter($ability, 'discover')`.
+   - Filter consults `ExposureResolver::resolve($server_id, $slug, $meta)` (post-`e0189b0`).
+   - Includes if resolved-true.
+6. Returns `{ abilities: [...] }` to the vendor's `mcp_adapter_tool_call_result` filter (no plugin subscribers post-`070ffe2` — the vendor-override interceptor was deleted).
+7. Response goes back to the AI client.
+8. `rest_post_dispatch` priority 999 → `CurrentServerHolder::clear`.
+
+Same flow for `get-ability-info` (context `'get_info'`) and `execute-ability` (context `'execute'`) — the last one additionally runs the target ability's `permission_callback` before dispatching to its `execute_callback`.
+
+### Test fixtures added in v3
+
+New test folder `tests/phpunit/Abilities/` with 6 classes:
+- `CallbackReplacerTest` — 5 cases (swap correctness for each vendor slug, pass-through for non-vendor slugs, args preservation).
+- `CurrentServerHolderTest` — 8 cases (set/get, slug→PK resolution, capture-from-request, clear-lifecycle).
+- `DiscoverTest` — 12 cases (default-behavior, filter widen/narrow, holder-set vs not, context arg, type filter, permission checks + 2 F017-resolver regression cases from `e0189b0`).
+- `GetAbilityInfoTest` — 7 cases (missing name, unauthenticated, missing capability, missing ability, filter-hidden, filter-widened, full-info-output).
+- `ExecuteTest` — 10 cases including the critical security invariant `test_filter_widening_does_not_bypass_target_permission_callback`.
+- `IntegrationTest` — 4 cases exercising the actual `wp_register_ability_args` swap via reflection on the constructed `WP_Ability`.
+
+Plus one new test class outside the folder:
+- `tests/phpunit/MCP/ToolExposureGateTest.php` — 6 cases guarding the F020 sanitizer bypass fix (`69e689c`).

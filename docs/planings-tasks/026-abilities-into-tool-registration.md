@@ -474,3 +474,19 @@ composer run phpstan
 **Attesting user**: raftaar1191@gmail.com
 
 **Validity window**: 2026-07-14 → Feature 026 merge.
+
+---
+
+## Post-shipping arc (2026-07-15)
+
+The original plan above described F026 v1 (tools-widening via `AbilityDiscovery` merge into `compose_effective_tools_for_row`). Behavior shipped as designed, but on the same day the tools-widening was reversed and the enforcement mechanism was refactored:
+
+| Commit | Layer | Change |
+|---|---|---|
+| `4ca9db4` | vendor-override | Interim intercept module (later superseded) |
+| `070ffe2` | callback-swap | Plugin-owned callbacks via `wp_register_ability_args` swap; new `includes/Abilities/` folder |
+| `0e122e2` | scope-revert | Stop widening `tools/list` with F017-effective abilities (tools go through the three meta tools now) |
+| `69e689c` | bugfix | F020 `EXCLUDED_SLUGS` accepts vendor-sanitized names |
+| `e0189b0` | bugfix | `AbilityHelpers::apply_exposure_filter` uses `ExposureResolver::resolve` for its default |
+
+For current-state architecture see `specs/026-abilities-into-tool-registration/data-model.md §"F026 v3 additions"` and `specs/026-abilities-into-tool-registration/research.md §"F026 v3 decisions"`. The `spec.md §"Scope reversal + refactor arc"` section holds the updated FRs (FR-020 through FR-025). This planning doc is retained as-is for git-blame continuity.

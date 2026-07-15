@@ -1,5 +1,21 @@
 # Quickstart — Feature 026 reviewer walkthrough
 
+> ⚠️ **2026-07-15 revert — the walkthrough below is largely superseded.**
+>
+> F026 v1's tools-widening was reverted by commit `0e122e2`. Steps `US1 §Acceptance 1–4` (which assert `mcp.public = true` abilities appear in `tools/list`) and `US2 §Acceptance 1–3` (which exercise the widened `acrossai_mcp_manager_server_tools` filter) NO LONGER MATCH shipped behavior. The equivalent modern verification path is:
+>
+> 1. **Scratch ability visible only via meta tools** — register a public ability, call `tools/list` on the server: expect ONLY 3 built-ins + F020 curated (NOT the scratch ability). Then call `tools/call` on `mcp-adapter-discover-abilities` (note: SANITIZED name with hyphens, not `mcp-adapter/discover-abilities`): expect the scratch ability in the response's `abilities` array.
+> 2. **Abilities-tab toggle authoritative** — toggle the ability OFF on `?page=acrossai_mcp_manager&action=edit&server=N&tab=abilities`. Re-call `discover-abilities`: the ability should be absent. Toggle back ON, re-call: present. Same expectation for `execute-ability` (403 `acrossai_mcp_ability_not_exposed_for_server` when hidden).
+> 3. **`acrossai_mcp_is_ability_exposed` filter** — hook the new filter and return `false` for a specific slug on a specific server_id: verify it disappears from `discover-abilities` on that server only.
+>
+> Steps for US3 (REST GET, Tools-tab UX, fail-open, F017 call-time gate) are still valid as written.
+>
+> Resources / prompts widening (US4–US5 in `spec.md`) is UNCHANGED; those checks still apply.
+>
+> Original walkthrough retained below for historical reference and for anyone re-hydrating F026 v1's behavior on a branch.
+
+---
+
 Manual walkthrough for a reviewer or QA engineer to verify Feature 026 end-to-end after implementation. Assumes the plugin is installed and active on a LocalWP-style site (baseline: `wordpress-7-0.local`).
 
 ## Prerequisites
