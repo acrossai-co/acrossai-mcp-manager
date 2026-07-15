@@ -489,3 +489,62 @@ All of the following MUST pass before this feature is considered complete:
   service layer only — the consumer change is tracked separately.
 - **Multisite is not in scope**: Pure service classes carry no
   site-scoped state; the spec is single-site implicitly.
+
+---
+
+## F004 amendment — `mcpServers` config key prefixed with site slug (2026-07-15)
+
+**Trigger**: operator reported that the admin UI's MCP Clients tab rendered `mcpServers` config key as bare `mcp-adapter-default-server`, but the `@acrossai/mcp-manager` CLI's `writeConfig` output uses `<site-slug>-<server-slug>` (e.g. `acrossai-mcp-adapter-default-server`). Operator copying the admin-UI snippet into `~/.claude.json` ended up with a key that didn't match what the CLI would auto-configure — duplicate/orphaned entries + confusion about which one is active.
+
+### FR-013 (new) — `AbstractMCPClient::derive_server_key` MUST prefix with site slug
+
+`AbstractMCPClient::derive_server_key( string $server_url ): string` (see the class implementation) MUST return `<site-slug>-<last-url-segment>` — NOT just the last URL segment as originally shipped.
+
+- Site slug source: `\AcrossAI_MCP_Manager\Includes\Utilities\SiteSlug::get()` (new helper — see FR-014).
+- Concatenation: `SiteSlug::get() . '-' . $last_url_segment`.
+- Fallback behavior for empty/unparsable URLs: return `SERVER_KEY_FALLBACK` ('wordpress-mcp') UNCHANGED — the fallback short-circuits BEFORE the SiteSlug prefix is applied. This preserves the historical R2 sentinel and simplifies the "unparsable URL" branch.
+
+All 7 concrete client renderers delegate to `derive_server_key` in the abstract base — no per-client changes required. The prefix propagates automatically to Claude Desktop, Claude Code, VS Code, GitHub Copilot, Codex, Cursor, and Custom Client output.
+
+### FR-014 (new) — `Includes\Utilities\SiteSlug` MUST be the single canonical site-slug helper
+
+`\AcrossAI_MCP_Manager\Includes\Utilities\SiteSlug::get(): string` MUST return the current site's slug — the same value that appears in the plugin's `/health` REST response's `site_slug` field (consumed by the CLI).
+
+Derivation:
+```php
+sanitize_title( (string) get_bloginfo( 'name' ) )
+```
+
+With an empty-input fallback:
+```php
+const EMPTY_FALLBACK = 'wordpress';
+```
+
+The `'wordpress'` fallback matches the CLI's own `siteValidator.js:50` fallback (`data.site_slug || 'wordpress'`) — the two constants MUST stay in sync. Any change to `EMPTY_FALLBACK` requires a paired update on the CLI side.
+
+Consumed by:
+1. `Includes\REST\CliController::handle_health` — returns as `site_slug` in the REST response for CLI consumption.
+2. `Includes\MCPClients\AbstractMCPClient::derive_server_key` — prefixes the admin UI's `mcpServers` key.
+
+This is the constitution §VI DRY canonical source — no consumer MAY inline `sanitize_title( get_bloginfo( 'name' ) )` for the same purpose; both consumers MUST route through `SiteSlug::get()`.
+
+### Test-env fallback semantics (informational)
+
+The MCPClients unit-test suite runs WITHOUT bootstrapping WordPress per SC-003. In that environment `SiteSlug::get()` hits its `! function_exists( 'get_bloginfo' )` branch and returns `EMPTY_FALLBACK` (`'wordpress'`). All golden fixtures in `tests/phpunit/MCPClients/fixtures/*.json` therefore use `"wordpress-test-server"` as the mcpServers key, not `"test-server"`. A separate WP-bootstrapped test suite (`tests/phpunit/Utilities/SiteSlugTest.php`) covers the real `sanitize_title( get_bloginfo( 'name' ) )` chain against actual site names.
+
+### Commit history
+
+| Commit | Semantic |
+|---|---|
+| `2d7257e` | `fix(mcp-clients): prefix rendered mcpServers config key with site slug (match what CLI writes)` — creates `Utilities\SiteSlug` helper, updates 2 consumers, updates 14 fixtures + 1 test file + adds 1 new test file. |
+
+### Cross-references
+
+- `includes/Utilities/SiteSlug.php` — new helper.
+- `includes/REST/CliController.php:210` — 1st consumer (unchanged /health response contract; now consumes the helper).
+- `includes/MCPClients/AbstractMCPClient.php:189` — 2nd consumer (the key change).
+- `tests/phpunit/Utilities/SiteSlugTest.php` — new (6 WP-bootstrapped cases).
+- `tests/phpunit/MCPClients/AbstractMCPClientTest.php` — deriveServerKeyMatrix updated.
+- `tests/phpunit/MCPClients/fixtures/*.json` × 14 — mechanical rewrite.
+- Related PRs: #30 (F007 v2), #31 (F006 `/servers` `id` = slug). Together they unblock the CLI end-to-end flow.
+- Combined-fixes branch for coordinated rsync: `combined-fixes-for-rsync`.

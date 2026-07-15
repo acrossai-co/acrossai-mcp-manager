@@ -21,6 +21,7 @@ namespace AcrossAI_MCP_Manager\Includes\REST;
 
 use AcrossAI_MCP_Manager\Includes\Database\CliAuthLog\Recorder;
 use AcrossAI_MCP_Manager\Includes\Database\MCPServer\Query as MCPServerQuery;
+use AcrossAI_MCP_Manager\Includes\Utilities\SiteSlug;
 use AcrossAI_MCP_Manager\Public\Partials\FrontendAuth;
 use WP_Error;
 use WP_REST_Request;
@@ -207,7 +208,7 @@ final class CliController {
 				'plugin_installed' => true,
 				'plugin_active'    => true,
 				'version'          => defined( 'ACROSSAI_MCP_MANAGER_VERSION' ) ? (string) ACROSSAI_MCP_MANAGER_VERSION : '0.0.0',
-				'site_slug'        => sanitize_title( get_bloginfo( 'name' ) ),
+				'site_slug'        => SiteSlug::get(),
 			),
 			200
 		);
