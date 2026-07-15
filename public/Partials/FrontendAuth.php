@@ -389,7 +389,12 @@ final class FrontendAuth {
 		echo '<title>' . $title . '</title>';
 		echo '<meta name="viewport" content="width=device-width, initial-scale=1">';
 		wp_print_styles( 'acrossai-mcp-frontend' );
-		echo '<style>body{font-family:system-ui,sans-serif;max-width:520px;margin:5em auto;padding:0 1em;color:#1d2327}</style>';
+		// Inline safety-net — legibility fallback if the external CSS 404s.
+		// Deliberately does NOT set `max-width` / `margin: auto` on body,
+		// because those constrain the external design and cause overflow
+		// (safety-net wins on cascade order — printed AFTER the <link>).
+		// The external SCSS handles the full centered-card layout.
+		echo '<style>body{font-family:system-ui,sans-serif;margin:0;padding:0;color:#1d2327;background:#f0f0f1;min-height:100vh}</style>';
 		echo '</head><body>';
 		// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- caller pre-escapes per the method's docblock contract.
 		echo $body_html;
