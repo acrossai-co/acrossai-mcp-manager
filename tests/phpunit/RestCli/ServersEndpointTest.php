@@ -71,13 +71,20 @@ class ServersEndpointTest extends WP_UnitTestCase {
 		$this->assertSame( 'Server A', $data['servers'][0]['name'] );
 	}
 
-	public function test_response_includes_server_slug_for_cli_matching(): void {
+	public function test_response_id_and_slug_both_carry_slug_string_for_cli_matching(): void {
 		// The CLI (`@acrossai/mcp-manager`) is invoked with `--server=<slug>` and
-		// compares that slug against the `slug` field on each returned server row.
-		// Prior to 2026-07-15 the endpoint returned `id` (integer PK) but omitted
-		// `slug` — the CLI's match failed and users saw the misleading
-		// "Server '<slug>' not in your available servers" error even though the
-		// server existed and the auth flow had succeeded.
+		// matches with `servers.find( s => s.id === serverId )` (per
+		// `src/serverValidator.js:24` in the CLI package). So `id` in the
+		// response MUST be the slug string, not the integer PK.
+		//
+		// Pre-2026-07-15 the endpoint returned `id` as `(int) $row->id`
+		// (e.g. `1`), so the match failed even though the auth flow succeeded
+		// and the server existed. Users saw the misleading
+		// "Server '<slug>' not in your available servers" error with
+		// "Available servers: • 1 (Default MCP Server)".
+		//
+		// Post-fix: `id` carries the slug string. `slug` alias is redundant /
+		// forward-compat and MUST equal `id`.
 		$this->seed_server( 'mcp-adapter-default-server', 1, 'Default MCP Server', 'default-route' );
 
 		$token = $this->issue_session_token( 'mcp-adapter-default-server' );
@@ -85,12 +92,25 @@ class ServersEndpointTest extends WP_UnitTestCase {
 
 		$this->assertSame( 200, $resp->get_status() );
 		$data = $resp->get_data();
-		$this->assertArrayHasKey(
-			'slug',
-			$data['servers'][0],
-			'CliController /servers response MUST include a `slug` field so the CLI can match against the --server=<slug> argument.'
+
+		$this->assertArrayHasKey( 'id', $data['servers'][0] );
+		$this->assertArrayHasKey( 'slug', $data['servers'][0] );
+
+		$this->assertSame(
+			'mcp-adapter-default-server',
+			$data['servers'][0]['id'],
+			'The `id` field MUST be the slug string (this is what the CLI matches on).'
 		);
-		$this->assertSame( 'mcp-adapter-default-server', $data['servers'][0]['slug'] );
+		$this->assertSame(
+			'mcp-adapter-default-server',
+			$data['servers'][0]['slug'],
+			'The `slug` field MUST equal the seeded slug (redundant/forward-compat alias for `id`).'
+		);
+		$this->assertSame(
+			$data['servers'][0]['id'],
+			$data['servers'][0]['slug'],
+			'`id` and `slug` MUST carry the same value in this contract.'
+		);
 	}
 
 	public function test_only_bound_server_returned_q4(): void {
