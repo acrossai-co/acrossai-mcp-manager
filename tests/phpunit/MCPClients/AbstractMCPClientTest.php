@@ -50,19 +50,31 @@ final class AbstractMCPClientTest extends TestCase {
 		};
 	}
 
-	// ─── derive_server_key matrix (research.md R2) ──────────────────────────
+	// ─── derive_server_key matrix (research.md R2 + 2026-07-15 site-slug prefix) ──
 
+	/*
+	 * Expected outputs carry the `wordpress-` prefix because this test suite
+	 * runs WITHOUT bootstrapping WordPress (SC-003) — `SiteSlug::get()` hits
+	 * its `! function_exists( 'get_bloginfo' )` fallback branch and returns
+	 * `SiteSlug::EMPTY_FALLBACK` (`'wordpress'`). Under a WP-bootstrapped
+	 * env the prefix would be `sanitize_title( get_bloginfo( 'name' ) )` —
+	 * see the `SiteSlugTest` case (WP-bootstrapped) for real-WP coverage.
+	 *
+	 * The empty-URL case still returns bare `SERVER_KEY_FALLBACK`
+	 * (`'wordpress-mcp'`) because that branch short-circuits BEFORE the
+	 * SiteSlug prefix is applied — the fallback is a self-contained sentinel.
+	 */
 	public static function deriveServerKeyMatrix(): array {
 		return array(
 			'empty url returns fallback'        => array( '', 'wordpress-mcp' ),
-			'full rest url returns last segment' => array( 'https://example.com/wp-json/mcp/foo', 'foo' ),
-			'trailing slash stripped'           => array( 'https://example.com/wp-json/mcp/foo/', 'foo' ),
-			'query string stripped'             => array( 'https://example.com/wp-json/mcp/foo?x=1', 'foo' ),
-			'bare slug accepted'                => array( 'foo', 'foo' ),
+			'full rest url returns last segment' => array( 'https://example.com/wp-json/mcp/foo', 'wordpress-foo' ),
+			'trailing slash stripped'           => array( 'https://example.com/wp-json/mcp/foo/', 'wordpress-foo' ),
+			'query string stripped'             => array( 'https://example.com/wp-json/mcp/foo?x=1', 'wordpress-foo' ),
+			'bare slug accepted'                => array( 'foo', 'wordpress-foo' ),
 			// research.md R2 wart: host-only URLs return the host as the
 			// key (the host IS the last path segment). Acceptable per spec.
-			'host-only with slash returns host' => array( 'https://example.com/', 'example.com' ),
-			'host-only bare returns host'       => array( 'example.com', 'example.com' ),
+			'host-only with slash returns host' => array( 'https://example.com/', 'wordpress-example.com' ),
+			'host-only bare returns host'       => array( 'example.com', 'wordpress-example.com' ),
 		);
 	}
 

@@ -1,6 +1,6 @@
 {
     "mcpServers": {
-        "test-server": {
+        "wordpress-test-server": {
             "command": "npx",
             "args": [
                 "-y",
