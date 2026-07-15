@@ -82,6 +82,27 @@ Use the action-only string `'cli_auth_approve'` for `wp_create_nonce()` AND `wp_
 - WordPress core `wp_login_url( $redirect_to )` source — the redirect_to is round-tripped via the `redirect_to` GET parameter, which goes through `urldecode()` on retrieval. Attacker-supplied opaque tokens with `+`, `&`, `=` characters can break the round-trip.
 - The spec will be updated at implementation time to align FR-007.3 with this decision (track via the spec realignment note in plan.md).
 
+### R3 amendment 2026-07-15 — preserve `?action=cli_auth&code=X` with hex-format validation
+
+**Revised decision**: preserve `?action=cli_auth&code=<32-char-hex>` in the redirect target passed to `wp_login_url()`. Fall through to the base-URL-only form when either the action isn't `cli_auth` OR the code doesn't match `/^[a-f0-9]{32}$/`.
+
+**Trigger**: operator feedback that the R3 UX ("return to terminal, copy auth URL again, re-open it") is a friction point. The CLI's polling window and the user's cognitive load both suffer for what turned out to be an easily-mitigable safety concern.
+
+**Mitigations for the original R3 concerns**:
+
+1. **`_wpnonce` round-trip brittleness** — NOT APPLICABLE. The URL preserved through login has NO `_wpnonce`. The initial `?action=cli_auth` URL from the CLI never contained `_wpnonce`; that nonce is generated inline server-side by `handle_cli_auth` after login on the return trip.
+2. **`//` scheme-relative injection via `code`** — MITIGATED by the `/^[a-f0-9]{32}$/` regex check applied BEFORE the value is passed to `add_query_arg`. Hex characters cannot contain `/`. CLI codes are always 32-char hex (MD5-style hashes generated server-side per `CliController::handle_auth_start`); any non-conforming value indicates either tampering or an unrelated URL and correctly falls back to base-URL-only.
+3. **Attacker-influenced `server` in URL** — NOT PRESERVED. `server` is fetched from the transient by `peek_pending_server( $code )` per SEC-001; keeping it out of the redirect URL is strictly safer AND simpler than R3 v1's blanket exclusion.
+
+**Load-bearing invariant**: the `[a-f0-9]{32}` regex is the sole line of defence against R3's original `//` injection concern. See `security-constraints.md` for the constraint statement. If a future refactor loosens the pattern (e.g., allows `-` for UUID-style codes), the security-constraints entry MUST be updated first with an equivalent injection-safety argument.
+
+**What the user sees now** (post-amendment): after login, browser lands directly on the Authorize card. Zero extra terminal round-trips. When the URL is malformed or the code is unrecognized, the branded "Missing Authentication Parameters" card still guides the user back to their terminal.
+
+**Cross-references**:
+- Implementation: `public/Partials/FrontendAuth.php::maybe_render_page` (the `! is_user_logged_in()` branch).
+- Constraint: `security-constraints.md §"Hex-format load-bearing invariant"`.
+- Test guards: `tests/phpunit/FrontendAuth/MaybeRenderPageTest.php` (3 new cases pinning the regex-based branch).
+
 ---
 
 ## Open items (none)

@@ -1,0 +1,241 @@
+/*
+ * FrontendAuth branded card styling.
+ *
+ * Consumed by `public/Partials/FrontendAuth.php::render_branded_card`.
+ * Applies to the four public-facing FrontendAuth screens:
+ *   .acrossai-mcp-frontend--consent  (Authorize CLI Access)
+ *   .acrossai-mcp-frontend--success  (CLI Authorization Approved)
+ *   .acrossai-mcp-frontend--warning  (CLI Login Not Enabled — kill switch)
+ *   .acrossai-mcp-frontend--info     (Missing Authentication Parameters)
+ *
+ * Visual language mirrors the admin AI Connectors tab (F021 constitution
+ * exception) — same accent color, card radius, and callout patterns — but
+ * scoped under `.acrossai-mcp-frontend__*` so admin styles don't collide.
+ *
+ * Class-name contract is PUBLIC API for the render_branded_card output.
+ * Any breaking change requires updating render_branded_card in sync.
+ */
+
+// -----------------------------------------------------------------------
+// Palette — reuses ai-connectors.scss values so the admin + frontend
+// share the same brand look. Duplicated here (not imported) because the
+// frontend is enqueued as a standalone stylesheet with no shared partials.
+// -----------------------------------------------------------------------
+
+$card-radius:      6px;
+$card-border:      #dcdcde;
+$card-hint:        #646970;
+$card-muted:       #50575e;
+
+$accent-blue:      #2271b1;
+$accent-blue-hover: #135e96;
+$accent-blue-bg:   #f0f6fc;
+
+$accent-green:     #00a32a;
+$accent-green-hover: #007a1f;
+$accent-green-bg:  #edfaef;
+
+$accent-amber:     #dba617;
+$accent-amber-hover: #b8930f;
+$accent-amber-bg:  #fcf9e8;
+
+$accent-grey:      #8c8f94;
+$accent-grey-hover: #6c6f74;
+$accent-grey-bg:   #f6f7f7;
+
+$page-bg:          #f0f0f1;
+$text-primary:     #1d2327;
+
+// -----------------------------------------------------------------------
+// Page shell — the render_page_shell body context.
+// The `<main>` element created by render_branded_card is the top-level
+// centred container. All parent-level layout lives on `body` (see the
+// inline safety-net <style> in render_page_shell for fallback).
+// -----------------------------------------------------------------------
+
+body {
+	background: $page-bg;
+	color: $text-primary;
+	font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+	             "Oxygen-Sans", Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+	line-height: 1.5;
+	margin: 0;
+	min-height: 100vh;
+	padding: 0;
+}
+
+// -----------------------------------------------------------------------
+// Card container
+// -----------------------------------------------------------------------
+
+.acrossai-mcp-frontend {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	min-height: 100vh;
+	padding: 40px 20px;
+	box-sizing: border-box;
+}
+
+.acrossai-mcp-frontend__card {
+	background: #fff;
+	border: 1px solid $card-border;
+	border-radius: $card-radius;
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+	max-width: 480px;
+	overflow: hidden;
+	position: relative;
+	width: 100%;
+}
+
+// -----------------------------------------------------------------------
+// Accent stripe — 4px band along the top of the card. Variant modifiers
+// on the parent .acrossai-mcp-frontend swap the color.
+// -----------------------------------------------------------------------
+
+.acrossai-mcp-frontend__stripe {
+	height: 4px;
+	width: 100%;
+
+	.acrossai-mcp-frontend--consent & { background: $accent-blue; }
+	.acrossai-mcp-frontend--success & { background: $accent-green; }
+	.acrossai-mcp-frontend--warning & { background: $accent-amber; }
+	.acrossai-mcp-frontend--info    & { background: $accent-grey; }
+}
+
+// -----------------------------------------------------------------------
+// Brand header
+// -----------------------------------------------------------------------
+
+.acrossai-mcp-frontend__brand {
+	padding: 20px 32px 0;
+}
+
+.acrossai-mcp-frontend__brand-name {
+	color: $card-muted;
+	font-size: 12px;
+	font-weight: 600;
+	letter-spacing: 0.05em;
+	text-transform: uppercase;
+}
+
+// -----------------------------------------------------------------------
+// Body — title + description + inline code
+// -----------------------------------------------------------------------
+
+.acrossai-mcp-frontend__body {
+	padding: 12px 32px 8px;
+}
+
+.acrossai-mcp-frontend__title {
+	color: $text-primary;
+	font-size: 22px;
+	font-weight: 600;
+	line-height: 1.3;
+	margin: 0 0 16px;
+}
+
+.acrossai-mcp-frontend__lede {
+	color: $text-primary;
+	font-size: 15px;
+	line-height: 1.55;
+	margin: 0 0 12px;
+}
+
+.acrossai-mcp-frontend__hint {
+	color: $card-hint;
+	font-size: 13px;
+	line-height: 1.55;
+	margin: 0 0 8px;
+}
+
+.acrossai-mcp-frontend__code {
+	background: $accent-grey-bg;
+	border: 1px solid $card-border;
+	border-radius: 3px;
+	color: $text-primary;
+	font-family: Consolas, Monaco, "Andale Mono", "DejaVu Sans Mono", monospace;
+	font-size: 13px;
+	padding: 2px 6px;
+	word-break: break-all;
+}
+
+// -----------------------------------------------------------------------
+// CTA footer
+// -----------------------------------------------------------------------
+
+.acrossai-mcp-frontend__cta {
+	padding: 8px 32px 28px;
+}
+
+.acrossai-mcp-frontend__button {
+	background: $accent-blue;
+	border: 1px solid $accent-blue;
+	border-radius: 4px;
+	color: #fff;
+	display: inline-block;
+	font-size: 14px;
+	font-weight: 500;
+	line-height: 1;
+	padding: 10px 20px;
+	text-decoration: none;
+	transition: background 0.15s ease, border-color 0.15s ease;
+
+	&:hover,
+	&:focus {
+		background: $accent-blue-hover;
+		border-color: $accent-blue-hover;
+		color: #fff;
+		outline: none;
+	}
+
+	&:focus {
+		box-shadow: 0 0 0 2px rgba(34, 113, 177, 0.35);
+	}
+
+	// Variant CTA colors — button follows the card variant's accent.
+	.acrossai-mcp-frontend--success & {
+		background: $accent-green;
+		border-color: $accent-green;
+		&:hover, &:focus { background: $accent-green-hover; border-color: $accent-green-hover; }
+	}
+
+	.acrossai-mcp-frontend--warning & {
+		background: $accent-amber;
+		border-color: $accent-amber;
+		color: $text-primary;
+		&:hover, &:focus { background: $accent-amber-hover; border-color: $accent-amber-hover; color: #fff; }
+	}
+
+	.acrossai-mcp-frontend--info & {
+		background: $accent-grey;
+		border-color: $accent-grey;
+		&:hover, &:focus { background: $accent-grey-hover; border-color: $accent-grey-hover; }
+	}
+}
+
+// -----------------------------------------------------------------------
+// Responsive breakpoint — reduce padding on narrow viewports.
+// -----------------------------------------------------------------------
+
+@media (max-width: 480px) {
+	.acrossai-mcp-frontend {
+		padding: 16px 12px;
+	}
+
+	.acrossai-mcp-frontend__brand,
+	.acrossai-mcp-frontend__body {
+		padding-left: 20px;
+		padding-right: 20px;
+	}
+
+	.acrossai-mcp-frontend__cta {
+		padding-left: 20px;
+		padding-right: 20px;
+		padding-bottom: 20px;
+	}
+
+	.acrossai-mcp-frontend__title {
+		font-size: 20px;
+	}
+}
