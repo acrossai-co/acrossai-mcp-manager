@@ -71,6 +71,28 @@ class ServersEndpointTest extends WP_UnitTestCase {
 		$this->assertSame( 'Server A', $data['servers'][0]['name'] );
 	}
 
+	public function test_response_includes_server_slug_for_cli_matching(): void {
+		// The CLI (`@acrossai/mcp-manager`) is invoked with `--server=<slug>` and
+		// compares that slug against the `slug` field on each returned server row.
+		// Prior to 2026-07-15 the endpoint returned `id` (integer PK) but omitted
+		// `slug` — the CLI's match failed and users saw the misleading
+		// "Server '<slug>' not in your available servers" error even though the
+		// server existed and the auth flow had succeeded.
+		$this->seed_server( 'mcp-adapter-default-server', 1, 'Default MCP Server', 'default-route' );
+
+		$token = $this->issue_session_token( 'mcp-adapter-default-server' );
+		$resp  = $this->call_with_token( $token );
+
+		$this->assertSame( 200, $resp->get_status() );
+		$data = $resp->get_data();
+		$this->assertArrayHasKey(
+			'slug',
+			$data['servers'][0],
+			'CliController /servers response MUST include a `slug` field so the CLI can match against the --server=<slug> argument.'
+		);
+		$this->assertSame( 'mcp-adapter-default-server', $data['servers'][0]['slug'] );
+	}
+
 	public function test_only_bound_server_returned_q4(): void {
 		// TASK-Q4 — two servers exist; session token bound to A → only A returned.
 		$this->seed_server( 'srv-a', 1, 'Server A', 'route-a' );

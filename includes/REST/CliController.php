@@ -348,6 +348,7 @@ final class CliController {
 				'servers' => array(
 					array(
 						'id'          => (int) $row->id,
+						'slug'        => (string) $row->server_slug,
 						'name'        => (string) $row->server_name,
 						'description' => (string) $row->description,
 						'enabled'     => (bool) $row->is_enabled,
