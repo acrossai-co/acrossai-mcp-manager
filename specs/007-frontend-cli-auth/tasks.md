@@ -305,3 +305,27 @@ This feature is sized for a single developer working primarily on one file plus 
 - **Cross-phase change (T018) requires Phase 6 sign-off**: the `CliController::peek_pending_server()` method widens Phase 6's surface. Architecture-Guard re-verify (T043) is the gate. If the Phase 6 owner objects, fall back to deferring SEC-001 via `/speckit-security-review-followup` and revert T001+T003+T005+T006+T007 + T018+T019+T021(b)+T023.
 - **Residual security findings (not addressed in-plan)**: SEC-003 (broadened authz — LOW, Phase 6 epic), SEC-004 (GET-as-mutation — INFO, documented). T041 spawns followup.
 - **Phase 5 OAuth audit (S9 spillover)**: NOT a Phase 7 task. Schedule separately via `/speckit-security-review-branch` against `005-oauth-connectors`. Mentioned in T041 for tracking.
+
+---
+
+## Phase 9: F007 v2 amendments (2026-07-15) — branded card + R3 amendment
+
+**Purpose**: reshape the four FrontendAuth screens with branded card styling AND revise R3 to preserve `?action=cli_auth&code=X` through the login redirect. Both driven by operator feedback (`?tab=abilities` bug diagnosis session on 2026-07-15). Neither breaks any v1 FR — all changes are additive amendments.
+
+**Commits in this phase**:
+
+- [X] T045 `743b698` **feat(frontend-auth)** — branded card styling + R3 amendment (initial). Adds `FrontendAuth::render_branded_card( $variant, $title, $body_html, ?$cta )` helper; refactors `handle_cli_auth` (both authorize + missing-params paths), `handle_approved`, `render_disabled_notice` to use it. Amends `maybe_render_page`'s login-redirect branch to preserve `?action=cli_auth&code=<32-char-hex>` in the redirect target when the code matches `/^[a-f0-9]{32}$/`. Adds `src/scss/frontend.scss` (~250 lines). Rebuilds `build/css/frontend.{css,asset.php}` + `frontend-rtl.css`. Updates `spec.md` (FR-020, FR-021, FR-022), `research.md` (R3 amendment), `security-constraints.md` (INV-R3-HEX invariant). Adds 4 PHPUnit cases across `MaybeRenderPageTest` (3 cases pinning the regex branch) + `HandleCliAuthTest` (1 case pinning the branded card wrapper). PHPCS 0/0, PHPStan L8 exit 0.
+
+- [X] T046 `9356ee2` **fix(frontend-auth)** — strip layout overrides from inline safety-net. Follow-up on T045 after operator screenshot showed vertical scrollbar overflow. Root cause: `render_page_shell`'s inline `<style>` still carried the pre-refactor `body { max-width: 520px; margin: 5em auto; padding: 0 1em }` rules that WIN the cascade over external CSS (inline `<style>` prints AFTER `wp_print_styles()` in HEAD). Combined with external CSS's `body { min-height: 100vh; margin: 0 }`, total document height = 100vh + 10em → forced scrollbar. Fix: reduce safety-net to minimal reset (font, color, background, `margin: 0`, `padding: 0`, `min-height: 100vh`). External SCSS now owns all layout. FR-022 codifies this rule. No SCSS change; no rebuild.
+
+**Deferred / not-yet-taken**:
+
+- [ ] T047 Manual E2E on `acrossai.co` — verify branded card rendering + login-redirect preservation end-to-end. Deferred to reviewer; requires live WP + npx CLI.
+- [ ] T048 `composer test` PHPUnit — deferred locally (WP test lib not bootstrapped). CI runs on push.
+
+**Cross-references**:
+- Plan artifacts: `spec.md §"F007 v2 amendments"`, `research.md §"R3 amendment 2026-07-15"`, `security-constraints.md §"Post-2026-07-15 addendum"`.
+- Combined-fixes branch for coordinated rsync deploy: `combined-fixes-for-rsync` (also carries PR #31 + PR #32 changes).
+- Related PRs: #30 (this one), #31 (`/servers id` field), #32 (MCP Clients config-key prefix). All three unblock the CLI end-to-end flow together.
+
+**Checkpoint**: F007 v2 complete. All four screens render with brand styling. Login-redirect preserves auth context. Ready for PR review + merge.
