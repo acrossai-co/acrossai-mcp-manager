@@ -375,3 +375,40 @@ if ( null !== $err ) {
 - Strict JSON-only — rejected, breaks the most common Bash + curl pattern (`-d 'k=v&k=v'`).
 - No Content-Type check at all (status quo before Q2) — rejected, leaves attackers free to probe REST API edge cases with mixed encodings.
 - Allowing `text/plain` as a third option — rejected, no legitimate use case + WP REST will parse it as raw string, which the controller cannot meaningfully consume.
+
+---
+
+## R-2026-07-15 — `/servers` response `id` field carries SLUG (not integer PK)
+
+### Decision
+
+The per-server object in `GET /servers` responses has its `id` field set to the ability slug string (`$row->server_slug`), NOT the integer database primary key (`$row->id`). A redundant `slug` field carries the same value as a forward-compat alias. The integer PK is not exposed anywhere in the response surface.
+
+### Rationale
+
+The `@acrossai/mcp-manager` CLI (source at `~/.npm/_npx/*/node_modules/@acrossai/mcp-manager/src/serverValidator.js:24`) matches with:
+
+```js
+const match = servers.find((s) => s.id === serverId);
+```
+
+Where `serverId` is the CLI's `--server=<slug>` argument. If `s.id` is the integer PK, the match fails against a slug string.
+
+The historical spec §Assumptions bullet already stated: *"The `server_id` parameter shape is the existing `MCPServer\Row::$server_slug` (URL-safe slug), not the numeric primary key. This matches how Phase 2 admin UI references servers and lets CLI tools use human-readable identifiers."* — the `/servers` RESPONSE contract was inconsistent with that ASSUMPTION. This amendment fixes the contract to match.
+
+### Alternatives considered
+
+1. **Keep `id` as integer, update CLI to read `slug`** — rejected. Would require updating and republishing the npm package + coordinating cache-busting on every operator's `~/.npm/_npx/` cache. Server-side single-file fix is strictly faster + safer.
+2. **Return BOTH the integer PK (as `id`) AND the slug (as `slug`), let clients pick** — first-pass fix (commit `42e82c1`) took this path. Rejected in follow-up (`6c4778b`) because the CLI's `s.id === serverId` line is the load-bearing comparison — adding a `slug` field the CLI doesn't read solves nothing.
+3. **Introduce a new field `identifier` = slug** — rejected. Would require both CLI update AND client-side conditional logic. The `id` field IS the identifier semantically; making it string-typed is the correct contract change.
+
+### Backwards-compatibility
+
+- **Client-side**: the shipped CLI (`@acrossai/mcp-manager` v0.0.9 and earlier) reads `s.id` as-is with no type assumption. When `id` was integer, string comparison against a slug argument failed. When `id` becomes string, string comparison succeeds. Strictly a bug fix from the CLI's perspective.
+- **No documented external consumers** treat `id` as integer for arithmetic or DB-join purposes. The integer PK's only prior use was as a display identifier in the CLI's fallback error message (`• 1 (Default MCP Server)`) — that display now shows the slug, which is more useful.
+
+### Citation
+
+- CLI source: `src/serverValidator.js:24` in the `@acrossai/mcp-manager` npm package.
+- Historical assumption: `spec.md §Assumptions` bullet on `server_id` shape.
+- Fix commits: `42e82c1` (initial, add `slug`), `6c4778b` (real fix, `id` = slug).

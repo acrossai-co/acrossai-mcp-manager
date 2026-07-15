@@ -398,3 +398,60 @@ All of the following MUST pass before this feature is considered complete:
 | Phase 5 (OAuth) | Shipped on `005-oauth-connectors` branch (PR open) — provides the `acrossai-mcp/v1/token` precedent for `__return_true` REST routes (memory S7) | ✅ shipped (under review) |
 
 **Cross-phase note**: this Phase 6 REST namespace `acrossai-mcp-manager/v1` is INTENTIONALLY DIFFERENT from Phase 5's `acrossai-mcp/v1`. Phase 5 (`acrossai-mcp/v1/token`) is the OAuth 2.0 endpoint for Claude / external OAuth clients. Phase 6 (`acrossai-mcp-manager/v1/*`) is the CLI-tooling namespace for first-party admin-mediated CLI flows. The two flows are deliberately separate — different threat models, different credential lifecycles, different user-facing UX. Keeping the namespaces distinct prevents future confusion and keeps the per-namespace permission policy clean.
+
+---
+
+## F006 amendment — `/servers` response `id` field carries SLUG (2026-07-15)
+
+**Trigger**: operator ran `npx -y @acrossai/mcp-manager --siteurl=https://acrossai.co --server=mcp-adapter-default-server` and hit:
+
+```
+❌ Server 'mcp-adapter-default-server' not in your available servers
+
+Available servers:
+  • 1 (Default MCP Server)
+```
+
+Auth flow succeeded, server existed and was correctly bound to the session, but the CLI's slug-based match failed because the `/servers` response returned `id: 1` (integer PK) while the CLI's `serverValidator.js:24` compares `s.id === serverId` where `serverId` is the SLUG.
+
+### FR-016 (new) — `/servers` response identifier semantics
+
+The `/servers` endpoint's per-server object MUST use the SLUG STRING as the value of the `id` field — NOT the integer database primary key. Rationale:
+
+- The `@acrossai/mcp-manager` CLI (npm package, cached at `~/.npm/_npx/*/node_modules/@acrossai/mcp-manager/src/serverValidator.js:24`) matches via `servers.find( s => s.id === serverId )` where `serverId` is the CLI's `--server=<slug>` argument.
+- The CLI's `configWriter.js` / `configDisplay.js:15` builds config keys as `${siteSlug}-${serverId}` — that concatenation MUST produce a legible slug-based identifier, not `<siteSlug>-1`.
+- Per the historical F006 spec §Assumptions bullet: "The `server_id` parameter shape is the existing `MCPServer\Row::$server_slug` (URL-safe slug), not the numeric primary key. This matches how Phase 2 admin UI references servers and lets CLI tools use human-readable identifiers." — the `/servers` RESPONSE contract was inconsistent with this stated ASSUMPTION; the amendment fixes the contract to match the assumption.
+
+Response object shape (MUST):
+
+```php
+array(
+    'id'          => (string) $row->server_slug, // WAS (int) $row->id — amended.
+    'slug'        => (string) $row->server_slug, // Redundant / forward-compat alias equal to `id`.
+    'name'        => (string) $row->server_name,
+    'description' => (string) $row->description,
+    'enabled'     => (bool) $row->is_enabled,
+    'version'     => (string) $row->server_version,
+    'namespace'   => $ns,
+    'route'       => $route,
+    'mcp_url'     => rest_url( $ns . '/' . $route ),
+)
+```
+
+The integer PK is intentionally NOT exposed. No documented consumer needs it; hiding it keeps the identifier surface single-string (slug-only). Prior consumers that treated `id` as `int` MUST update — but no such consumer exists in this codebase or in the published CLI.
+
+Regression-guarded by new PHPUnit case `ServersEndpointTest::test_response_id_and_slug_both_carry_slug_string_for_cli_matching` — seeds a server with slug `mcp-adapter-default-server`, asserts `$data['servers'][0]['id'] === 'mcp-adapter-default-server'` and `slug === id`.
+
+### Commit history
+
+| Commit | Semantic |
+|---|---|
+| `42e82c1` | Initial fix — added `slug` field alongside `id`. Later found insufficient (CLI reads `id`, not `slug`), superseded by `6c4778b`. Kept in git history for the discovery arc. |
+| `6c4778b` | Amended — `id` field itself now carries the slug string. `slug` kept as forward-compat alias. |
+
+### Cross-references
+
+- `includes/REST/CliController.php` — the `handle_servers` response body.
+- `tests/phpunit/RestCli/ServersEndpointTest.php` — regression guard.
+- Related PRs: #30 (F007 v2), #32 (F004 site-slug prefix). All three PRs together unblock the CLI end-to-end flow.
+- Combined-fixes branch for coordinated rsync deploy: `combined-fixes-for-rsync`.
