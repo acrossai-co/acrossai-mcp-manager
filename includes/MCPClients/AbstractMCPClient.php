@@ -8,6 +8,8 @@
 
 namespace AcrossAI_MCP_Manager\Includes\MCPClients;
 
+use AcrossAI_MCP_Manager\Includes\Utilities\SiteSlug;
+
 defined( 'ABSPATH' ) || exit;
 
 /**
@@ -165,14 +167,29 @@ abstract class AbstractMCPClient {
 	/**
 	 * Extract the inner mcpServers key from a server URL (Q1 2026-06-17).
 	 *
-	 * Strips query string + trailing slash, takes the last path segment.
-	 * Falls back to SERVER_KEY_FALLBACK on empty / unparsable inputs.
+	 * Strips query string + trailing slash, takes the last path segment,
+	 * then prefixes with the site slug (amended 2026-07-15) so the
+	 * admin-UI-rendered `mcpServers` key matches what the CLI
+	 * (`@acrossai/mcp-manager` at `configWriter.js` / `configDisplay.js:15`)
+	 * writes: `${siteSlug}-${serverId}`. Fixes the historical mismatch
+	 * where admin UI showed `mcp-adapter-default-server` but the CLI wrote
+	 * `<site>-mcp-adapter-default-server`, causing duplicate/orphaned
+	 * entries in `~/.claude.json` when operators copied one and the CLI
+	 * generated the other.
 	 *
-	 * Test matrix in research.md R2.
+	 * Site slug source: `Utilities\SiteSlug::get()` — the SAME helper
+	 * consumed by `CliController::handle_health` for the `/health`
+	 * `site_slug` field the CLI reads. Single source of truth per
+	 * constitution §VI (DRY).
+	 *
+	 * Falls back to SERVER_KEY_FALLBACK on empty / unparsable URL inputs.
+	 *
+	 * Test matrix in research.md R2 + amended 2026-07-15 for the site-slug
+	 * prefix in tests/phpunit/MCPClients/AbstractMCPClientTest.php.
 	 *
 	 * @param string $server_url Full server URL.
 	 *
-	 * @return string Derived server key.
+	 * @return string Derived server key of the form `<site-slug>-<url-tail>`.
 	 */
 	protected function derive_server_key( string $server_url ): string {
 		$no_query = (string) strtok( $server_url, '?' );
@@ -185,7 +202,8 @@ abstract class AbstractMCPClient {
 		if ( false === $last || '' === $last ) {
 			return self::SERVER_KEY_FALLBACK;
 		}
-		return $last;
+
+		return SiteSlug::get() . '-' . $last;
 	}
 
 	/**
