@@ -59,6 +59,22 @@ class DCRRegisterFreshTest extends OAuthTestCase {
 		$this->assertArrayNotHasKey( 'client_secret', $body );
 	}
 
+	public function test_omitted_auth_method_defaults_to_none_public_client(): void {
+		// Claude.ai / ChatGPT shape — public+PKCE client that omits the field.
+		// Must default to 'none' so the token exchange doesn't demand a secret
+		// the client never carries.
+		$response = $this->dispatch( array(
+			'redirect_uris' => array( 'https://claude.ai/api/mcp/auth_callback' ),
+			'grant_types'   => array( 'authorization_code', 'refresh_token' ),
+			'client_name'   => 'Claude',
+		) );
+
+		$this->assertSame( 201, $response->get_status() );
+		$body = $response->get_data();
+		$this->assertSame( 'none', $body['token_endpoint_auth_method'] );
+		$this->assertArrayNotHasKey( 'client_secret', $body );
+	}
+
 	public function test_missing_redirect_uris_returns_400(): void {
 		$response = $this->dispatch( array(
 			'grant_types' => array( 'authorization_code' ),

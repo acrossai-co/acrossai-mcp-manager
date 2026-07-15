@@ -305,9 +305,13 @@ final class ClientRegistrationController {
 			? array_values( array_filter( $body['response_types'], 'is_string' ) )
 			: array( 'code' );
 
+		// Default to 'none' — modern MCP hosts (Claude.ai, ChatGPT) register as
+		// public+PKCE clients and omit this field; they never carry a
+		// client_secret through the token exchange. Callers that want a
+		// confidential client pass 'client_secret_post' explicitly.
 		$token_endpoint_auth_method = isset( $body['token_endpoint_auth_method'] ) && is_string( $body['token_endpoint_auth_method'] )
 			? $body['token_endpoint_auth_method']
-			: 'client_secret_post';
+			: 'none';
 		if ( ! in_array( $token_endpoint_auth_method, array( 'none', 'client_secret_post' ), true ) ) {
 			return new \WP_Error(
 				'invalid_client_metadata',
