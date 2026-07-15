@@ -522,3 +522,26 @@ Both converge on US5 Auth Exchange + Polish.
 - Gate / verification / doc tasks: 19
 
 **Task count reflects** the broader scope (3 classes vs Phase 5's 6 classes, but 6 user stories vs Phase 5's 5, and 4 explicit Q1-Q4 regression gates that didn't exist in Phase 5). MVP scope (Phases 1-9, ~62 tasks) ships a working CLI → browser-approve → poll flow. Phases 10-12 add the value-delivery (App Password) + polish.
+
+---
+
+## Phase 13: F006 amendment (2026-07-15) — `/servers` `id` field carries slug
+
+**Purpose**: fix the CLI's `Server '<slug>' not in your available servers` error by making the `/servers` response's `id` field carry the slug string (not the integer PK). See spec.md §"F006 amendment" (FR-016) for the full rationale.
+
+**Commits in this phase**:
+
+- [X] T109 `42e82c1` **fix(cli): include server_slug in GET /servers response**. Initial fix — added `slug` field alongside `id`. Discovery: CLI reads `s.id`, not `s.slug` (verified via `/Users/raftaar1191/.npm/_npx/*/node_modules/@acrossai/mcp-manager/src/serverValidator.js:24`). Retained in git history for the design-decision trail.
+
+- [X] T110 `6c4778b` **fix(cli): make /servers `id` field carry the SLUG string (not the integer PK)**. Real fix — swaps `'id' => (int) $row->id` to `'id' => (string) $row->server_slug`. Keeps `slug` as forward-compat alias equal to `id`. Removes integer PK from the response surface entirely (no documented consumer needs it). Regression test extended: `ServersEndpointTest::test_response_id_and_slug_both_carry_slug_string_for_cli_matching` asserts both fields equal the seeded slug.
+
+- [ ] T111 Manual E2E on `acrossai.co` — after merge + deploy + OPcache flush, re-run `npx -y @acrossai/mcp-manager --siteurl=https://acrossai.co --server=mcp-adapter-default-server`. Expected: `Available servers: • mcp-adapter-default-server (Default MCP Server)` (was `• 1 (Default MCP Server)`), no `❌ not in your available servers` error, setup completes successfully. **DEFERRED** to reviewer.
+
+**Cross-references**:
+- `spec.md §"F006 amendment"` — full FR-016 statement + response shape contract.
+- `research.md §"R-2026-07-15 — id field carries slug"` — decision + rejected alternatives.
+- `security-constraints.md §"Post-2026-07-15 addendum"` — no new security invariants; identifier-semantic change note.
+- Combined-fixes branch: `combined-fixes-for-rsync` (also carries PR #30 + PR #32).
+- Related PRs: #30 (F007 v2), #32 (F004 MCP Clients site-slug prefix).
+
+**Checkpoint**: F006 amendment complete. CLI end-to-end flow unblocked.
