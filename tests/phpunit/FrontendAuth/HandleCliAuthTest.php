@@ -164,4 +164,20 @@ class HandleCliAuthTest extends WP_UnitTestCase {
 		$this->assertStringNotContainsString( 'wp-emoji-release.min.js', $html );
 		$this->assertStringNotContainsString( 'api.w.org', $html );
 	}
+
+	public function test_render_output_uses_branded_card_wrapper(): void {
+		// 2026-07-15 branded-card refactor — the four render sites all go
+		// through render_branded_card, which emits `.acrossai-mcp-frontend`
+		// as the outer wrapper class. Guard against regressions that would
+		// revert to the pre-refactor bare-<h1> markup.
+		$this->seed_pending( 'codeA', 'real-server' );
+		$_GET['code'] = 'codeA';
+
+		$html = $this->capture_render();
+
+		$this->assertStringContainsString( 'class="acrossai-mcp-frontend ', $html );
+		$this->assertStringContainsString( 'acrossai-mcp-frontend--consent', $html );
+		$this->assertStringContainsString( 'acrossai-mcp-frontend__card', $html );
+		$this->assertStringContainsString( 'acrossai-mcp-frontend__button', $html );
+	}
 }

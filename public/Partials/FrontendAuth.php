@@ -153,9 +153,34 @@ final class FrontendAuth {
 		nocache_headers();
 
 		if ( ! is_user_logged_in() ) {
-			// Base URL only — sidesteps URL-encoding round-trip and future
-			// wp_safe_redirect injection vector. Research §R3.
-			wp_safe_redirect( wp_login_url( self::get_base_url() ) );
+			// R3 amendment 2026-07-15: preserve `?action=cli_auth&code=X` in
+			// the redirect target so the user lands back on the consent page
+			// after login. `code` is validated against hex format
+			// (/^[a-f0-9]{32}$/) BEFORE inclusion — any deviation falls
+			// through to the base-URL-only path per the original R3
+			// conservatism. `server` is intentionally NOT preserved (it's
+			// fetched from the transient per SEC-001). `_wpnonce` is
+			// generated fresh on return inside handle_cli_auth. Load-bearing
+			// invariant: the hex regex mitigates R3's original `//` scheme-
+			// relative injection concern — do NOT loosen it without a
+			// security-constraints.md update.
+			// phpcs:disable WordPress.Security.NonceVerification.Recommended -- read-only param extraction; the state-mutating cli_auth_approve branch verifies its per-code nonce explicitly inside handle_approve().
+			$raw_code   = isset( $_GET['code'] ) ? sanitize_text_field( wp_unslash( $_GET['code'] ) ) : '';
+			$raw_action = isset( $_GET['action'] ) ? sanitize_text_field( wp_unslash( $_GET['action'] ) ) : '';
+			// phpcs:enable WordPress.Security.NonceVerification.Recommended
+
+			$redirect_to = self::get_base_url();
+			if ( 'cli_auth' === $raw_action && 1 === preg_match( '/^[a-f0-9]{32}$/', $raw_code ) ) {
+				$redirect_to = add_query_arg(
+					array(
+						'action' => 'cli_auth',
+						'code'   => $raw_code,
+					),
+					$redirect_to
+				);
+			}
+
+			wp_safe_redirect( wp_login_url( $redirect_to ) );
 			exit;
 		}
 
@@ -202,10 +227,16 @@ final class FrontendAuth {
 		$bound_server = ( '' !== $code ) ? CliController::peek_pending_server( $code ) : null;
 
 		if ( '' === $code || null === $bound_server ) {
-			$this->render_page_shell(
-				esc_html__( 'AcrossAI MCP Manager', 'acrossai-mcp-manager' ),
-				'<h1>' . esc_html__( 'Missing Authentication Parameters', 'acrossai-mcp-manager' ) . '</h1>'
-				. '<p>' . esc_html__( 'This page must be opened via a link from your CLI tool.', 'acrossai-mcp-manager' ) . '</p>'
+			$body  = '<p class="acrossai-mcp-frontend__lede">'
+				. esc_html__( 'This page must be opened via a link from your CLI tool.', 'acrossai-mcp-manager' )
+				. '</p>';
+			$body .= '<p class="acrossai-mcp-frontend__hint">'
+				. esc_html__( 'Return to your terminal, copy the authentication URL your CLI printed, and open it here.', 'acrossai-mcp-manager' )
+				. '</p>';
+			$this->render_branded_card(
+				'info',
+				esc_html__( 'Missing Authentication Parameters', 'acrossai-mcp-manager' ),
+				$body
 			);
 			return;
 		}
@@ -219,17 +250,25 @@ final class FrontendAuth {
 			self::get_base_url()
 		);
 
-		$html  = '<h1>' . esc_html__( 'Authorize CLI Access', 'acrossai-mcp-manager' ) . '</h1>';
-		$html .= '<p>' . sprintf(
+		$body = '<p class="acrossai-mcp-frontend__lede">' . sprintf(
 			/* translators: 1: server slug from the transient (authoritative source per SEC-001) */
-			esc_html__( 'A CLI tool is requesting access to your MCP server "%1$s".', 'acrossai-mcp-manager' ),
-			esc_html( $bound_server )
+			esc_html__( 'A CLI tool is requesting access to your MCP server %1$s.', 'acrossai-mcp-manager' ),
+			'<code class="acrossai-mcp-frontend__code">' . esc_html( $bound_server ) . '</code>'
 		) . '</p>';
-		$html .= '<p>' . esc_html__( 'Click Approve to grant the tool access. The session is single-use.', 'acrossai-mcp-manager' ) . '</p>';
-		$html .= '<p><a class="button button-primary" href="' . esc_url( $approve_url ) . '">'
-			. esc_html__( 'Approve', 'acrossai-mcp-manager' ) . '</a></p>';
+		$body .= '<p class="acrossai-mcp-frontend__hint">'
+			. esc_html__( 'The session is single-use. Click Approve to grant the tool access.', 'acrossai-mcp-manager' )
+			. '</p>';
 
-		$this->render_page_shell( esc_html__( 'AcrossAI MCP Manager', 'acrossai-mcp-manager' ), $html );
+		$this->render_branded_card(
+			'consent',
+			esc_html__( 'Authorize CLI Access', 'acrossai-mcp-manager' ),
+			$body,
+			array(
+				'url'   => esc_url( $approve_url ),
+				'label' => esc_html__( 'Approve', 'acrossai-mcp-manager' ),
+				'style' => 'primary',
+			)
+		);
 	}
 
 	/**
@@ -282,10 +321,17 @@ final class FrontendAuth {
 	 * Render the success page after `handle_approve` redirect.
 	 */
 	private function handle_approved(): void {
-		$html  = '<h1>' . esc_html__( 'CLI Authorization Approved', 'acrossai-mcp-manager' ) . '</h1>';
-		$html .= '<p>' . esc_html__( 'You can now return to your CLI tool — it will detect the approval shortly.', 'acrossai-mcp-manager' ) . '</p>';
-		$html .= '<p>' . esc_html__( 'This page can be closed.', 'acrossai-mcp-manager' ) . '</p>';
-		$this->render_page_shell( esc_html__( 'AcrossAI MCP Manager', 'acrossai-mcp-manager' ), $html );
+		$body  = '<p class="acrossai-mcp-frontend__lede">'
+			. esc_html__( 'You can now return to your CLI tool — it will detect the approval shortly.', 'acrossai-mcp-manager' )
+			. '</p>';
+		$body .= '<p class="acrossai-mcp-frontend__hint">'
+			. esc_html__( 'This page can be closed.', 'acrossai-mcp-manager' )
+			. '</p>';
+		$this->render_branded_card(
+			'success',
+			esc_html__( 'CLI Authorization Approved', 'acrossai-mcp-manager' ),
+			$body
+		);
 	}
 
 	/**
@@ -293,16 +339,25 @@ final class FrontendAuth {
 	 *
 	 * 2026-06-30 SEC-005 fix: emits Retry-After header and noindex meta to
 	 * signal retry timing and prevent search-engine indexing of the
-	 * disabled-notice page (CWE-1004).
+	 * disabled-notice page (CWE-1004). The noindex meta is prepended to the
+	 * body payload (invalid HTML per spec — meta belongs in head — but
+	 * browsers ignore it in body while robots/crawlers still respect it).
+	 * Preserved from pre-2026-07-15 behavior; retasking `render_page_shell`
+	 * to accept a head-injectable robots directive is out of scope here.
 	 */
 	private function render_disabled_notice(): void {
 		status_header( 503 );
 		header( 'Retry-After: 3600' );
 
-		$html  = '<meta name="robots" content="noindex,nofollow">';
-		$html .= '<h1>' . esc_html__( 'CLI Login Not Enabled', 'acrossai-mcp-manager' ) . '</h1>';
-		$html .= '<p>' . esc_html__( 'The CLI login flow is currently disabled on this site. Contact your administrator.', 'acrossai-mcp-manager' ) . '</p>';
-		$this->render_page_shell( esc_html__( 'AcrossAI MCP Manager', 'acrossai-mcp-manager' ), $html );
+		$body  = '<meta name="robots" content="noindex,nofollow">';
+		$body .= '<p class="acrossai-mcp-frontend__lede">'
+			. esc_html__( 'The CLI login flow is currently disabled on this site. Contact your administrator.', 'acrossai-mcp-manager' )
+			. '</p>';
+		$this->render_branded_card(
+			'warning',
+			esc_html__( 'CLI Login Not Enabled', 'acrossai-mcp-manager' ),
+			$body
+		);
 	}
 
 	/**
@@ -339,5 +394,68 @@ final class FrontendAuth {
 		// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- caller pre-escapes per the method's docblock contract.
 		echo $body_html;
 		echo '</body></html>';
+	}
+
+	/**
+	 * Render a branded card wrapper around the caller-supplied body HTML.
+	 *
+	 * Introduced 2026-07-15 to replace the four sites that previously echoed
+	 * bare `<h1>` + `<p>` markup into `render_page_shell`. The card structure
+	 * matches the visual language of the admin AI Connectors tab (F021 v1.1.0
+	 * constitution exception) — rounded card, subtle shadow, accent-colored
+	 * top stripe, primary CTA button — but is scoped under
+	 * `.acrossai-mcp-frontend__*` classes so it doesn't collide with admin.
+	 *
+	 * Variants control the accent color and top stripe:
+	 *  - `consent` (blue)   — handle_cli_auth authorize screen
+	 *  - `success` (green)  — handle_approved
+	 *  - `warning` (amber)  — render_disabled_notice (kill-switch)
+	 *  - `info`    (grey)   — missing-params fallback
+	 *
+	 * Any unknown variant falls through to `info`.
+	 *
+	 * @param string     $variant   One of 'consent' | 'success' | 'warning' | 'info'.
+	 * @param string     $title     Pre-escaped h1 text.
+	 * @param string     $body_html Pre-escaped body HTML.
+	 * @param array|null $cta       Optional `[ 'url' => string, 'label' => string, 'style' => 'primary' ]`.
+	 */
+	private function render_branded_card( string $variant, string $title, string $body_html, ?array $cta = null ): void {
+		$known_variants = array( 'consent', 'success', 'warning', 'info' );
+		if ( ! in_array( $variant, $known_variants, true ) ) {
+			$variant = 'info';
+		}
+		$variant_class = 'acrossai-mcp-frontend--' . $variant;
+
+		$card  = '<main class="acrossai-mcp-frontend ' . esc_attr( $variant_class ) . '">';
+		$card .= '<div class="acrossai-mcp-frontend__card">';
+		$card .= '<div class="acrossai-mcp-frontend__stripe" aria-hidden="true"></div>';
+		$card .= '<header class="acrossai-mcp-frontend__brand">';
+		$card .= '<span class="acrossai-mcp-frontend__brand-name">'
+			. esc_html__( 'AcrossAI MCP Manager', 'acrossai-mcp-manager' )
+			. '</span>';
+		$card .= '</header>';
+		$card .= '<div class="acrossai-mcp-frontend__body">';
+		$card .= '<h1 class="acrossai-mcp-frontend__title">' . $title . '</h1>';
+		// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- caller pre-escapes body per the method's docblock contract.
+		$card .= $body_html;
+		$card .= '</div>';
+
+		if ( is_array( $cta ) && isset( $cta['url'], $cta['label'] ) ) {
+			$style        = isset( $cta['style'] ) && is_string( $cta['style'] ) ? $cta['style'] : 'primary';
+			$button_class = 'acrossai-mcp-frontend__button acrossai-mcp-frontend__button--' . $style;
+			$card        .= '<footer class="acrossai-mcp-frontend__cta">';
+			$card        .= '<a class="' . esc_attr( $button_class ) . '" href="' . esc_url( $cta['url'] ) . '">'
+				. esc_html( $cta['label'] )
+				. '</a>';
+			$card        .= '</footer>';
+		}
+
+		$card .= '</div>';
+		$card .= '</main>';
+
+		$this->render_page_shell(
+			esc_html__( 'AcrossAI MCP Manager', 'acrossai-mcp-manager' ),
+			$card
+		);
 	}
 }
