@@ -193,3 +193,41 @@ WordPress**. The implications:
 - If a future i18n requirement emerges, wrap at the consumer boundary
   (Phase 2 amendment) — render the snippet with the placeholder
   string replaced via `str_replace(...)` at the moment of display.
+
+---
+
+## R-2026-07-15 — `mcpServers` key MUST be prefixed with site slug
+
+### Decision
+
+`AbstractMCPClient::derive_server_key( string $server_url )` returns `<site-slug>-<last-url-segment>` where site-slug comes from `\AcrossAI_MCP_Manager\Includes\Utilities\SiteSlug::get()`. All 7 concrete client renderers delegate to this method — no per-client changes needed.
+
+Site-slug derivation is extracted to `Utilities\SiteSlug::get()` per constitution §VI DRY (this is the 2nd usage — `CliController::handle_health` was the 1st). Empty-input fallback is the literal string `'wordpress'` — matches the CLI's `siteValidator.js:50` fallback `data.site_slug || 'wordpress'`.
+
+### Rationale
+
+The `@acrossai/mcp-manager` CLI writes `~/.claude.json` entries keyed as `${siteSlug}-${serverId}` (per `configWriter.js` / `configDisplay.js:15`). Prior to this amendment, the admin UI's copy-paste snippet used just the bare `serverId` (last URL segment), producing a different key. Operator running both flows ended up with duplicate/orphaned entries because the admin snippet and CLI-generated config didn't share a key.
+
+Fixing the ADMIN side (not the CLI) is the correct direction because:
+- CLI is source-of-truth for the deployed config file shape (`~/.claude.json` is Claude Code's own file, not the plugin's).
+- CLI is already published and cached in every operator's `~/.npm/_npx/` — updating it and forcing cache-bust is slower + more error-prone.
+- Admin UI is a helper for operators who prefer manual paste over auto-CLI; both paths should produce identical output.
+
+### Alternatives considered
+
+1. **Update the CLI to strip the site-slug prefix when writing** — rejected. CLI's approach is correct (namespacing per site prevents cross-site key collisions in `~/.claude.json`); admin UI's approach was wrong.
+2. **Add a `site_slug` param to `derive_server_key` and let callers pass their own** — rejected. Callers would all pass the same value; better to derive it in one place.
+3. **Read site slug from `home_url()` host part** — rejected. Site name is more human-friendly (`AcrossAI` → `acrossai`) than host derivation (`acrossai.co` → `acrossai-co` or similar). Also, `sanitize_title(get_bloginfo('name'))` matches what the CLI already gets from `/health`, ensuring exact string-equality across the two paths.
+4. **Inline `sanitize_title(get_bloginfo('name'))` in `AbstractMCPClient` without extracting a helper** — rejected per constitution §VI. The identical expression was already inline in `CliController::handle_health`; adding a 2nd inline usage triggers the DRY extraction rule.
+
+### Backwards-compatibility
+
+- **Old admin-UI-generated `~/.claude.json` entries** — will remain in the file under the old bare-slug key. Operators updating the plugin should manually remove old entries or accept the duplicate (harmless — old entry just isn't invoked because there's no reference to it). Not a blocking upgrade concern.
+- **Downstream MCPClient subclasses in other plugins** — none exist in this codebase. If any hypothetical subclass hardcoded assumptions about `derive_server_key`'s return shape (unlikely — it's a protected method), they would need updating.
+- **Test env** — 14 golden fixtures updated (`"test-server":` → `"wordpress-test-server":`). The MCPClients test suite runs WP-bootstrap-free per SC-003, so `SiteSlug::get()` returns the `'wordpress'` fallback.
+
+### Citation
+
+- CLI source: `~/.npm/_npx/*/node_modules/@acrossai/mcp-manager/src/{siteValidator.js:50,configDisplay.js:15,configWriter.js}`.
+- Fix commit: `2d7257e`.
+- Constitution §VI DRY.

@@ -331,3 +331,33 @@ With seven developers/agents after T009 closes:
 Implementation tasks: 9 (T008, T010–T016, T017 partial).
 Test tasks: 9 (T009 + 7×test-class-bundled-with-impl in T010–T016 + T017).
 Gate / verification / doc tasks: 12.
+
+---
+
+## Phase A: F004 amendment (2026-07-15) — `mcpServers` key prefixed with site slug
+
+**Purpose**: fix admin-UI ↔ CLI config-key mismatch. Prior to this amendment, admin UI's copy-paste snippet used bare `<server-slug>` as the `mcpServers` key while the CLI's `writeConfig` output used `<site-slug>-<server-slug>` — operator's `~/.claude.json` ended up with two entries for the same server under different keys.
+
+See `spec.md §"F004 amendment"` for FR-013 + FR-014 statements, `research.md §"R-2026-07-15"` for design decision + rejected alternatives, and `security-constraints.md §"Post-2026-07-15 addendum"` for the security-posture note.
+
+**Commit in this phase**:
+
+- [X] TA-01 `2d7257e` **fix(mcp-clients): prefix rendered mcpServers config key with site slug (match what CLI writes)**. Three-part change:
+  1. **New helper** `Includes\Utilities\SiteSlug` (~60 LOC) — canonical `SiteSlug::get()` returning `sanitize_title(get_bloginfo('name'))` with `'wordpress'` fallback. Constitution §VI DRY — this is the 2nd usage (extracted from inline in `CliController::handle_health`).
+  2. **`CliController::handle_health` refactor** — swaps inline expression → `SiteSlug::get()`. Same `/health` response contract; no behavior change (except empty-site-name fallback which now returns `'wordpress'` instead of empty string — safer).
+  3. **`AbstractMCPClient::derive_server_key` amendment** — returns `SiteSlug::get() . '-' . $last_url_segment` (was just `$last_url_segment`). All 7 concrete clients inherit the prefix automatically. `SERVER_KEY_FALLBACK` sentinel short-circuits BEFORE the prefix — unchanged behavior for empty-URL edge case.
+
+  Tests: new WP-bootstrapped `Utilities\SiteSlugTest` (6 cases including CLI-fallback-constant sync guard). Updated `AbstractMCPClientTest::deriveServerKeyMatrix` (7 rows now expect `wordpress-<X>` per SC-003 WP-bootstrap-free env). Mechanical rewrite of all 14 golden fixtures under `tests/phpunit/MCPClients/fixtures/*.json` (`"test-server": {` → `"wordpress-test-server": {`).
+
+  Quality: composer phpcs 0/0 on all touched files, PHPStan L8 exit 0.
+
+- [ ] TA-02 Manual E2E on `acrossai.co` — after merge + deploy + OPcache flush, visit MCP Manager → Edit Default Server → MCP Clients → Claude Desktop. Confirm rendered JSON has `"acrossai-mcp-adapter-default-server"` as the mcpServers key (was `"mcp-adapter-default-server"`). Copy the snippet + paste into `~/.claude.json`. Re-run `npx -y @acrossai/mcp-manager --siteurl=https://acrossai.co --server=mcp-adapter-default-server` and confirm the CLI's output key matches the pasted key (single canonical entry, no duplicate). **DEFERRED** to reviewer.
+
+**Cross-references**:
+- `spec.md §"F004 amendment"` — FR-013, FR-014.
+- `research.md §"R-2026-07-15"` — full rationale + rejected alternatives.
+- `security-constraints.md §"Post-2026-07-15 addendum"` — no security impact.
+- Combined-fixes branch: `combined-fixes-for-rsync` (also carries PR #30 + PR #31).
+- Related PRs: #30 (F007 v2 branded card + R3), #31 (F006 `/servers` `id` = slug).
+
+**Checkpoint**: F004 amendment complete. Admin UI's config-key output now matches CLI's `writeConfig` output — single canonical entry per site per server in operator's `~/.claude.json`.

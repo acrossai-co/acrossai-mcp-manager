@@ -94,3 +94,18 @@ reason about and to defend.
 Secret plaintext at rest, Phase 2) is unrelated to this module. SEC-002
 (`admin_url esc_url`) is N/A (no `admin_url()` calls here). SEC-003
 (slug sanitiser) is N/A (no DB writes here).
+
+---
+
+## Post-2026-07-15 addendum — site-slug prefix + DRY extraction (no security impact)
+
+Commit `2d7257e` extracts `sanitize_title( get_bloginfo( 'name' ) )` into a shared `Includes\Utilities\SiteSlug::get()` helper and updates `AbstractMCPClient::derive_server_key` to prefix the returned `mcpServers` key with the site slug. Security posture assessment:
+
+- **No new user input** — the site slug is derived from `get_bloginfo( 'name' )` (an admin-configured value set via `Settings → General`), not from any request-time parameter.
+- **No new REST route, no new writes, no new capabilities** — the extraction is a pure refactor across two existing consumers (`CliController::handle_health` /health response + `AbstractMCPClient::derive_server_key` admin-UI snippet).
+- **No output escaping regression** — snippet output is rendered via `wp_kses_post()` / `esc_html()` in the Tokens-tab UI (Phase 2 consumer) exactly as before. The prefix concatenation happens on already-sanitized values (`sanitize_title` output is safe for HTML/attr contexts).
+- **No new secrets** — the site slug is public information (visible in every page's `<title>`, in every REST response's `site_slug` field). Prefixing the config key with it doesn't leak anything new.
+- **DRY extraction is a defense-in-depth win** — two consumers now share one canonical derivation. Any future security-hardening change to the site-slug logic (e.g., adding character restrictions) applies uniformly. Previously, an update to `CliController::handle_health` could drift from `AbstractMCPClient` if the second consumer's inline expression was missed.
+- **`EMPTY_FALLBACK = 'wordpress'` sync guard** — the test `SiteSlugTest::test_fallback_constant_matches_cli_default` pins this constant to `'wordpress'` to prevent silent drift from the CLI's own `data.site_slug || 'wordpress'` fallback. Without this guard, an accidental refactor of the constant would produce a subtle key-mismatch bug across the admin UI ↔ CLI boundary.
+
+No new CWEs introduced. No existing constraints relaxed. LOW risk (unchanged).
