@@ -352,6 +352,14 @@ final class Main {
 		$this->loader->add_action( 'admin_init', $settings_menu, 'register_settings' );
 
 		/**
+		 * `acrossai_addons` filter — drop our own slug from the list rendered
+		 * on the shared Add-ons page (bundled in acrossai-co/main-menu 0.0.22+).
+		 * An already-active plugin should not appear as an installable add-on.
+		 */
+		$addons_filter = \AcrossAI_MCP_Manager\Admin\Partials\AddonsFilter::instance();
+		$this->loader->add_filter( 'acrossai_addons', $addons_filter, 'remove_self' );
+
+		/**
 		 * Admin notices — extracted to Admin\Partials\Notices per RT-2.
 		 * - render_action_result_notice consumes the `?notice=...` query var set by
 		 *   Settings::handle_actions() redirects (FR-016)
