@@ -1318,7 +1318,8 @@ When a feature description references "landed inline with F###", verify tasks.md
 
 ### DEC-ADDONS-PAGE-VENDOR-CTOR-BOOT — External-package classes whose constructor self-registers all hooks are exempt from the Loader-only rule (A1), and MUST instead be instantiated inside `Main::define_admin_hooks()` under a `class_exists` guard + `try/catch`
 
-**Status**: Active (Feature 022 — 2026-07-12)
+**Status**: Superseded (Feature 028 — 2026-07-17). `\AcrossAI_Addon\AddonsPage` was removed from `acrossai-co/main-menu` 0.0.22 alongside the `freemius/wordpress-sdk` dependency. This plugin no longer instantiates a self-registering external class; the Add-ons page in 0.0.22+ is filter-driven (`acrossai_addons`) and needs no consumer-side boot. Retained here as the reference pattern for any *future* self-registering vendor class. See `docs/planings-tasks/028-remove-freemius-and-filter-self.md`.
+**Original status**: Active (Feature 022 — 2026-07-12)
 **Scope**: Every consumer plugin integrating `\AcrossAI_Addon\AddonsPage` (bundled in the vendored `acrossai-co/main-menu` package) or any future external-package class that follows the same self-registering-in-constructor pattern.
 **Tags**: `vendor-integration, main-menu, addons-page, external-package, a1-exception, boot-flow, class-exists-guard, try-catch, generalizable`
 
@@ -1363,7 +1364,8 @@ Reference: `vendor/acrossai-co/main-menu/src/Addons/FreemiusInitializer.php` `DE
 
 ### DEC-FREEMIUS-DOUBLE-OPTIN-GATES-ACCOUNT — Freemius' Account submenu requires a completed email round-trip; `is_pending_activation: true` in `fs_accounts` proves click happened but confirmation link wasn't followed
 
-**Status**: Active (Feature 022 — 2026-07-13)
+**Status**: Superseded (Feature 028 — 2026-07-17). This plugin dropped Freemius entirely when `acrossai-co/main-menu` 0.0.22 removed the `freemius/wordpress-sdk` dependency. The double-opt-in state machine no longer applies to any live surface here. The DB-sanity SQL and LocalWP dev-mode recipe below stay useful for any *other* AcrossAI plugin still using an unretired Freemius integration; audit-prune once no consumer remains. See `docs/planings-tasks/028-remove-freemius-and-filter-self.md`.
+**Original status**: Active (Feature 022 — 2026-07-13)
 **Scope**: Every consumer plugin that instantiates `\AcrossAI_Addon\AddonsPage` against a Freemius product with `is_wp_org_compliant: true` (which is the default for AcrossAI umbrella products). Applies to `acrossai-mcp-manager`, `acrossai-abilities-manager`, and every future AcrossAI plugin.
 **Tags**: `freemius, double-opt-in, wp-org-compliant, is_registered, is_pending_activation, fs_accounts, localwp, generalizable`
 
