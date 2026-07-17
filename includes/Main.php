@@ -352,98 +352,12 @@ final class Main {
 		$this->loader->add_action( 'admin_init', $settings_menu, 'register_settings' );
 
 		/**
-		 * Add-ons submenu page — bundled in acrossai-co/main-menu (\AcrossAI_Addon\AddonsPage).
-		 *
-		 * The AddonsPage constructor self-registers all WordPress hooks
-		 * (admin_menu, admin_init, admin_enqueue_scripts, admin_notices,
-		 * wp_ajax_acrossai_addons_*, admin_post_acrossai_addons_connect_again)
-		 * — no Loader wiring needed. Accepted deviation from Boot Flow Rule
-		 * (see DEC-ADDONS-PAGE-VENDOR-CTOR-BOOT) because the external package's
-		 * public API does not expose individual hook methods. Guarded per
-		 * Constitution §V Integration Resilience — fails gracefully when the
-		 * vendor package is stripped from a build. Freemius credentials are
-		 * scoped to this plugin's Freemius product (id 34418, slug
-		 * `acrossai-add-ons`). The Freemius slug is intentionally distinct
-		 * from the WordPress plugin slug (`acrossai-mcp-manager`) so the
-		 * Freemius product represents the shared add-ons surface rather
-		 * than the plugin itself.
-		 * Mirrors acrossai-abilities-manager Feature 038 DEC-EXTERNAL-PACKAGE-HOOK-CTOR.
-		 *
-		 * The `fs_menu` array declares this plugin's intent for each Freemius
-		 * auto-submenu explicitly (main-menu 0.0.16+). Every key is spelled
-		 * out so the full menu policy is visible at the call site — flip any
-		 * value here to change what operators see, without needing a vendor
-		 * release. The vendor's DEFAULT_MENU is used only when a consumer
-		 * plugin does NOT pass `fs_menu` at all.
+		 * `acrossai_addons` filter — drop our own slug from the list rendered
+		 * on the shared Add-ons page (bundled in acrossai-co/main-menu 0.0.22+).
+		 * An already-active plugin should not appear as an installable add-on.
 		 */
-		if ( class_exists( \AcrossAI_Addon\AddonsPage::class ) ) {
-			try {
-				new \AcrossAI_Addon\AddonsPage(
-					ACROSSAI_MCP_MANAGER_PLUGIN_FILE,
-					array(
-						'fs_product_id' => '34418',
-						'fs_public_key' => 'pk_d61a7ddb1a619f7697fbb4fc397b6',
-						'fs_slug'       => 'acrossai-add-ons',
-						// Freemius product 34418 (slug `acrossai-add-ons`) is the
-						// AcrossAI umbrella — one shared Freemius product for
-						// every AcrossAI plugin's Add-ons page + license
-						// activation surface.
-						//
-						// - `addons`  : the point of the umbrella — the ONE
-						// Add-ons page for the whole ecosystem.
-						// - `account` : one place for all license activations
-						// (each add-on activates its license
-						// here).
-						// - `contact` : single contact surface for the whole
-						// ecosystem.
-						// - `support` : off — Freemius links this to a
-						// WP.org forum keyed on the product's
-						// slug. The umbrella product is NOT on
-						// WP.org, so the link would be dead.
-						// Per-plugin support surfaces live in
-						// each plugin's own main-menu pages.
-						// - `pricing`/`upgrade` : off — pricing/upgrade
-						// belongs to individual add-ons, not
-						// the umbrella. With
-						// `has_paid_plans => false` on this
-						// product these would render Freemius'
-						// placeholder anyway.
-						'fs_menu'       => array(
-							'account' => true,
-							'contact' => true,
-							'addons'  => true,
-							'support' => false,
-							'pricing' => false,
-							'upgrade' => false,
-						),
-						// `fs_menu.addons => true` alone is not enough — the
-						// Freemius SDK also gates the Add-ons submenu row on
-						// `if ( $this->has_addons() )` (class-freemius.php:18964).
-						// Pass `fs_has_addons => true` so the vendor forwards
-						// `has_addons => true` to fs_dynamic_init() and the row
-						// actually renders. Empty add-on lists render Freemius'
-						// "no add-ons yet" placeholder — expected for a fresh
-						// umbrella product with no add-ons published yet.
-						// Requires main-menu 0.0.18+.
-						'fs_has_addons' => true,
-					)
-				);
-			} catch ( \Throwable $e ) {
-				$error_message = $e->getMessage();
-				add_action(
-					'admin_notices',
-					function () use ( $error_message ) {
-						if ( ! current_user_can( 'manage_options' ) ) {
-							return;
-						}
-						printf(
-							'<div class="notice notice-error"><p><strong>AcrossAI MCP Manager:</strong> %s</p></div>',
-							esc_html( $error_message )
-						);
-					}
-				);
-			}
-		}
+		$addons_filter = \AcrossAI_MCP_Manager\Admin\Partials\AddonsFilter::instance();
+		$this->loader->add_filter( 'acrossai_addons', $addons_filter, 'remove_self' );
 
 		/**
 		 * Admin notices — extracted to Admin\Partials\Notices per RT-2.

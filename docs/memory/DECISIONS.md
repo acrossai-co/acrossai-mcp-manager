@@ -1318,7 +1318,8 @@ When a feature description references "landed inline with F###", verify tasks.md
 
 ### DEC-ADDONS-PAGE-VENDOR-CTOR-BOOT — External-package classes whose constructor self-registers all hooks are exempt from the Loader-only rule (A1), and MUST instead be instantiated inside `Main::define_admin_hooks()` under a `class_exists` guard + `try/catch`
 
-**Status**: Active (Feature 022 — 2026-07-12)
+**Status**: Superseded (Feature 028 — 2026-07-17). `\AcrossAI_Addon\AddonsPage` was removed from `acrossai-co/main-menu` 0.0.22 alongside the `freemius/wordpress-sdk` dependency. This plugin no longer instantiates a self-registering external class; the Add-ons page in 0.0.22+ is filter-driven (`acrossai_addons`) and needs no consumer-side boot. Retained here as the reference pattern for any *future* self-registering vendor class. See `docs/planings-tasks/028-remove-freemius-and-filter-self.md`.
+**Original status**: Active (Feature 022 — 2026-07-12)
 **Scope**: Every consumer plugin integrating `\AcrossAI_Addon\AddonsPage` (bundled in the vendored `acrossai-co/main-menu` package) or any future external-package class that follows the same self-registering-in-constructor pattern.
 **Tags**: `vendor-integration, main-menu, addons-page, external-package, a1-exception, boot-flow, class-exists-guard, try-catch, generalizable`
 
@@ -1363,7 +1364,8 @@ Reference: `vendor/acrossai-co/main-menu/src/Addons/FreemiusInitializer.php` `DE
 
 ### DEC-FREEMIUS-DOUBLE-OPTIN-GATES-ACCOUNT — Freemius' Account submenu requires a completed email round-trip; `is_pending_activation: true` in `fs_accounts` proves click happened but confirmation link wasn't followed
 
-**Status**: Active (Feature 022 — 2026-07-13)
+**Status**: Superseded (Feature 028 — 2026-07-17). This plugin dropped Freemius entirely when `acrossai-co/main-menu` 0.0.22 removed the `freemius/wordpress-sdk` dependency. The double-opt-in state machine no longer applies to any live surface here. The DB-sanity SQL and LocalWP dev-mode recipe below stay useful for any *other* AcrossAI plugin still using an unretired Freemius integration; audit-prune once no consumer remains. See `docs/planings-tasks/028-remove-freemius-and-filter-self.md`.
+**Original status**: Active (Feature 022 — 2026-07-13)
 **Scope**: Every consumer plugin that instantiates `\AcrossAI_Addon\AddonsPage` against a Freemius product with `is_wp_org_compliant: true` (which is the default for AcrossAI umbrella products). Applies to `acrossai-mcp-manager`, `acrossai-abilities-manager`, and every future AcrossAI plugin.
 **Tags**: `freemius, double-opt-in, wp-org-compliant, is_registered, is_pending_activation, fs_accounts, localwp, generalizable`
 
@@ -1650,3 +1652,46 @@ pass-through for non-vendor slugs).
 - Companion architecture pattern: `A17` (request-scoped WP REST context
   capture) — required because the swapped callbacks don't receive
   McpServer context
+
+---
+
+### 2026-07-17 — D26 — Consumer plugin MUST drop its own slug from a shared vendor filter that renders an ecosystem installable-list
+
+**Status**: Active (Feature 028 — 2026-07-17)
+**Scope**: Every AcrossAI plugin whose slug appears in `\AcrossAI_Main_Menu\AddonsPageRenderer::ADDONS` (currently: `acrossai-abilities-manager`, `acrossai-mcp-manager`, `acrossai-model-manager`, `turn-off-ai-features`) and any future vendor-published `apply_filters()`-driven ecosystem list where an already-installed consumer would otherwise render as a self-referential "installable" card.
+**Tags**: `vendor-integration, main-menu, consumer-self-exclusion, addons-page, filter-driven-list, admin-partials, generalizable`
+
+**Why this is durable**
+
+Vendor-owned shared surfaces that enumerate ecosystem plugins (Add-ons pages, "related plugins" widgets, dashboard grids) typically hardcode a baseline list and expose it through a WordPress filter. Every consumer plugin present in the baseline is, by definition, already active when the filter runs on that install — so rendering an "Install" card for it is UX-nonsensical (button on an already-active plugin) and becomes an outright bug once the vendor's render inspects `is_plugin_active()` and starts showing an "Activate" or "Deactivated" state on an active plugin. F028 hit exactly this shape with `acrossai-co/main-menu` 0.0.22's `acrossai_addons` filter: the vendor's `AddonsPageRenderer::ADDONS` baseline contains this plugin's slug. Without a consumer-side filter, the plugin would advertise itself.
+
+**Decision**
+
+Every AcrossAI plugin whose slug appears in a vendor's ecosystem-list baseline MUST ship a small singleton in `admin/Partials/` (e.g., `AddonsFilter`) that hooks the vendor's filter at default priority 10 and drops the entry where `slug === <own_plugin_slug>`. Requirements:
+
+1. **Singleton** under `AcrossAI_MCP_Manager\Admin\Partials\` (or the plugin's equivalent namespace) with private `__construct` — matches A2 + S6.
+2. **Loader-wired** — filter registration lives in `Main::define_admin_hooks()` via `$this->loader->add_filter( '<vendor_filter>', <instance>, '<method>' )` — matches A1.
+3. **Reuse the plugin's canonical slug constant** (this plugin: `\ACROSSAI_MCP_MANAGER_PLUGIN_NAME_SLUG` per D1) — never introduce a third literal (Principle VI).
+4. **Defensive normalization** — non-array top-level input returns `array()`; non-array entries in the array are dropped by the inner filter. Callers that pass malformed shapes get harmless empty results, not PHP warnings.
+5. **`array_values()` reindex** — return a numerically-indexed array (0..N-1) so `wp_json_encode` doesn't emit an object.
+
+Complements D20: where D20 says "verify the vendor doesn't already register your ADDITION before wiring a consumer filter" (avoid double-registration), D26 says "drop your own SUBTRACTION from vendor-hardcoded ecosystem lists" (avoid self-advertisement). Together they form the consumer-side filter-hygiene pair for shared vendor packages.
+
+**Tradeoffs / Prevention**
+
+- **Gained**: consistent UX across every wp-admin where an AcrossAI plugin is installed — no self-referential "Install" cards; Add-ons page always shows *other* installable options. Cheap: one 60-line file per consumer, zero performance impact (vendor memoizes filter output per request).
+- **Made harder**: every AcrossAI plugin now must ship this file; forgetting it silently re-introduces the self-advertisement UX regression. Mitigation: this DEC + review-time grep gate — `grep -rn 'acrossai_addons' admin/Partials/` MUST return at least one match on any plugin listed in `AddonsPageRenderer::ADDONS`.
+- **Reconsider**: if a vendor future-releases a filter with per-caller context (e.g., `apply_filters( 'acrossai_addons', $addons, $context )` where `$context` names the requesting plugin), consumers could push the self-exclusion into the vendor. Until then, every consumer owns its own drop.
+- **Related**: `D1` (canonical `ACROSSAI_MCP_MANAGER_PLUGIN_NAME_SLUG` constant — the slug source-of-truth this DEC mandates reusing); `D20` (consumer-side default-registration hygiene — the additive-side complement); `S6` (singleton private `__construct` invariant this DEC's singleton relies on).
+
+**Evidence**
+
+- `admin/Partials/AddonsFilter.php` — this plugin's canonical implementation (~60 LOC): singleton, Loader-wired, reuses `\ACROSSAI_MCP_MANAGER_PLUGIN_NAME_SLUG` via `defined()` guard, defensively normalizes input, reindexes via `array_values()`.
+- `includes/Main.php::define_admin_hooks()` — the Loader wiring, `$this->loader->add_filter( 'acrossai_addons', AddonsFilter::instance(), 'remove_self' )`.
+- `tests/phpunit/Admin/AddonsFilterTest.php` — 4 phpunit cases: strip+reindex, no-op when own slug absent, non-array input, non-array entries.
+- `vendor/acrossai-co/main-menu/src/AddonsPageRenderer.php` — the vendor contract: `ADDONS` baseline + `get_addons()` runs `apply_filters( 'acrossai_addons', self::ADDONS )` with per-request memoization.
+- F028 planning doc: `docs/planings-tasks/028-remove-freemius-and-filter-self.md`.
+
+**Where to look next**
+
+Before adding a new AcrossAI plugin to `AddonsPageRenderer::ADDONS`: ship the equivalent `AddonsFilter` singleton in that plugin's `admin/Partials/` in the SAME PR that adds the baseline entry. When bumping `acrossai-co/main-menu` past 0.0.23: verify the `ADDONS` baseline still contains this plugin's slug (the filter is inert but harmless if the slug isn't present). If the vendor evolves to a per-caller-context filter (`$context` argument), revisit whether the vendor should absorb the self-exclusion.
