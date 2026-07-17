@@ -4,7 +4,7 @@ Tags: mcp, ai, copilot, vscode, claude
 Requires at least: 7.0
 Requires PHP: 8.1
 Tested up to: 7.0
-Stable tag: 0.1.1
+Stable tag: 0.1.2
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -180,6 +180,9 @@ No additional software is needed on the WordPress side. Your MCP clients (VS Cod
 4. Per-provider configuration file locations and top-level keys
 
 == Changelog ==
+
+= 0.1.2 =
+* **Feature 027 — Fix: DCR `token_endpoint_auth_method` default flipped to `none` for public+PKCE clients.** `ClientRegistrationController::handle_register()` (`includes/OAuth/ClientRegistrationController.php:310`) previously defaulted the RFC 7591 Dynamic Client Registration `token_endpoint_auth_method` field to `client_secret_post` when the caller omitted it. Modern MCP hosts (Claude.ai, ChatGPT, Cursor, Cline) register as public+PKCE clients — they omit the field in DCR and never carry a `client_secret` through the `/token` exchange. The old default silently stored these clients as confidential; the follow-up authorization-code exchange then failed at `TokenController::handle_authorization_code()` (`includes/OAuth/TokenController.php:106-111`) with `invalid_client` HTTP 401 *after* the auth code had already been consumed atomically at `AuthCodeRepository::consume_atomic` line 89 — so the client saw a generic "Authorization failed" page with no ability to retry. Default now flips to `none`, matching RFC 8252 §8.4 for public+PKCE clients. Confidential-client callers can still pass `token_endpoint_auth_method=client_secret_post` explicitly in the DCR body; admin-generated clients at `handle_admin_generate` are unaffected (they continue to hardcode `client_secret_post`). New phpunit case `test_omitted_auth_method_defaults_to_none_public_client` in `tests/phpunit/OAuth/DCRRegisterFreshTest.php` locks the invariant.
 
 = 0.1.1 =
 * **Feature 028 — Retire Freemius integration; consume `acrossai-co/main-menu` 0.0.22+ filter-driven Add-ons page.** The bundled `freemius/wordpress-sdk` transitive dependency is dropped entirely (vendor removed it from `acrossai-co/main-menu` 0.0.22's `require` block along with the `AcrossAI_Addon\` PSR-4 namespace). This plugin's Freemius integration in `Main::define_admin_hooks()` — the `\AcrossAI_Addon\AddonsPage` instantiation with `fs_product_id => '34418'` / `fs_public_key` / `fs_slug => 'acrossai-add-ons'` / `fs_menu` / `fs_has_addons` config, its `class_exists`+`try/catch` guards, and its admin-notice fallback closure — is removed in full (94 lines). No opt-in card, no `api.freemius.com` outbound requests, no umbrella-product license state. Bumps `acrossai-co/main-menu` `0.0.18` → `0.0.23`.
