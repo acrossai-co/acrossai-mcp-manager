@@ -888,7 +888,8 @@ Before applying branch protection: `gh api repos/{owner}/{repo}/actions/runs?per
 
 ### B28 — Freemius auto-submenus require BOTH `menu.<key>` AND the corresponding `has_<key>` / `is_<key>` at `fs_dynamic_init()` top level (silent no-render otherwise)
 
-**Status**: Active (Feature 022 — 2026-07-13)
+**Status**: Superseded (Feature 028 — 2026-07-17). Retirement is by removal: `freemius/wordpress-sdk` is uninstalled with `acrossai-co/main-menu` 0.0.22, so no consumer surface here can trigger the two-level enablement failure mode. Body stays for reference until an audit prunes it (see PATTERN-MEMORY-SUPERSESSION-VS-ANNOTATION). See `docs/planings-tasks/028-remove-freemius-and-filter-self.md`.
+**Original status**: Active (Feature 022 — 2026-07-13)
 **Scope**: Every consumer of the Freemius WordPress SDK (any AcrossAI plugin using `\AcrossAI_Addon\AddonsPage` from `acrossai-co/main-menu`, plus any future direct Freemius consumer).
 **Tags**: `freemius, two-level-enablement, menu-config, fs_dynamic_init, silent-no-render, generalizable`
 
