@@ -20,8 +20,6 @@ defined( 'ABSPATH' ) || exit;
  */
 final class AddonsFilter {
 
-	private const OWN_SLUG = 'acrossai-mcp-manager';
-
 	/** @var AddonsFilter|null */
 	protected static $_instance = null;
 
@@ -52,14 +50,18 @@ final class AddonsFilter {
 			return array();
 		}
 
+		$own_slug = defined( 'ACROSSAI_MCP_MANAGER_PLUGIN_NAME_SLUG' )
+			? (string) \ACROSSAI_MCP_MANAGER_PLUGIN_NAME_SLUG
+			: 'acrossai-mcp-manager';
+
 		return array_values(
 			array_filter(
 				$addons,
-				static function ( $addon ): bool {
+				static function ( $addon ) use ( $own_slug ): bool {
 					if ( ! is_array( $addon ) ) {
 						return false;
 					}
-					return ( $addon['slug'] ?? '' ) !== self::OWN_SLUG;
+					return ( $addon['slug'] ?? '' ) !== $own_slug;
 				}
 			)
 		);
