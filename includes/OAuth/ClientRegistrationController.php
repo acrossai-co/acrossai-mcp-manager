@@ -366,6 +366,19 @@ final class ClientRegistrationController {
 				$new_client_id = SecretsVault::random_hex( 16 );
 			}
 
+			// F024 attribution — match the DCR client against every
+			// registered connector profile by (client_name, redirect_uris).
+			// First match wins; no match preserves the previous empty-string
+			// behavior. Fixes the disconnect where DCR-registered Claude
+			// clients did not participate in per-connector settings gating.
+			$attributed_slug = '';
+			foreach ( ConnectorProfileRegistry::instance()->get_profiles() as $profile ) {
+				if ( $profile->matches_dcr_client( $client_name, $redirect_uris ) ) {
+					$attributed_slug = $profile->get_slug();
+					break;
+				}
+			}
+
 			$row_id = ClientRepository::create(
 				array(
 					'client_id'                  => $new_client_id,
@@ -374,7 +387,7 @@ final class ClientRegistrationController {
 					'redirect_uris'              => $redirect_uris,
 					'grant_types'                => implode( ' ', $grant_types ),
 					'token_endpoint_auth_method' => $token_endpoint_auth_method,
-					'connector_slug'             => '',
+					'connector_slug'             => $attributed_slug,
 					'metadata_fingerprint'       => $fingerprint,
 				)
 			);

@@ -79,11 +79,22 @@ final class TokenController {
 	 * @return void
 	 */
 	private function handle_authorization_code( array $body ): void {
-		$required = array( 'code', 'client_id', 'code_verifier', 'redirect_uri' );
+		// Resolve client credentials from Authorization: Basic header first
+		// (RFC 6749 §2.3.1 RECOMMENDED), falling back to body params.
+		[ $header_client_id, $header_client_secret ] = self::read_client_credentials_from_header();
+		$body_client_id                              = isset( $body['client_id'] ) ? (string) $body['client_id'] : '';
+		$body_client_secret                          = isset( $body['client_secret'] ) ? (string) $body['client_secret'] : '';
+		$client_id                                   = '' !== $header_client_id ? $header_client_id : $body_client_id;
+		$client_secret                               = '' !== $header_client_secret ? $header_client_secret : $body_client_secret;
+
+		$required = array( 'code', 'code_verifier', 'redirect_uri' );
 		foreach ( $required as $field ) {
 			if ( ! isset( $body[ $field ] ) || '' === $body[ $field ] ) {
 				self::respond_error( 'invalid_request', 'Missing required field: ' . $field, 400 );
 			}
+		}
+		if ( '' === $client_id ) {
+			self::respond_error( 'invalid_request', 'Missing required field: client_id', 400 );
 		}
 
 		$row = AuthCodeRepository::consume_atomic( $body['code'] );
@@ -91,21 +102,27 @@ final class TokenController {
 			self::respond_error( 'invalid_grant', 'Auth code is invalid or has already been used.', 400 );
 		}
 
-		if ( ! hash_equals( (string) $row->client_id, (string) $body['client_id'] ) ) {
+		if ( ! hash_equals( (string) $row->client_id, $client_id ) ) {
 			self::respond_error( 'invalid_grant', 'client_id mismatch', 400 );
 		}
 		if ( ! hash_equals( (string) $row->redirect_uri, (string) $body['redirect_uri'] ) ) {
 			self::respond_error( 'invalid_grant', 'redirect_uri mismatch', 400 );
 		}
 
-		$client = ClientRepository::find_by_id( (string) $body['client_id'] );
+		$client = ClientRepository::find_by_id( $client_id );
 		if ( null === $client ) {
 			self::respond_error( 'invalid_client', 'Client not registered', 401 );
 		}
 
-		if ( 'client_secret_post' === $client->token_endpoint_auth_method ) {
-			$submitted_secret = isset( $body['client_secret'] ) ? (string) $body['client_secret'] : '';
-			if ( '' === $submitted_secret || ! ClientRepository::verify_secret( $client, $submitted_secret ) ) {
+		// client_secret_post clients: verify the submitted secret when one
+		// is present. When NO secret was submitted (via header or body),
+		// fall through to PKCE-only verification — modern MCP hosts
+		// (Claude.ai, ChatGPT) register as client_secret_post but behave
+		// as public+PKCE at token exchange, never carrying the secret.
+		// Rejecting them for a missing secret would break interop; PKCE
+		// still authenticates the exchange.
+		if ( 'client_secret_post' === $client->token_endpoint_auth_method && '' !== $client_secret ) {
+			if ( ! ClientRepository::verify_secret( $client, $client_secret ) ) {
 				self::respond_error( 'invalid_client', 'client_secret verification failed', 401 );
 			}
 		}
@@ -122,7 +139,7 @@ final class TokenController {
 
 		$access  = AccessTokenRepository::issue(
 			array(
-				'client_id'       => (string) $body['client_id'],
+				'client_id'       => $client_id,
 				'user_id'         => $user_id,
 				'scope'           => $scope,
 				'resource'        => $resource,
@@ -131,7 +148,7 @@ final class TokenController {
 		);
 		$refresh = RefreshTokenRepository::issue(
 			array(
-				'client_id'       => (string) $body['client_id'],
+				'client_id'       => $client_id,
 				'user_id'         => $user_id,
 				'scope'           => $scope,
 				'resource'        => $resource,
@@ -142,7 +159,7 @@ final class TokenController {
 		/**
 		 * Action: acrossai_mcp_manager_oauth_token_issued
 		 */
-		do_action( 'acrossai_mcp_manager_oauth_token_issued', (int) $access['id'], (string) $body['client_id'], $user_id, (string) $client->connector_slug );
+		do_action( 'acrossai_mcp_manager_oauth_token_issued', (int) $access['id'], $client_id, $user_id, (string) $client->connector_slug );
 
 		self::respond_token_success(
 			array(
@@ -163,7 +180,15 @@ final class TokenController {
 	 * @return void
 	 */
 	private function handle_refresh_token( array $body ): void {
-		if ( ! isset( $body['refresh_token'], $body['client_id'] ) || '' === $body['refresh_token'] || '' === $body['client_id'] ) {
+		// Resolve client credentials from Authorization: Basic header first
+		// (RFC 6749 §2.3.1 RECOMMENDED), falling back to body params.
+		[ $header_client_id, $header_client_secret ] = self::read_client_credentials_from_header();
+		$body_client_id                              = isset( $body['client_id'] ) ? (string) $body['client_id'] : '';
+		$body_client_secret                          = isset( $body['client_secret'] ) ? (string) $body['client_secret'] : '';
+		$client_id                                   = '' !== $header_client_id ? $header_client_id : $body_client_id;
+		$client_secret                               = '' !== $header_client_secret ? $header_client_secret : $body_client_secret;
+
+		if ( ! isset( $body['refresh_token'] ) || '' === $body['refresh_token'] || '' === $client_id ) {
 			self::respond_error( 'invalid_request', 'Missing refresh_token or client_id', 400 );
 		}
 
@@ -186,7 +211,7 @@ final class TokenController {
 			self::respond_error( 'invalid_grant', 'Refresh token has been revoked.', 400 );
 		}
 
-		if ( ! hash_equals( (string) $row->client_id, (string) $body['client_id'] ) ) {
+		if ( ! hash_equals( (string) $row->client_id, $client_id ) ) {
 			self::respond_error( 'invalid_grant', 'client_id mismatch', 400 );
 		}
 
@@ -195,14 +220,17 @@ final class TokenController {
 			self::respond_error( 'invalid_grant', 'Refresh token expired', 400 );
 		}
 
-		$client = ClientRepository::find_by_id( (string) $body['client_id'] );
+		$client = ClientRepository::find_by_id( $client_id );
 		if ( null === $client ) {
 			self::respond_error( 'invalid_client', 'Client not registered', 401 );
 		}
 
-		if ( 'client_secret_post' === $client->token_endpoint_auth_method ) {
-			$submitted_secret = isset( $body['client_secret'] ) ? (string) $body['client_secret'] : '';
-			if ( '' === $submitted_secret || ! ClientRepository::verify_secret( $client, $submitted_secret ) ) {
+		// client_secret_post clients: verify the submitted secret when one
+		// is present. When NO secret was submitted, fall through — the
+		// refresh token itself (bound to the client via row->client_id)
+		// authenticates the exchange for public+PKCE-style clients.
+		if ( 'client_secret_post' === $client->token_endpoint_auth_method && '' !== $client_secret ) {
+			if ( ! ClientRepository::verify_secret( $client, $client_secret ) ) {
 				self::respond_error( 'invalid_client', 'client_secret verification failed', 401 );
 			}
 		}
@@ -224,7 +252,7 @@ final class TokenController {
 
 		$access      = AccessTokenRepository::issue(
 			array(
-				'client_id'       => (string) $body['client_id'],
+				'client_id'       => $client_id,
 				'user_id'         => $user_id,
 				'scope'           => $scope,
 				'resource'        => $resource,
@@ -233,7 +261,7 @@ final class TokenController {
 		);
 		$new_refresh = RefreshTokenRepository::issue(
 			array(
-				'client_id'       => (string) $body['client_id'],
+				'client_id'       => $client_id,
 				'user_id'         => $user_id,
 				'scope'           => $scope,
 				'resource'        => $resource,
@@ -241,7 +269,7 @@ final class TokenController {
 			)
 		);
 
-		do_action( 'acrossai_mcp_manager_oauth_token_issued', (int) $access['id'], (string) $body['client_id'], $user_id, (string) $client->connector_slug );
+		do_action( 'acrossai_mcp_manager_oauth_token_issued', (int) $access['id'], $client_id, $user_id, (string) $client->connector_slug );
 
 		self::respond_token_success(
 			array(
@@ -253,6 +281,36 @@ final class TokenController {
 				'resource'      => $resource,
 			)
 		);
+	}
+
+	/**
+	 * RFC 6749 §2.3.1 — parse client credentials from Authorization: Basic
+	 * header. Handles both HTTP_AUTHORIZATION and the CGI fallback
+	 * REDIRECT_HTTP_AUTHORIZATION. Returns [$client_id, $client_secret];
+	 * empty strings when the header is absent or malformed.
+	 *
+	 * @return array{0: string, 1: string}
+	 */
+	private static function read_client_credentials_from_header(): array {
+		$auth_header = '';
+		if ( isset( $_SERVER['HTTP_AUTHORIZATION'] ) ) {
+			$auth_header = (string) $_SERVER['HTTP_AUTHORIZATION'];
+		} elseif ( isset( $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ) ) {
+			$auth_header = (string) $_SERVER['REDIRECT_HTTP_AUTHORIZATION'];
+		}
+
+		if ( 0 !== stripos( $auth_header, 'Basic ' ) ) {
+			return array( '', '' );
+		}
+
+		// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode -- RFC 6749 §2.3.1 Basic auth requires base64 decoding of the header value.
+		$decoded = base64_decode( substr( $auth_header, 6 ), true );
+		if ( false === $decoded || false === strpos( $decoded, ':' ) ) {
+			return array( '', '' );
+		}
+
+		[ $cred_id, $cred_secret ] = explode( ':', $decoded, 2 );
+		return array( (string) $cred_id, (string) $cred_secret );
 	}
 
 	/**
