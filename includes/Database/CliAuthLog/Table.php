@@ -34,13 +34,25 @@ class Table extends \BerlinDB\Database\Kern\Table {
 	 *
 	 * `1.0.1` (F029): forces reconciliation of three type-mismatched columns
 	 * (`status`, `failure_code`, `app_password_uuid`) that drifted from
-	 * `Schema.php` on some installs — dbDelta compares column names only, not
-	 * types, so the widths stayed wrong until this version bump ran the
-	 * explicit `ALTER TABLE MODIFY COLUMN` override in `maybe_upgrade()` below.
+	 * `Schema.php` on some installs. dbDelta compares column names only, not
+	 * types, so BerlinDB's install path (`create()`) never notices the
+	 * width drift on existing installs. The paired `$upgrades` callback
+	 * `upgrade_to_1_0_1()` below runs explicit `ALTER TABLE MODIFY COLUMN`
+	 * on the drifted columns; per-column idempotency via `INFORMATION_SCHEMA`.
 	 *
 	 * @var string
 	 */
 	protected $version = '1.0.1';
+
+	/**
+	 * BerlinDB per-version upgrade callbacks. Runs when `db_version` in
+	 * `wp_options` is less than the target version key.
+	 *
+	 * @var array<string, string>
+	 */
+	protected $upgrades = array(
+		'1.0.1' => 'upgrade_to_1_0_1',
+	);
 
 	/**
 	 * WordPress option key that tracks the installed schema version.
@@ -83,22 +95,12 @@ class Table extends \BerlinDB\Database\Kern\Table {
 	}
 
 	/**
-	 * Create or upgrade the table with the phantom-version guard AND
-	 * F029 column-type reconciliation.
+	 * Create or upgrade the table with the phantom-version guard.
 	 *
-	 * Phantom-version guard: if the db_version_key option exists but the
-	 * physical table was manually dropped, BerlinDB's needs_upgrade() would
-	 * return false and skip install. Clearing the option first forces a fresh
-	 * install on the next run. SILENT per Clarification Q1 — no error_log,
-	 * no admin notice, no transient.
-	 *
-	 * F029 column-type reconciliation: dbDelta compares column names only,
-	 * not types, so pre-1.0.1 installs whose live DB widths drifted from
-	 * Schema.php stayed wrong forever. Snapshot the pre-upgrade version;
-	 * after parent::maybe_upgrade() has run (which brings versions in sync
-	 * via dbDelta name-only diff), run explicit `ALTER TABLE MODIFY COLUMN`
-	 * on the 3 drifted columns. Idempotent-safe via INFORMATION_SCHEMA
-	 * width check — reruns are no-ops on already-correct installs.
+	 * If the db_version_key option exists but the physical table was manually
+	 * dropped, BerlinDB's needs_upgrade() would return false and skip install.
+	 * Clearing the option first forces a fresh install on the next run.
+	 * SILENT per Clarification Q1 — no error_log, no admin notice, no transient.
 	 *
 	 * @return void
 	 */
@@ -106,25 +108,30 @@ class Table extends \BerlinDB\Database\Kern\Table {
 		if ( ! $this->exists() ) {
 			delete_option( $this->db_version_key );
 		}
-
-		$prev_version = (string) get_option( $this->db_version_key, '' );
-
 		parent::maybe_upgrade();
-
-		if ( '' === $prev_version || version_compare( $prev_version, '1.0.1', '<' ) ) {
-			self::reconcile_column_types();
-		}
 	}
 
 	/**
-	 * F029 — Bring `status`, `failure_code`, `app_password_uuid` to the
-	 * widths declared in Schema.php. Idempotent per-column via
-	 * INFORMATION_SCHEMA width comparison; only ALTERs columns whose live
-	 * width differs from the target.
+	 * BerlinDB upgrade callback for 1.0.0 → 1.0.1 (F029).
 	 *
-	 * @return void
+	 * Reconciles three columns whose live DB widths drifted from Schema.php
+	 * on some installs. BerlinDB's `create()` (install path) never notices
+	 * width drift because it only fires on tables that don't yet exist —
+	 * and dbDelta (which older BerlinDB versions used for the upgrade path)
+	 * only compares column names, not types.
+	 *
+	 * Idempotent per-column via INFORMATION_SCHEMA width comparison; only
+	 * ALTERs columns whose live width differs from the Schema.php target.
+	 * Safe to re-run on already-correct installs (each per-column check
+	 * short-circuits) or if a future upgrade cycle re-fires this callback.
+	 *
+	 * Returns `true` on success (BerlinDB stamps the version), `false` on
+	 * failure (BerlinDB aborts and leaves the version unstamped so the
+	 * upgrade retries on the next admin request).
+	 *
+	 * @return bool
 	 */
-	private static function reconcile_column_types(): void {
+	protected function upgrade_to_1_0_1(): bool {
 		global $wpdb;
 
 		$table = $wpdb->prefix . 'acrossai_mcp_cli_auth_logs';
@@ -159,7 +166,7 @@ class Table extends \BerlinDB\Database\Kern\Table {
 		);
 
 		if ( ! is_array( $current ) ) {
-			return;
+			return false;
 		}
 
 		foreach ( $targets as $column_name => $spec ) {
@@ -172,5 +179,7 @@ class Table extends \BerlinDB\Database\Kern\Table {
 			// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.DirectDatabaseQuery.SchemaChange -- DDL with plugin-owned table name ($wpdb->prefix + hardcoded slug) + hardcoded column definitions; idempotent via width check above. $wpdb->prepare() does not support DDL identifiers.
 			$wpdb->query( "ALTER TABLE `{$table}` " . $spec['ddl'] );
 		}
+
+		return true;
 	}
 }
