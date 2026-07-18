@@ -1741,3 +1741,68 @@ The softening applies to BOTH grant handlers (`handle_authorization_code` and `h
 **Where to look next**
 
 Any future OAuth grant addition (device_code, JWT bearer, etc.) MUST decide how to handle a `client_secret_post` client that doesn't submit a secret. Default: mirror D27's softening ONLY IF the grant has an equivalent alternate-authentication surface (PKCE, JWT signature, etc.). For grants without an alternate surface, hard-reject on missing secret. When bumping the plugin's PKCE minimum (e.g., PKCE plain support removed — already the case per F021), verify this DEC's rationale still holds (PKCE remains the sole alternative auth path).
+
+---
+
+### 2026-07-18 — D28 — BerlinDB schema-drift reconciliation MUST use $upgrades callbacks + admin_init trigger, never a bare version bump
+
+**Status**: Active (Feature 029 — 2026-07-18)
+**Scope**: Every plugin-owned BerlinDB Kern\Table subclass in `includes/Database/`. Applies to every future column addition, width widening, index change, or default value shift declared in `Schema.php` on a table that any live install already has.
+**Tags**: `berlindb, schema-drift, upgrades-callback, maybe-upgrade, admin-init, generalizable`
+
+**Why this is durable**
+
+BerlinDB Core (`vendor/berlindb/core/src/Database/Kern/Table.php`) has counter-intuitive upgrade semantics — one this codebase already violated once when the F025 protocol-tool flag columns were declared in `Schema.php` without a paired `$version` bump AND without a paired `$upgrades` callback. The result was silent — `MCPServer\Table` shipped with the columns in `Schema.php` but the physical `wp_acrossai_mcp_servers` never grew them, causing the write-loss captured as `B34`. Understanding BerlinDB's actual upgrade contract prevents every future feature from re-tripping this.
+
+**BerlinDB upgrade semantics (verified in vendor source):**
+
+- `Table::maybe_upgrade()` checks `needs_upgrade()` (does stored `db_version` differ from declared `$version`?).
+- If YES + table exists → `upgrade()` runs. Otherwise → `install()` runs (create fresh from `Schema`) OR no-op.
+- **`upgrade()` does NOT auto-diff `Schema.php` against the live table. It does NOT auto-run `dbDelta`.**
+- `upgrade()` walks `$this->upgrades` (per-version callback map). Callbacks with version > stored `db_version` run in order.
+- If `$upgrades` is EMPTY → `set_db_version()` stamps the new version and returns success without touching schema.
+- Callback signature: `protected function upgrade_to_<version>(): bool`. Returns `false` → BerlinDB aborts and leaves version unstamped so the upgrade retries next admin request.
+
+**Decision**
+
+Any change to a `Schema.php` on a table that live installs already have MUST ship as a coordinated three-part change:
+
+1. **Bump `$version`** in the paired `Table.php` (e.g., `1.1.0` → `1.1.1`).
+2. **Register a `$upgrades` entry** for the new version pointing to a `protected function upgrade_to_<version>(): bool` method:
+   ```php
+   protected $upgrades = array(
+       '1.1.1' => 'upgrade_to_1_1_1',
+   );
+
+   protected function upgrade_to_1_1_1(): bool {
+       // Idempotent per-column via INFORMATION_SCHEMA existence / width check.
+       // For ADD COLUMN: check COLUMN_NAME not in COLUMNS, then ALTER ADD.
+       // For MODIFY COLUMN: check CHARACTER_MAXIMUM_LENGTH differs from target, then ALTER MODIFY.
+       return true;
+   }
+   ```
+3. **Ensure `maybe_upgrade()` fires on `admin_init`** (not just from `Activator::activate()`). Wire via `Main::reconcile_database_schemas()` at priority 3 — before any handler that reads from these tables. `Activator` only fires on plugin activation; in-place upgrades (composer / wp-cli plugin update / manual file replace) never re-activate the plugin, so a bare Activator-only trigger leaves version bumps inert on updates.
+
+Callbacks MUST be idempotent per-item via `INFORMATION_SCHEMA.COLUMNS` inspection. dbDelta is NOT called anywhere in this pattern — plugin-owned ALTER TABLE statements with `phpcs:ignore` comments for the DDL-identifier-interpolation warning.
+
+**Tradeoffs**
+
+- **Gained**: Every live install auto-reconciles on the next admin request after upgrade. No operator action (deactivate + reactivate) required. Truly idempotent — callbacks can re-run without side effects. dbDelta's known-fragile column-diff logic is bypassed entirely; we use explicit ALTERs with `INFORMATION_SCHEMA` gates instead.
+- **Made harder**: Every future Schema change needs three edits in two files, not one. Reviewers must catch missing `$upgrades` entries — grep gate: any diff that changes `Schema.php` MUST also change the paired `Table.php` `$version` AND add a matching `$upgrades` entry.
+- **Reconsider**: If BerlinDB Core adds an auto-diff mode (e.g., an `$auto_diff = true` protected flag that would trigger a Schema-to-live-table comparison), this DEC's manual-callback requirement can relax. Until then, callbacks are mandatory.
+- **Related**: `DEC-BERLINDB-TABLE-REQUEST-BOOT` (F011 — sibling: Tables must be instantiated at request time OR the DB interface never registers the table name); `F011 WORKLOG` phantom-version-guard entry (covers the "table missing" case; D28 covers the "table exists but drifted" case they explicitly don't overlap); `B34` (the application-level silent-write-loss symptom D28 prevents).
+
+**Evidence**
+
+- `vendor/berlindb/core/src/Database/Kern/Table.php:313-346` — `maybe_upgrade()`.
+- `vendor/berlindb/core/src/Database/Kern/Table.php:982-1012` — `upgrade()` walks `$this->upgrades`.
+- `vendor/berlindb/core/src/Database/Kern/Table.php:1021-1040` — `get_pending_upgrades()` filters by `version_compare`.
+- `vendor/berlindb/core/src/Database/Kern/Table.php:1052-1086` — `upgrade_to()` invokes callback + stamps version on success.
+- `includes/Database/CliAuthLog/Table.php` (post-F029) — reference impl: `$upgrades = ['1.0.1' => 'upgrade_to_1_0_1']` + `protected function upgrade_to_1_0_1(): bool { ... }`.
+- `includes/Database/MCPServer/Table.php` (post-F029) — reference impl for ADD COLUMN case.
+- `includes/Main.php::reconcile_database_schemas()` + `admin_init@3` Loader wiring (post-F029) — the trigger surface for in-place upgrades.
+- Commit `479518e` (WRONG — bumped `$version` on MCPServer without `$upgrades` callback; would have silently stamped `1.1.1` with the columns still missing). Commit `90cbdeb` (CORRECT — rewrote to `$upgrades` pattern).
+
+**Where to look next**
+
+Before any commit that touches a `Schema.php`: run `git diff --stat includes/Database/` and verify every changed `Schema.php` has a paired `Table.php` change bumping `$version` AND adding a `$upgrades` entry. When adding a new Table module, register the module in `Main::reconcile_database_schemas()` alongside the existing 7 tables. If a new column addition can be safely deferred (feature-flagged behind operator opt-in that keys on new-column-present), the `$upgrades` callback can be omitted, but the version bump then must also be omitted — otherwise BerlinDB stamps the new version and the callback can never run later.
