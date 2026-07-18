@@ -1146,3 +1146,46 @@ caller.
   (regression guards)
 - `DEC-ABILITY-OVERRIDE-RESOLUTION` (the canonical-resolver principle this
   bug pattern violated)
+
+---
+
+### B33 — Admin gate keyed on a data field that a write path leaves empty by default silently falls open for every row created by that path
+
+**Status**: Active (Feature 029 — 2026-07-18)
+**Scope**: Any admin-facing security control (enable/disable toggle, approval gate, allow-list, capability check) whose resolution consults a column, meta field, or option value that could be legitimately empty. Includes F024's per-connector settings gating, but generalizes to every future admin control keyed on data.
+**Tags**: `admin-gate, silent-bypass, data-model, connector_slug, f024, dcr, generalizable`
+
+**Symptom**
+
+An admin UI exposes a control (e.g., "Enable this connector? [ ]"). The control's runtime enforcement reads a data field on the resource being gated (e.g., `wp_acrossai_mcp_oauth_clients.connector_slug`) and looks up settings keyed by that value. When the resource-creation code path leaves the field empty by default (previously: `connector_slug => ''` hardcoded in `ClientRegistrationController::handle_register()` line 373), the gate lookup returns "no settings found" and falls open — the operator's toggle has no effect for that class of rows. No error, no admin notice, no log line — the gate silently doesn't apply.
+
+**Root cause**
+
+F024 (introduced with F021) added per-connector settings storage keyed on `connector_slug`. The admin-generator path (`handle_admin_generate`) populated `connector_slug` from the REST param. The DCR path (`handle_register`) hardcoded `connector_slug => ''`. F024's gate resolver was written assuming `connector_slug` was always populated; the empty-string case was never distinguished from "unknown connector" (which should surface an admin-visible state) — both fell through to "no gate applies". The `AuthorizationController::infer_slug_from_dcr_client()` helper was added later to work around this by walking the profile registry at `/authorize` time, but the persisted field remained empty, so DIRECT F024 gate consumers (e.g., a future report or CLI dumper that reads `connector_slug` directly) still saw the wrong picture.
+
+**Decision (Prevention Recipe)**
+
+For any admin control keyed on a data field:
+
+1. **Every write path must populate the field**, or the resolver must have a documented explicit fallback that surfaces "no value" as an admin-visible state (an admin notice, a "unattributed" row on a report, a warning banner). Do NOT let the gate silently fall open on empty.
+2. **When adding a write path after the fact** (e.g., DCR alongside admin-generate), audit every consumer of the gate for how it handles the empty case. If any consumer treats empty as "no gate applies", either populate the field at the new write path (F029's fix) or update the consumer to reject empty explicitly.
+3. **Grep gate**: whenever a data field is added to an admin-gating resolver, `grep -rn '<field_name>' includes/` MUST return at least one populated write path per creation surface (admin, REST DCR, WP-CLI, etc.). Reviewer verifies every returned line writes a non-empty value.
+4. **Test invariant**: any admin gate keyed on a data field MUST have at least one test case that creates a row via every documented creation path and asserts the gate resolves correctly for each. If the gate resolves "no settings apply" for any creation path, the test fails.
+
+**Tradeoffs / Prevention**
+
+- **Gained**: no more silent-bypass of admin gates; operators trust that toggles apply universally.
+- **Made harder**: every future write path must remember to populate every admin-gating data field. Mitigation: this BUG entry + the grep gate above.
+- **Reconsider**: this pattern generalizes beyond OAuth. Any admin gate on a data field (post_meta, term_meta, user_meta, options) is subject to it. Consider extracting into an ARCHITECTURE constraint if it recurs on a third feature.
+- **Related**: `D18` (canonical `mcp_adapter_pre_tool_call` enforcement hook — a related gating architecture, gates on payload not persisted data so not vulnerable to this bug); `D20` (consumer-side default-provider registration hygiene — sibling "audit-before-wiring" pattern); `S9` (consent-surface server-side authoritative state — same underlying principle: don't trust missing data as absent, treat it explicitly).
+
+**Evidence**
+
+- `includes/OAuth/ClientRegistrationController.php:373` (pre-F029): `'connector_slug' => ''` hardcoded — the silent-bypass write path.
+- `includes/OAuth/ClientRegistrationController.php:369-379` (post-F029): the profile-walk attribution block that populates `connector_slug` correctly.
+- `includes/OAuth/AuthorizationController.php:497-510`: `infer_slug_from_dcr_client()` helper — a workaround at gate-consumer time that masked the bug from the /authorize path but left DIRECT consumers exposed.
+- Runtime evidence: on `acrossai.co` pre-F029, every DCR-registered Claude client bypassed the F024 connector-enable toggle because their `connector_slug` was empty; the admin's "disable Claude" toggle had no effect for DCR-created rows.
+
+**Where to look next**
+
+Before adding a new admin control keyed on a data field, run the grep gate above. When reviewing any feature that adds a new creation surface for a resource with existing admin gates, verify every admin-gating field is populated. If you find an admin gate with empty-value tolerance today, either fix the write path or add a documented fallback that surfaces the "unattributed" state to the admin.

@@ -1695,3 +1695,49 @@ Complements D20: where D20 says "verify the vendor doesn't already register your
 **Where to look next**
 
 Before adding a new AcrossAI plugin to `AddonsPageRenderer::ADDONS`: ship the equivalent `AddonsFilter` singleton in that plugin's `admin/Partials/` in the SAME PR that adds the baseline entry. When bumping `acrossai-co/main-menu` past 0.0.23: verify the `ADDONS` baseline still contains this plugin's slug (the filter is inert but harmless if the slug isn't present). If the vendor evolves to a per-caller-context filter (`$context` argument), revisit whether the vendor should absorb the self-exclusion.
+
+---
+
+### 2026-07-18 — D27 — Confidential-client token exchange MAY fall through to PKCE-only verification when no secret is submitted
+
+**Status**: Active (Feature 029 — 2026-07-18)
+**Scope**: The OAuth 2.1 `/token` endpoint (`includes/OAuth/TokenController.php`), both `authorization_code` and `refresh_token` grants. Applies whenever a client is registered as `token_endpoint_auth_method = 'client_secret_post'` but does not submit a `client_secret` at exchange (checked in BOTH the Authorization Basic header AND the body).
+**Tags**: `oauth-2-1, client-secret-post, pkce-only, defense-in-depth, mcp-host-interop, security-tradeoff, generalizable`
+
+**Why this is durable**
+
+Modern MCP hosts (Claude.ai, ChatGPT, Cursor, Cline) frequently register as `client_secret_post` — either via pre-F027 DCR that defaulted to that value, or via an admin generator that hardcodes it (`handle_admin_generate` line 187) — but then behave as public+PKCE clients at exchange, never carrying the secret. F029 confirmed this in the wild against `acrossai.co` after F027 fixed the DCR default; existing rows with `client_secret_post` + a stored `client_secret_hash` were still failing token exchange because the runtime hard-rejected the missing secret. F027 fixes the source-of-truth default for NEW DCR clients; D27 codifies the runtime softening that makes pre-existing / admin-generated confidential rows also complete.
+
+**Decision**
+
+When `$client->token_endpoint_auth_method === 'client_secret_post'`:
+
+1. If the client submits a non-empty `client_secret` (via Authorization Basic header OR body), verify it via `ClientRepository::verify_secret( $client, $client_secret )` — reject with `invalid_client` HTTP 401 on mismatch. **This branch is unchanged from the pre-F029 behavior.**
+2. If the client submits NO `client_secret` (header AND body both empty for that field), **fall through** to the grant's other authentication surface — PKCE S256 verification (`PKCE::verify_s256`) for `authorization_code`; refresh-token-bound-to-client verification for `refresh_token`. Do NOT emit `invalid_client`.
+
+The softening applies to BOTH grant handlers (`handle_authorization_code` and `handle_refresh_token`) symmetrically. It does NOT apply to `token_endpoint_auth_method === 'none'` clients (which are already public+PKCE by design — the F027 default) — for those, the `client_secret_post` conditional never fires.
+
+**Tradeoffs**
+
+- **Security posture**: The residual attack surface for a `client_secret_post` client that doesn't submit a secret is bounded by the intersection of:
+  - Mandatory PKCE S256 (rejected regardless of client claim, enforced at `AuthorizationController` per F021).
+  - Mandatory RFC 8707 `resource` binding (token issued for one MCP server rejects when presented against another).
+  - Single-use auth codes via `AuthCodeRepository::consume_atomic` (B10).
+  - Short-lived access tokens + refresh-token family revocation on reuse (RFC 9700 §2.2.2, F021).
+  - Server-side `redirect_uri` byte-match enforcement at `/authorize` (S9 pattern).
+  A hypothetical attacker who could otherwise defeat PKCE (which requires knowledge of the 43-char high-entropy verifier) additionally doesn't need the client secret — but PKCE has never been "optional" on this endpoint, so the marginal defense loss is bounded.
+- **Interop win**: Every modern MCP host completes the flow on first attempt, without operators needing to know whether a client is registered as `none` or `client_secret_post`.
+- **Reconsider**: If a future security review deems the residual risk unacceptable (e.g., because PKCE has a known weakness in a specific MCP host implementation), tighten by requiring `token_endpoint_auth_method === 'none'` for public+PKCE flows AND providing a migration path for pre-F027 `client_secret_post` rows.
+- **Related**: `F027` (v0.1.2 DCR default → 'none' — the source-of-truth fix); `D20` (consumer-side filter registration hygiene — sibling defense-in-depth pattern); `S7` (OAuth token endpoint `__return_true` permission_callback exception — still valid; the "auth happens in the request" surface is now widened from body-only to header-or-body-or-PKCE); `B10` (atomic single-use auth code consumption — the invariant this softening depends on).
+
+**Evidence**
+
+- `includes/OAuth/TokenController.php:106-111` (post-F029) — the softened `client_secret_post` conditional in `handle_authorization_code`.
+- `includes/OAuth/TokenController.php:203-208` (post-F029) — same shape in `handle_refresh_token`.
+- `includes/OAuth/TokenController.php:283-311` (post-F029) — `read_client_credentials_from_header()` — the header-first credential resolution that makes the "no secret in body" branch discoverable at the header level too.
+- F029 planning doc: `docs/planings-tasks/029-oauth-token-basic-auth-and-dcr-attribution.md`.
+- F029 spec §Story 3 Security Posture: `specs/029-oauth-token-basic-auth-and-dcr-attribution/spec.md`.
+
+**Where to look next**
+
+Any future OAuth grant addition (device_code, JWT bearer, etc.) MUST decide how to handle a `client_secret_post` client that doesn't submit a secret. Default: mirror D27's softening ONLY IF the grant has an equivalent alternate-authentication surface (PKCE, JWT signature, etc.). For grants without an alternate surface, hard-reject on missing secret. When bumping the plugin's PKCE minimum (e.g., PKCE plain support removed — already the case per F021), verify this DEC's rationale still holds (PKCE remains the sole alternative auth path).
