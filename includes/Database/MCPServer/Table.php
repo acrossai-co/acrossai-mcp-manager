@@ -32,9 +32,17 @@ class Table extends \BerlinDB\Database\Kern\Table {
 	/**
 	 * Table schema version used to trigger maybe_upgrade().
 	 *
+	 * `1.1.1` (F029): forces dbDelta to ADD the three F025 protocol-tool
+	 * flag columns (`tool_discover_abilities`, `tool_get_ability_info`,
+	 * `tool_execute_ability`) on installs where the columns declared in
+	 * `Schema.php` never materialized because the F025 shipping bump landed
+	 * without a version increment. dbDelta name-diff handles this correctly
+	 * — no override needed here (unlike CliAuthLog whose drift is name-match
+	 * type-mismatch, which dbDelta ignores).
+	 *
 	 * @var string
 	 */
-	protected $version = '1.1.0';
+	protected $version = '1.1.1';
 
 	/**
 	 * WordPress option key that tracks the installed schema version.
