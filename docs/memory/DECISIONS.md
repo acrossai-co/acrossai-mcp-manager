@@ -1695,3 +1695,114 @@ Complements D20: where D20 says "verify the vendor doesn't already register your
 **Where to look next**
 
 Before adding a new AcrossAI plugin to `AddonsPageRenderer::ADDONS`: ship the equivalent `AddonsFilter` singleton in that plugin's `admin/Partials/` in the SAME PR that adds the baseline entry. When bumping `acrossai-co/main-menu` past 0.0.23: verify the `ADDONS` baseline still contains this plugin's slug (the filter is inert but harmless if the slug isn't present). If the vendor evolves to a per-caller-context filter (`$context` argument), revisit whether the vendor should absorb the self-exclusion.
+
+---
+
+### 2026-07-18 — D27 — Confidential-client token exchange MAY fall through to PKCE-only verification when no secret is submitted
+
+**Status**: Active (Feature 029 — 2026-07-18)
+**Scope**: The OAuth 2.1 `/token` endpoint (`includes/OAuth/TokenController.php`), both `authorization_code` and `refresh_token` grants. Applies whenever a client is registered as `token_endpoint_auth_method = 'client_secret_post'` but does not submit a `client_secret` at exchange (checked in BOTH the Authorization Basic header AND the body).
+**Tags**: `oauth-2-1, client-secret-post, pkce-only, defense-in-depth, mcp-host-interop, security-tradeoff, generalizable`
+
+**Why this is durable**
+
+Modern MCP hosts (Claude.ai, ChatGPT, Cursor, Cline) frequently register as `client_secret_post` — either via pre-F027 DCR that defaulted to that value, or via an admin generator that hardcodes it (`handle_admin_generate` line 187) — but then behave as public+PKCE clients at exchange, never carrying the secret. F029 confirmed this in the wild against `acrossai.co` after F027 fixed the DCR default; existing rows with `client_secret_post` + a stored `client_secret_hash` were still failing token exchange because the runtime hard-rejected the missing secret. F027 fixes the source-of-truth default for NEW DCR clients; D27 codifies the runtime softening that makes pre-existing / admin-generated confidential rows also complete.
+
+**Decision**
+
+When `$client->token_endpoint_auth_method === 'client_secret_post'`:
+
+1. If the client submits a non-empty `client_secret` (via Authorization Basic header OR body), verify it via `ClientRepository::verify_secret( $client, $client_secret )` — reject with `invalid_client` HTTP 401 on mismatch. **This branch is unchanged from the pre-F029 behavior.**
+2. If the client submits NO `client_secret` (header AND body both empty for that field), **fall through** to the grant's other authentication surface — PKCE S256 verification (`PKCE::verify_s256`) for `authorization_code`; refresh-token-bound-to-client verification for `refresh_token`. Do NOT emit `invalid_client`.
+
+The softening applies to BOTH grant handlers (`handle_authorization_code` and `handle_refresh_token`) symmetrically. It does NOT apply to `token_endpoint_auth_method === 'none'` clients (which are already public+PKCE by design — the F027 default) — for those, the `client_secret_post` conditional never fires.
+
+**Tradeoffs**
+
+- **Security posture**: The residual attack surface for a `client_secret_post` client that doesn't submit a secret is bounded by the intersection of:
+  - Mandatory PKCE S256 (rejected regardless of client claim, enforced at `AuthorizationController` per F021).
+  - Mandatory RFC 8707 `resource` binding (token issued for one MCP server rejects when presented against another).
+  - Single-use auth codes via `AuthCodeRepository::consume_atomic` (B10).
+  - Short-lived access tokens + refresh-token family revocation on reuse (RFC 9700 §2.2.2, F021).
+  - Server-side `redirect_uri` byte-match enforcement at `/authorize` (S9 pattern).
+  A hypothetical attacker who could otherwise defeat PKCE (which requires knowledge of the 43-char high-entropy verifier) additionally doesn't need the client secret — but PKCE has never been "optional" on this endpoint, so the marginal defense loss is bounded.
+- **Interop win**: Every modern MCP host completes the flow on first attempt, without operators needing to know whether a client is registered as `none` or `client_secret_post`.
+- **Reconsider**: If a future security review deems the residual risk unacceptable (e.g., because PKCE has a known weakness in a specific MCP host implementation), tighten by requiring `token_endpoint_auth_method === 'none'` for public+PKCE flows AND providing a migration path for pre-F027 `client_secret_post` rows.
+- **Related**: `F027` (v0.1.2 DCR default → 'none' — the source-of-truth fix); `D20` (consumer-side filter registration hygiene — sibling defense-in-depth pattern); `S7` (OAuth token endpoint `__return_true` permission_callback exception — still valid; the "auth happens in the request" surface is now widened from body-only to header-or-body-or-PKCE); `B10` (atomic single-use auth code consumption — the invariant this softening depends on).
+
+**Evidence**
+
+- `includes/OAuth/TokenController.php:106-111` (post-F029) — the softened `client_secret_post` conditional in `handle_authorization_code`.
+- `includes/OAuth/TokenController.php:203-208` (post-F029) — same shape in `handle_refresh_token`.
+- `includes/OAuth/TokenController.php:283-311` (post-F029) — `read_client_credentials_from_header()` — the header-first credential resolution that makes the "no secret in body" branch discoverable at the header level too.
+- F029 planning doc: `docs/planings-tasks/029-oauth-token-basic-auth-and-dcr-attribution.md`.
+- F029 spec §Story 3 Security Posture: `specs/029-oauth-token-basic-auth-and-dcr-attribution/spec.md`.
+
+**Where to look next**
+
+Any future OAuth grant addition (device_code, JWT bearer, etc.) MUST decide how to handle a `client_secret_post` client that doesn't submit a secret. Default: mirror D27's softening ONLY IF the grant has an equivalent alternate-authentication surface (PKCE, JWT signature, etc.). For grants without an alternate surface, hard-reject on missing secret. When bumping the plugin's PKCE minimum (e.g., PKCE plain support removed — already the case per F021), verify this DEC's rationale still holds (PKCE remains the sole alternative auth path).
+
+---
+
+### 2026-07-18 — D28 — BerlinDB schema-drift reconciliation MUST use $upgrades callbacks + admin_init trigger, never a bare version bump
+
+**Status**: Active (Feature 029 — 2026-07-18)
+**Scope**: Every plugin-owned BerlinDB Kern\Table subclass in `includes/Database/`. Applies to every future column addition, width widening, index change, or default value shift declared in `Schema.php` on a table that any live install already has.
+**Tags**: `berlindb, schema-drift, upgrades-callback, maybe-upgrade, admin-init, generalizable`
+
+**Why this is durable**
+
+BerlinDB Core (`vendor/berlindb/core/src/Database/Kern/Table.php`) has counter-intuitive upgrade semantics — one this codebase already violated once when the F025 protocol-tool flag columns were declared in `Schema.php` without a paired `$version` bump AND without a paired `$upgrades` callback. The result was silent — `MCPServer\Table` shipped with the columns in `Schema.php` but the physical `wp_acrossai_mcp_servers` never grew them, causing the write-loss captured as `B34`. Understanding BerlinDB's actual upgrade contract prevents every future feature from re-tripping this.
+
+**BerlinDB upgrade semantics (verified in vendor source):**
+
+- `Table::maybe_upgrade()` checks `needs_upgrade()` (does stored `db_version` differ from declared `$version`?).
+- If YES + table exists → `upgrade()` runs. Otherwise → `install()` runs (create fresh from `Schema`) OR no-op.
+- **`upgrade()` does NOT auto-diff `Schema.php` against the live table. It does NOT auto-run `dbDelta`.**
+- `upgrade()` walks `$this->upgrades` (per-version callback map). Callbacks with version > stored `db_version` run in order.
+- If `$upgrades` is EMPTY → `set_db_version()` stamps the new version and returns success without touching schema.
+- Callback signature: `protected function upgrade_to_<version>(): bool`. Returns `false` → BerlinDB aborts and leaves version unstamped so the upgrade retries next admin request.
+
+**Decision**
+
+Any change to a `Schema.php` on a table that live installs already have MUST ship as a coordinated three-part change:
+
+1. **Bump `$version`** in the paired `Table.php` (e.g., `1.1.0` → `1.1.1`).
+2. **Register a `$upgrades` entry** for the new version pointing to a `protected function upgrade_to_<version>(): bool` method:
+   ```php
+   protected $upgrades = array(
+       '1.1.1' => 'upgrade_to_1_1_1',
+   );
+
+   protected function upgrade_to_1_1_1(): bool {
+       // Idempotent per-column via INFORMATION_SCHEMA existence / width check.
+       // For ADD COLUMN: check COLUMN_NAME not in COLUMNS, then ALTER ADD.
+       // For MODIFY COLUMN: check CHARACTER_MAXIMUM_LENGTH differs from target, then ALTER MODIFY.
+       return true;
+   }
+   ```
+3. **Ensure `maybe_upgrade()` fires on `admin_init`** (not just from `Activator::activate()`). Wire via `Main::reconcile_database_schemas()` at priority 3 — before any handler that reads from these tables. `Activator` only fires on plugin activation; in-place upgrades (composer / wp-cli plugin update / manual file replace) never re-activate the plugin, so a bare Activator-only trigger leaves version bumps inert on updates.
+
+Callbacks MUST be idempotent per-item via `INFORMATION_SCHEMA.COLUMNS` inspection. dbDelta is NOT called anywhere in this pattern — plugin-owned ALTER TABLE statements with `phpcs:ignore` comments for the DDL-identifier-interpolation warning.
+
+**Tradeoffs**
+
+- **Gained**: Every live install auto-reconciles on the next admin request after upgrade. No operator action (deactivate + reactivate) required. Truly idempotent — callbacks can re-run without side effects. dbDelta's known-fragile column-diff logic is bypassed entirely; we use explicit ALTERs with `INFORMATION_SCHEMA` gates instead.
+- **Made harder**: Every future Schema change needs three edits in two files, not one. Reviewers must catch missing `$upgrades` entries — grep gate: any diff that changes `Schema.php` MUST also change the paired `Table.php` `$version` AND add a matching `$upgrades` entry.
+- **Reconsider**: If BerlinDB Core adds an auto-diff mode (e.g., an `$auto_diff = true` protected flag that would trigger a Schema-to-live-table comparison), this DEC's manual-callback requirement can relax. Until then, callbacks are mandatory.
+- **Related**: `DEC-BERLINDB-TABLE-REQUEST-BOOT` (F011 — sibling: Tables must be instantiated at request time OR the DB interface never registers the table name); `F011 WORKLOG` phantom-version-guard entry (covers the "table missing" case; D28 covers the "table exists but drifted" case they explicitly don't overlap); `B34` (the application-level silent-write-loss symptom D28 prevents).
+
+**Evidence**
+
+- `vendor/berlindb/core/src/Database/Kern/Table.php:313-346` — `maybe_upgrade()`.
+- `vendor/berlindb/core/src/Database/Kern/Table.php:982-1012` — `upgrade()` walks `$this->upgrades`.
+- `vendor/berlindb/core/src/Database/Kern/Table.php:1021-1040` — `get_pending_upgrades()` filters by `version_compare`.
+- `vendor/berlindb/core/src/Database/Kern/Table.php:1052-1086` — `upgrade_to()` invokes callback + stamps version on success.
+- `includes/Database/CliAuthLog/Table.php` (post-F029) — reference impl: `$upgrades = ['1.0.1' => 'upgrade_to_1_0_1']` + `protected function upgrade_to_1_0_1(): bool { ... }`.
+- `includes/Database/MCPServer/Table.php` (post-F029) — reference impl for ADD COLUMN case.
+- `includes/Main.php::reconcile_database_schemas()` + `admin_init@3` Loader wiring (post-F029) — the trigger surface for in-place upgrades.
+- Commit `479518e` (WRONG — bumped `$version` on MCPServer without `$upgrades` callback; would have silently stamped `1.1.1` with the columns still missing). Commit `90cbdeb` (CORRECT — rewrote to `$upgrades` pattern).
+
+**Where to look next**
+
+Before any commit that touches a `Schema.php`: run `git diff --stat includes/Database/` and verify every changed `Schema.php` has a paired `Table.php` change bumping `$version` AND adding a `$upgrades` entry. When adding a new Table module, register the module in `Main::reconcile_database_schemas()` alongside the existing 7 tables. If a new column addition can be safely deferred (feature-flagged behind operator opt-in that keys on new-column-present), the `$upgrades` callback can be omitted, but the version bump then must also be omitted — otherwise BerlinDB stamps the new version and the callback can never run later.

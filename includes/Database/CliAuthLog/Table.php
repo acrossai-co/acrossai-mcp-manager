@@ -32,9 +32,27 @@ class Table extends \BerlinDB\Database\Kern\Table {
 	/**
 	 * Table schema version used to trigger maybe_upgrade().
 	 *
+	 * `1.0.1` (F029): forces reconciliation of three type-mismatched columns
+	 * (`status`, `failure_code`, `app_password_uuid`) that drifted from
+	 * `Schema.php` on some installs. dbDelta compares column names only, not
+	 * types, so BerlinDB's install path (`create()`) never notices the
+	 * width drift on existing installs. The paired `$upgrades` callback
+	 * `upgrade_to_1_0_1()` below runs explicit `ALTER TABLE MODIFY COLUMN`
+	 * on the drifted columns; per-column idempotency via `INFORMATION_SCHEMA`.
+	 *
 	 * @var string
 	 */
-	protected $version = '1.0.0';
+	protected $version = '1.0.1';
+
+	/**
+	 * BerlinDB per-version upgrade callbacks. Runs when `db_version` in
+	 * `wp_options` is less than the target version key.
+	 *
+	 * @var array<string, string>
+	 */
+	protected $upgrades = array(
+		'1.0.1' => 'upgrade_to_1_0_1',
+	);
 
 	/**
 	 * WordPress option key that tracks the installed schema version.
@@ -91,5 +109,77 @@ class Table extends \BerlinDB\Database\Kern\Table {
 			delete_option( $this->db_version_key );
 		}
 		parent::maybe_upgrade();
+	}
+
+	/**
+	 * BerlinDB upgrade callback for 1.0.0 → 1.0.1 (F029).
+	 *
+	 * Reconciles three columns whose live DB widths drifted from Schema.php
+	 * on some installs. BerlinDB's `create()` (install path) never notices
+	 * width drift because it only fires on tables that don't yet exist —
+	 * and dbDelta (which older BerlinDB versions used for the upgrade path)
+	 * only compares column names, not types.
+	 *
+	 * Idempotent per-column via INFORMATION_SCHEMA width comparison; only
+	 * ALTERs columns whose live width differs from the Schema.php target.
+	 * Safe to re-run on already-correct installs (each per-column check
+	 * short-circuits) or if a future upgrade cycle re-fires this callback.
+	 *
+	 * Returns `true` on success (BerlinDB stamps the version), `false` on
+	 * failure (BerlinDB aborts and leaves the version unstamped so the
+	 * upgrade retries on the next admin request).
+	 *
+	 * @return bool
+	 */
+	protected function upgrade_to_1_0_1(): bool {
+		global $wpdb;
+
+		$table = $wpdb->prefix . 'acrossai_mcp_cli_auth_logs';
+
+		$targets = array(
+			'status'            => array(
+				'length' => 32,
+				'ddl'    => "MODIFY COLUMN `status` varchar(32) NOT NULL DEFAULT 'pending'",
+			),
+			'failure_code'      => array(
+				'length' => 64,
+				'ddl'    => "MODIFY COLUMN `failure_code` varchar(64) NOT NULL DEFAULT ''",
+			),
+			'app_password_uuid' => array(
+				'length' => 36,
+				'ddl'    => "MODIFY COLUMN `app_password_uuid` varchar(36) NOT NULL DEFAULT ''",
+			),
+		);
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Schema-drift read; INFORMATION_SCHEMA has no caching layer.
+		$current = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT COLUMN_NAME, CHARACTER_MAXIMUM_LENGTH
+				 FROM INFORMATION_SCHEMA.COLUMNS
+				 WHERE TABLE_SCHEMA = %s
+				   AND TABLE_NAME = %s
+				   AND COLUMN_NAME IN ('status', 'failure_code', 'app_password_uuid')",
+				DB_NAME,
+				$table
+			),
+			OBJECT_K
+		);
+
+		if ( ! is_array( $current ) ) {
+			return false;
+		}
+
+		foreach ( $targets as $column_name => $spec ) {
+			if ( ! isset( $current[ $column_name ] ) ) {
+				continue;
+			}
+			if ( (int) $current[ $column_name ]->CHARACTER_MAXIMUM_LENGTH === $spec['length'] ) {
+				continue;
+			}
+			// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.DirectDatabaseQuery.SchemaChange -- DDL with plugin-owned table name ($wpdb->prefix + hardcoded slug) + hardcoded column definitions; idempotent via width check above. $wpdb->prepare() does not support DDL identifiers.
+			$wpdb->query( "ALTER TABLE `{$table}` " . $spec['ddl'] );
+		}
+
+		return true;
 	}
 }

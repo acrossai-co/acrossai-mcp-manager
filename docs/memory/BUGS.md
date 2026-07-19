@@ -1146,3 +1146,111 @@ caller.
   (regression guards)
 - `DEC-ABILITY-OVERRIDE-RESOLUTION` (the canonical-resolver principle this
   bug pattern violated)
+
+---
+
+### B33 — Admin gate keyed on a data field that a write path leaves empty by default silently falls open for every row created by that path
+
+**Status**: Active (Feature 029 — 2026-07-18)
+**Scope**: Any admin-facing security control (enable/disable toggle, approval gate, allow-list, capability check) whose resolution consults a column, meta field, or option value that could be legitimately empty. Includes F024's per-connector settings gating, but generalizes to every future admin control keyed on data.
+**Tags**: `admin-gate, silent-bypass, data-model, connector_slug, f024, dcr, generalizable`
+
+**Symptom**
+
+An admin UI exposes a control (e.g., "Enable this connector? [ ]"). The control's runtime enforcement reads a data field on the resource being gated (e.g., `wp_acrossai_mcp_oauth_clients.connector_slug`) and looks up settings keyed by that value. When the resource-creation code path leaves the field empty by default (previously: `connector_slug => ''` hardcoded in `ClientRegistrationController::handle_register()` line 373), the gate lookup returns "no settings found" and falls open — the operator's toggle has no effect for that class of rows. No error, no admin notice, no log line — the gate silently doesn't apply.
+
+**Root cause**
+
+F024 (introduced with F021) added per-connector settings storage keyed on `connector_slug`. The admin-generator path (`handle_admin_generate`) populated `connector_slug` from the REST param. The DCR path (`handle_register`) hardcoded `connector_slug => ''`. F024's gate resolver was written assuming `connector_slug` was always populated; the empty-string case was never distinguished from "unknown connector" (which should surface an admin-visible state) — both fell through to "no gate applies". The `AuthorizationController::infer_slug_from_dcr_client()` helper was added later to work around this by walking the profile registry at `/authorize` time, but the persisted field remained empty, so DIRECT F024 gate consumers (e.g., a future report or CLI dumper that reads `connector_slug` directly) still saw the wrong picture.
+
+**Decision (Prevention Recipe)**
+
+For any admin control keyed on a data field:
+
+1. **Every write path must populate the field**, or the resolver must have a documented explicit fallback that surfaces "no value" as an admin-visible state (an admin notice, a "unattributed" row on a report, a warning banner). Do NOT let the gate silently fall open on empty.
+2. **When adding a write path after the fact** (e.g., DCR alongside admin-generate), audit every consumer of the gate for how it handles the empty case. If any consumer treats empty as "no gate applies", either populate the field at the new write path (F029's fix) or update the consumer to reject empty explicitly.
+3. **Grep gate**: whenever a data field is added to an admin-gating resolver, `grep -rn '<field_name>' includes/` MUST return at least one populated write path per creation surface (admin, REST DCR, WP-CLI, etc.). Reviewer verifies every returned line writes a non-empty value.
+4. **Test invariant**: any admin gate keyed on a data field MUST have at least one test case that creates a row via every documented creation path and asserts the gate resolves correctly for each. If the gate resolves "no settings apply" for any creation path, the test fails.
+
+**Tradeoffs / Prevention**
+
+- **Gained**: no more silent-bypass of admin gates; operators trust that toggles apply universally.
+- **Made harder**: every future write path must remember to populate every admin-gating data field. Mitigation: this BUG entry + the grep gate above.
+- **Reconsider**: this pattern generalizes beyond OAuth. Any admin gate on a data field (post_meta, term_meta, user_meta, options) is subject to it. Consider extracting into an ARCHITECTURE constraint if it recurs on a third feature.
+- **Related**: `D18` (canonical `mcp_adapter_pre_tool_call` enforcement hook — a related gating architecture, gates on payload not persisted data so not vulnerable to this bug); `D20` (consumer-side default-provider registration hygiene — sibling "audit-before-wiring" pattern); `S9` (consent-surface server-side authoritative state — same underlying principle: don't trust missing data as absent, treat it explicitly).
+
+**Evidence**
+
+- `includes/OAuth/ClientRegistrationController.php:373` (pre-F029): `'connector_slug' => ''` hardcoded — the silent-bypass write path.
+- `includes/OAuth/ClientRegistrationController.php:369-379` (post-F029): the profile-walk attribution block that populates `connector_slug` correctly.
+- `includes/OAuth/AuthorizationController.php:497-510`: `infer_slug_from_dcr_client()` helper — a workaround at gate-consumer time that masked the bug from the /authorize path but left DIRECT consumers exposed.
+- Runtime evidence: on `acrossai.co` pre-F029, every DCR-registered Claude client bypassed the F024 connector-enable toggle because their `connector_slug` was empty; the admin's "disable Claude" toggle had no effect for DCR-created rows.
+
+**Where to look next**
+
+Before adding a new admin control keyed on a data field, run the grep gate above. When reviewing any feature that adds a new creation surface for a resource with existing admin gates, verify every admin-gating field is populated. If you find an admin gate with empty-value tolerance today, either fix the write path or add a documented fallback that surfaces the "unattributed" state to the admin.
+
+---
+
+### B34 — Silent write-loss when live BerlinDB table drifts from Schema.php with matching db_version stamp
+
+**Status**: Active (Feature 029 — 2026-07-18)
+**Scope**: Any plugin-owned BerlinDB Kern\Table where `Schema.php` gained columns or bumped column widths without a paired `$version` bump + `$upgrades` callback. Applies to every future BerlinDB Table module in this plugin and every sibling plugin using the same base class.
+**Tags**: `berlindb, schema-drift, silent-write-loss, wpdb-insert-returns-false, generalizable`
+
+**Symptom**
+
+An application-level INSERT (`$wpdb->insert()` / BerlinDB `Query::add_item()`) that references a column present in `Schema.php` but absent from the physical table returns `false`. The caller casts the return to `int(0)` (per `add_item()`'s existing shape) and treats it as a successful insert with row_id=0. The REST API returns a 200/201 with a "success" JSON payload containing data that was never persisted. No error log, no admin notice, no exception — total silent failure.
+
+**Root cause**
+
+BerlinDB `Table::maybe_upgrade()` only runs `dbDelta`-equivalent schema changes when the stored `db_version` (wp_options) differs from the declared `$version` (Table property) AND a matching `$upgrades` callback exists (`vendor/berlindb/core/src/Database/Kern/Table.php:982-1012` — see `D28`). When `Schema.php` gains a column but `$version` stays the same, `needs_upgrade()` returns false and the physical table is never touched. When `$version` is bumped WITHOUT a matching `$upgrades` callback, BerlinDB just stamps the new version and returns success without altering the schema. In both cases the drift persists forever, and every subsequent write that references the missing column silently returns `false`.
+
+The F011 phantom-version guard (`if ( ! $this->exists() ) { delete_option( $this->db_version_key ); }` in `Table::maybe_upgrade()` overrides) only catches the "physical table missing" case — it does NOT detect column drift on an existing table.
+
+**Real-world evidence**
+
+- **`procureco.uk` OAuth outage** (fixed live via `DROP TABLE + recreate` before F029): `wp_acrossai_mcp_oauth_tokens` was missing columns declared in `OAuthTokens\Schema.php`. Token issuance at `/wp-json/acrossai-mcp-manager/v1/oauth/token` returned success, Claude.ai received a token response, but the token row was never persisted. Subsequent bearer usage failed at `TokenValidator` because the token hash didn't exist in the table.
+- **`acrossai_mcp_servers`** — same shape, latent: `Schema.php` declares `tool_discover_abilities` / `tool_get_ability_info` / `tool_execute_ability` (F025) but installs on <1.1.1 code never grew the columns. F025 tool-selection reads returned undefined; writes silently no-op'd.
+- **`acrossai_mcp_cli_auth_logs`** — same shape, latent: `Schema.php` declared four columns (`redirect_uri`, `code_challenge`, `code_challenge_method`, `scope`) that older installs never grew, plus three columns whose widths drifted (`status`, `failure_code`, `app_password_uuid`).
+
+**Decision (Prevention Recipe)**
+
+1. **Ship `D28`** — every Schema change on an existing table needs the 3-part coordinated change: `$version` bump + `$upgrades` entry + admin_init trigger.
+2. **Post-release SQL sanity check** — for any table whose schema changed in a recent release, on any install that already existed pre-release, run:
+   ```sql
+   SELECT COLUMN_NAME, DATA_TYPE, CHARACTER_MAXIMUM_LENGTH, IS_NULLABLE, COLUMN_DEFAULT
+     FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = '<prefix>acrossai_<module>'
+    ORDER BY ORDINAL_POSITION;
+   ```
+   Diff manually against `Schema.php`. If any column is missing OR widths differ OR defaults differ, the `$upgrades` callback didn't run — investigate (usually: version stamped but callback was missing).
+3. **Emergency remediation** — if a live install is silently write-losing, the temporary fix is `DROP TABLE <table>` + reload any admin page to trigger `install()` on the fresh table. This obviously loses data. The permanent fix is the `D28` reconciliation callback running on the next admin request after upgrade.
+4. **Grep gate on `Schema.php` diffs**: any PR that changes an `includes/Database/<Module>/Schema.php` MUST also touch the paired `Table.php` (`$version` + `$upgrades` diff). If a reviewer sees the Schema diff without the paired Table diff, block the PR.
+
+**Tradeoffs / Prevention**
+
+- **Gained**: Every future Schema evolution auto-reconciles on the next admin request; no operator action required; no "success" responses with lost data.
+- **Made harder**: Reviewers must catch missing `$upgrades` entries at PR time; grep gate above.
+- **Reconsider**: If a future BerlinDB Core release adds auto-diff-on-upgrade (Schema vs live table comparison), this bug pattern goes away — but until then it's a real, recurring hazard.
+- **Related**: `D28` (the fix pattern); `F011 WORKLOG` (phantom-version guard — catches "table missing" only, NOT column drift); `B18` (BerlinDB TINYINT string return — different failure mode, same lesson: don't trust that vendor abstractions "just work" without vendor-source verification).
+
+**Evidence**
+
+- `procureco.uk` outage post-mortem (live fix): `wp_acrossai_mcp_oauth_tokens` schema drift, restored via drop + recreate.
+- Pre-F029 `wp_acrossai_mcp_servers` sanity: `SHOW COLUMNS LIKE 'tool_%'` returned zero rows despite `Schema.php` declaring three.
+- Pre-F029 `wp_acrossai_mcp_cli_auth_logs` sanity: 4 columns missing + 3 width mismatches vs `Schema.php`.
+- `vendor/berlindb/core/src/Database/Kern/Table.php:988-993`:
+  ```php
+  if ( empty( $upgrades ) ) {
+      $this->set_db_version();
+      return true;
+  }
+  ```
+  This is the exact code path that made version bumps a no-op when `$upgrades` was empty.
+- Commit `479518e` — first attempt: bumped `MCPServer::$version` without a callback. Would have silently stamped the new version with columns still missing. Reviewer-caught. Commit `90cbdeb` — corrected using `$upgrades` per `D28`.
+
+**Where to look next**
+
+When onboarding a new BerlinDB Table module, run the `INFORMATION_SCHEMA` diff above once against a pre-release install to confirm no legacy drift exists. Before every release, `git diff` on all `Schema.php` files vs the last release tag — every changed file MUST have a matching `Table.php` `$version` + `$upgrades` change or the release is defective.

@@ -220,6 +220,45 @@ final class Main {
 	}
 
 	/**
+	 * F029 — Run `maybe_upgrade()` on every BerlinDB Table on admin_init
+	 * so schema-version bumps (e.g. F029's CliAuthLog 1.0.1 + MCPServer
+	 * 1.1.1) roll out on the next admin page load, without operators
+	 * having to deactivate + reactivate the plugin.
+	 *
+	 * `Activator::activate()` already calls `maybe_upgrade()` on every
+	 * table at plugin-activation time — but activation only fires once.
+	 * For live installs that upgrade in place (composer / wp-cli plugin
+	 * update / manual file replace), no code path was reconciling schema
+	 * versions until this hook was added, so any table whose Schema.php
+	 * gained columns or bumped widths after the initial install silently
+	 * stayed drifted — including the pre-F029 F025 `tool_*` columns on
+	 * `acrossai_mcp_servers` and the `status`/`failure_code`/
+	 * `app_password_uuid` widths on `acrossai_mcp_cli_auth_logs`.
+	 *
+	 * Cost per admin request: 7 cheap option reads (needs_upgrade()
+	 * short-circuits when the stored version matches). Real dbDelta only
+	 * runs on the FIRST admin request after a version bump.
+	 *
+	 * Runs at priority 3 so it fires BEFORE `Settings::maybe_seed_default_server`
+	 * (priority 4) and `Settings::handle_actions` (priority 5) — both of
+	 * which read from these tables and would otherwise race a drifted
+	 * schema on the first post-upgrade admin request.
+	 *
+	 * Wired by `define_admin_hooks()` per Constitution §A1.
+	 *
+	 * @return void
+	 */
+	public function reconcile_database_schemas(): void {
+		\AcrossAI_MCP_Manager\Includes\Database\MCPServer\Table::instance()->maybe_upgrade();
+		\AcrossAI_MCP_Manager\Includes\Database\CliAuthLog\Table::instance()->maybe_upgrade();
+		\AcrossAI_MCP_Manager\Includes\Database\MCPServerAbility\Table::instance()->maybe_upgrade();
+		\AcrossAI_MCP_Manager\Includes\Database\MCPServerTool\Table::instance()->maybe_upgrade();
+		\AcrossAI_MCP_Manager\Includes\Database\OAuthClients\Table::instance()->maybe_upgrade();
+		\AcrossAI_MCP_Manager\Includes\Database\OAuthTokens\Table::instance()->maybe_upgrade();
+		\AcrossAI_MCP_Manager\Includes\Database\OAuthAuthCodes\Table::instance()->maybe_upgrade();
+	}
+
+	/**
 	 * Load the required composer dependencies for this plugin.
 	 *
 	 * @since    0.0.1
@@ -326,6 +365,13 @@ final class Main {
 		 * - render_action_result_notice consumes the `?notice=...` query var
 		 *   set by handle_actions redirects (FR-016).
 		 */
+		// F029 — reconcile BerlinDB schema versions on admin_init so table
+		// upgrades roll out on the next admin page load without operators
+		// having to deactivate/reactivate. See Main::reconcile_database_schemas().
+		// Runs at priority 3 so it fires BEFORE Settings::maybe_seed_default_server (4)
+		// and Settings::handle_actions (5) — both read from these tables.
+		$this->loader->add_action( 'admin_init', $this, 'reconcile_database_schemas', 3 );
+
 		$settings = \AcrossAI_MCP_Manager\Admin\Partials\Settings::instance();
 		// Auto-heal the default MCP server row (reference-plugin pattern).
 		// Runs at priority 4 so the row exists before handle_actions/list-render.
