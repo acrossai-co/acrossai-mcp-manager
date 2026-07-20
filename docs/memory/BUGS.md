@@ -1254,3 +1254,122 @@ The F011 phantom-version guard (`if ( ! $this->exists() ) { delete_option( $this
 **Where to look next**
 
 When onboarding a new BerlinDB Table module, run the `INFORMATION_SCHEMA` diff above once against a pre-release install to confirm no legacy drift exists. Before every release, `git diff` on all `Schema.php` files vs the last release tag — every changed file MUST have a matching `Table.php` `$version` + `$upgrades` change or the release is defective.
+
+### 2026-07-20 - B35 — Filter-priority footrace on `wp_register_ability_args` callback-swap chains
+
+**Status**
+Active — Feature 030
+
+**Why this is durable**
+
+Filter priority is a load-order coincidence, not a durable authorization boundary. Any plugin registering above the highest existing consumer silently supersedes it. Documents the slot map so future consumers pick non-conflicting priorities and reviewers can spot ordering regressions at PR time.
+
+**Failure mode**
+
+When multiple plugins hook `wp_register_ability_args` with the intent of overriding `permission_callback`, the LAST-registered filter wins. Registration order is priority-based: lower priority number → runs first; higher → runs last and gets the final say.
+
+Any silent addition of a new consumer at OR ABOVE the highest existing priority number silently subsumes every earlier consumer's decision. In F030's case, a rogue plugin registering at P1000000 could wrap F030's `true`-returning closure, restore the original `permission_callback` verdict, and thereby restore denials the operator explicitly toggled off — without any log entry or admin-visible signal.
+
+**Current priority slot map** (last updated Feature 030):
+
+- **P10** — `AcrossAI_MCP_Manager\Includes\Abilities\CallbackReplacer::replace_callbacks` — swaps callbacks for exactly three vendor abilities (`mcp-adapter/discover-abilities`, `.../get-ability-info`, `.../execute-ability`). Narrow scope; runs first so downstream consumers see the plugin-owned callback shape.
+- **P100000** — sibling `acrossai-abilities-manager` plugin's `AcrossAI_Ability_Override_Processor::inject_override_args` — per-slug injector that reads DB-stored override rows and rebinds `permission_callback` when a rule exists for the ability slug.
+- **P999999** — F030 `PermissionOverrideProcessor::inject_override` — per-server operator-opt-in bypass; MUST beat P100000 so operator's toggle wins over the sibling plugin's per-ability rules for MCP requests routed to the specific server.
+
+**Prevention**
+
+Before adding a new `wp_register_ability_args` hook, check this slot map. Pick a priority that intentionally orders relative to existing consumers:
+
+- If the new consumer should NEVER be overridden by F030's operator toggle: register above P999999 AND update this entry with the new slot AND coordinate with the F030 semantic (does the new consumer respect the toggle or explicitly override it?).
+- If the new consumer should be subject to F030's toggle: register below P999999.
+- If the new consumer should be subject to the sibling plugin's per-ability rules: register below P100000.
+
+If a fourth entrant emerges, consider consolidating into a `WpRegisterAbilityArgsPriorityMap` constants class (analog to `DEC-F020-TOOL-ENFORCEMENT-PRIORITY` for the `mcp_adapter_pre_tool_call` filter — same problem shape, same solution).
+
+**Detection gap** (accepted follow-up)
+
+F030 does NOT implement boot-time detection of conflicting registrations at ≥ P999999. Recommended follow-up feature: add a `plugins_loaded` P999999 hook that walks `$GLOBALS['wp_filter']['wp_register_ability_args']` and admin-notices any conflict. Non-blocking for F030 — installing a rogue plugin at P1000000 requires `install_plugins`, which is game-over territory anyway.
+
+**Evidence**
+
+- `includes/Main.php` — three Loader wire-ups: `CallbackReplacer` at 10, F030's `PermissionOverrideProcessor` at 999999.
+- `../acrossai-abilities-manager/includes/Modules/Abilities/AcrossAI_Ability_Override_Processor.php:164` — sibling plugin's P100000 registration.
+- `tests/phpunit/Abilities/PermissionOverrideIsolationTest::test_p999999_beats_p100000_denying_filter` — regression test asserting the ordering invariant.
+
+**Where to look**
+
+Any new file under `includes/` or `admin/` that emits `add_filter( 'wp_register_ability_args', ... )` in the diff — check the priority number against this slot map. Any diff that registers at or above P999999 needs a matching update to this entry AND a coordination note with F030 in the PR description.
+
+### 2026-07-20 - B36 — Inline `<script>` string-interpolation requires `wp_json_encode()`, not `esc_html()`/`esc_attr()`
+
+**Status**
+Active — Feature 030 (generalizable beyond F030)
+
+**Why this is durable**
+
+`esc_html()` and `esc_attr()` are the default WP escaping habits and PHPCS wants to see them everywhere. But neither correctly encodes strings for a JavaScript string-literal context — both leave `'`, `"`, `\`, newline, and `</script>` un-escaped for a JS parser. Stored XSS by any user who can set the interpolated value (in F030's case, an admin who set a hostile `server_name` for an MCP server row).
+
+**Failure mode**
+
+Consider:
+
+```php
+$server_name = 'Server '; alert(document.cookie); //'; // stored in DB by an admin
+printf(
+    '<script>window.confirm("%s")</script>',
+    esc_html( $server_name )  // ← WRONG: HTML-context escaper, not JS-context
+);
+```
+
+Rendered HTML:
+```html
+<script>window.confirm("Server '; alert(document.cookie); //")</script>
+```
+
+`esc_html()` doesn't escape `'` — the JS parser sees `window.confirm("Server ");` followed by `alert(document.cookie);` followed by `//")`. XSS fires under any admin who visits the page.
+
+`esc_attr()` fails the same way — it targets HTML attribute quoting, not JS string quoting. It escapes `<` and `>` but leaves `'`, `"`, `\`, and control chars alone.
+
+**Correct pattern**
+
+For ANY inline `<script>` block that interpolates a dynamic PHP value into a JavaScript string literal (`document.getElementById(?)`, `window.confirm(?)`, event-handler payloads, config object values, etc.), MUST use `wp_json_encode( $value )` for the interpolation.
+
+```php
+printf(
+    '<script>window.confirm(%s)</script>',       // ← no quotes around %s — wp_json_encode adds them
+    wp_json_encode( $server_name )
+);
+```
+
+Rendered HTML:
+```html
+<script>window.confirm("Server '; alert(document.cookie); \/\/")</script>
+```
+
+`wp_json_encode()` produces a JSON-quoted string that is safe both as a JS literal AND as HTML content — JSON's `<` encoding for `<` prevents `</script>` breakout. The emitted literal INCLUDES the surrounding quotes; the `<script>` template must NOT wrap the placeholder in additional quotes.
+
+**Grep gate** (candidate for pre-commit hook or PHPCS custom sniff):
+
+```
+grep -rn 'echo *"<script\|printf( *[\x27"]<script' includes/ admin/ public/ | grep -v 'wp_json_encode'
+```
+
+Any hit that interpolates a dynamic PHP value into a JS literal needs `wp_json_encode()`. Zero hits post-F030.
+
+**Reference implementation**: `admin/Partials/ServerTabs/AccessControlTab.php:509-513` — both `$form_id` and `$confirm_msg` interpolated via `wp_json_encode()`. This was the SEC-030-001 ship-blocker in the F030 plan-phase security review, remediated in the implementation phase and verified in the staged review.
+
+**Tradeoffs / Prevention**
+
+- **Prevention**: Add the grep to the pre-commit checklist. When a dynamic value MUST reach JS, `wp_json_encode()` — no exceptions.
+- **Note**: `wp_json_encode()` INCLUDES the surrounding quotes; the emitted literal is `"value"` not `value` — the `<script>` template should NOT wrap the placeholder in additional quotes. Common mistake when converting from `esc_html`-with-quotes to `wp_json_encode`-without.
+- **Related**: `B22` (WordPress admin JS bundle contract — different failure mode but same "trust the WP escaping helper for the right context" lesson).
+
+**Evidence**
+
+- `docs/security-reviews/2026-07-20-030-per-server-permission-override-plan.md` §SEC-030-001 — original finding.
+- `docs/security-reviews/2026-07-20-030-per-server-permission-override-staged.md` §SEC-030-001 — remediation verified.
+- `admin/Partials/ServerTabs/AccessControlTab.php:509-513` — the fixed pattern in use.
+
+**Where to look next**
+
+Any new admin PHP that emits inline `<script>` with dynamic interpolation — run the grep gate. Any use of `wp_json_encode()` OUTSIDE of JS-context is fine (it's a superset of `esc_html`'s safety guarantees for the string-content case), but the reverse is dangerous.

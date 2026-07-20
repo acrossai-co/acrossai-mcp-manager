@@ -89,8 +89,11 @@ class Settings {
 		// US2: toggle_status, delete (single), create (POST), bulk.
 		// US3: update (General-tab save).
 		// F015 (post-Q4): access-control saves are owned by the vendor React
-		// component via vendor REST — no plugin-owned action handler.
-		if ( ! in_array( $action, array( 'toggle_status', 'delete', 'create', 'update' ), true )
+		// component via vendor REST — no plugin-owned action handler for the
+		// wpb-ac panel.
+		// F030: save_permission_override handles the per-server override toggle
+		// form on the Access Control tab (does NOT touch the wpb-ac panel).
+		if ( ! in_array( $action, array( 'toggle_status', 'delete', 'create', 'update', 'save_permission_override' ), true )
 			&& ! $this->is_bulk_request()
 		) {
 			return;
@@ -151,9 +154,20 @@ class Settings {
 			$this->handle_update_server( $server_id );
 		}
 
-		// F015 note (post-Q4): access-control saves are owned by the vendor
-		// React component via vendor REST endpoints (PUT/DELETE
-		// /wpb-ac/v1/mcp/rules/{ns}/{key}). No plugin-owned POST handler here.
+		// ── F030 — save_permission_override (POST) ────────────────────────────
+		// Access Control tab's per-server override toggle. Owns its own save
+		// path so `handle_update_server()` (Update Server tab) is never
+		// coupled to Access Control state.
+		if ( 'save_permission_override' === $action && $this->is_post_request() ) {
+			$server_id = isset( $_GET['server'] ) ? absint( $_GET['server'] ) : 0; // phpcs:ignore WordPress.Security.NonceVerification
+			check_admin_referer( 'acrossai_mcp_manager_permission_override_' . $server_id, 'acrossai_mcp_manager_permission_override_nonce' );
+			$this->handle_save_permission_override( $server_id );
+		}
+
+		// F015 note (post-Q4): access-control saves for the vendor wpb-ac
+		// React panel are owned by vendor REST endpoints (PUT/DELETE
+		// /wpb-ac/v1/mcp/rules/{ns}/{key}). No plugin-owned POST handler
+		// for the vendor panel here.
 	}
 
 	/**
@@ -375,6 +389,91 @@ class Settings {
 
 		$query->update_item( $server_id, $data );
 		$this->redirect_to_edit( $server_id, 'update-server', 'server_saved' );
+	}
+
+	/**
+	 * F030 — save handler for the per-server ability permission_callback
+	 * override toggle. Caller (`handle_actions()`) already verified nonce +
+	 * that this is a POST request.
+	 *
+	 * Enforces `manage_options` capability defensively (belt-and-suspenders
+	 * atop the top-level check in `handle_actions()`). Persists the tinyint
+	 * flag via `MCPServerQuery::update_item()`. Fires the
+	 * `acrossai_mcp_permission_override_toggled` D19-style observability
+	 * hook so operators can attach an audit logger without a hard dep
+	 * (SEC-030-002 remediation).
+	 *
+	 * Redirects back to the Access Control tab with a success flag; the tab
+	 * renders the notice via `AccessControlTab::render_save_notice()`.
+	 *
+	 * @param int $server_id MCP server PK.
+	 * @return void
+	 */
+	private function handle_save_permission_override( int $server_id ): void {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die(
+				esc_html__( 'You do not have permission to perform this action.', 'acrossai-mcp-manager' ),
+				'',
+				array( 'response' => 403 )
+			);
+		}
+		if ( $server_id <= 0 ) {
+			$this->redirect_to_list( 'server_not_found' );
+		}
+
+		$query = Query::instance();
+		$rows  = $query->query(
+			array(
+				'id'     => $server_id,
+				'number' => 1,
+			)
+		);
+		if ( empty( $rows ) ) {
+			$this->redirect_to_list( 'server_not_found' );
+		}
+
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- Nonce verified in handle_actions() dispatcher via check_admin_referer().
+		$value = ! empty( $_POST['override_abilities_permission'] ) ? 1 : 0;
+
+		$query->update_item( $server_id, array( 'override_abilities_permission' => $value ) );
+
+		/**
+		 * Fires after the operator toggles the per-server permission override.
+		 *
+		 * D19-style fail-open observability signal. Fire-and-forget — return
+		 * value is ignored. Operators can attach any logger (Query Monitor,
+		 * custom audit table, syslog) without this plugin depending on it.
+		 *
+		 * @since Feature 030
+		 *
+		 * @param int $server_id  MCP server PK.
+		 * @param int $value      New value (0 = off, 1 = on).
+		 * @param int $user_id    ID of the user who made the change.
+		 * @param int $timestamp  Unix timestamp of the change.
+		 */
+		do_action(
+			'acrossai_mcp_permission_override_toggled',
+			$server_id,
+			$value,
+			get_current_user_id(),
+			time()
+		);
+
+		wp_safe_redirect(
+			esc_url_raw(
+				add_query_arg(
+					array(
+						'page'   => AdminPageSlugs::PARENT,
+						'action' => 'edit',
+						'server' => $server_id,
+						'tab'    => 'access-control',
+						'acrossai_mcp_manager_permission_saved' => 1,
+					),
+					admin_url( 'admin.php' )
+				)
+			)
+		);
+		exit;
 	}
 
 	// ─────────────────────────────────────────────────────────────────────────

@@ -535,6 +535,27 @@ final class Main {
 		$callback_replacer = \AcrossAI_MCP_Manager\Includes\Abilities\CallbackReplacer::instance();
 		$this->loader->add_filter( 'wp_register_ability_args', $callback_replacer, 'replace_callbacks', 10, 2 );
 
+		/**
+		 * Feature 030 — per-server ability permission_callback override.
+		 *
+		 * Wraps every ability's permission_callback in a closure that returns
+		 * `true` iff (a) MCP request in flight, (b) that server's operator
+		 * toggled `override_abilities_permission = 1`, (c) the slug is exposed
+		 * to this server via wp_acrossai_mcp_server_abilities. Otherwise the
+		 * original callback runs unchanged.
+		 *
+		 * Priority 999999 — MUST beat sibling acrossai-abilities-manager's
+		 * P100000 injector so the operator toggle wins. Load-bearing invariant
+		 * per DEC-F030-PERMISSION-CALLBACK-OPERATOR-OPT-IN-BYPASS.
+		 *
+		 * Companion cache-clear on rest_post_dispatch + shutdown mirrors A17
+		 * pattern (symmetric with CurrentServerHolder::clear).
+		 */
+		$permission_override = \AcrossAI_MCP_Manager\Includes\Abilities\PermissionOverrideProcessor::instance();
+		$this->loader->add_filter( 'wp_register_ability_args', $permission_override, 'inject_override', \AcrossAI_MCP_Manager\Includes\Abilities\PermissionOverrideProcessor::PRIORITY, 2 );
+		$this->loader->add_filter( 'rest_post_dispatch', $permission_override, 'clear_request_cache', 999, 1 );
+		$this->loader->add_action( 'shutdown', $permission_override, 'clear_request_cache', 999 );
+
 		$current_server_holder = \AcrossAI_MCP_Manager\Includes\Abilities\CurrentServerHolder::instance();
 		// `rest_pre_dispatch` is a filter that returns $result; priority 5 to
 		// fire before any short-circuiting handlers at default 10.

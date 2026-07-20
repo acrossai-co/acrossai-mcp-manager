@@ -69,6 +69,38 @@
         <testsuite name="oauth">
             <directory>tests/phpunit/OAuth</directory>
         </testsuite>
+
+        <!--
+            Abilities (Feature 017/F026/F030): tests for the WP Abilities API
+            integration layer under includes/Abilities/. Covers CallbackReplacer,
+            CurrentServerHolder, Discover/Execute/GetAbilityInfo, and
+            PermissionOverrideProcessor (F030). Requires WP for
+            wp_get_ability, wp_register_ability_args filter dispatch,
+            rest_pre_dispatch — use tests/bootstrap-wp.php.
+        -->
+        <testsuite name="abilities">
+            <directory>tests/phpunit/Abilities</directory>
+        </testsuite>
+
+        <!--
+            Database (Feature 011/F017/F025/F029/F030): tests for BerlinDB
+            Schema/Table/Row/Query subclasses + upgrade callbacks + phantom-
+            version guard. Requires WP for $wpdb, INFORMATION_SCHEMA reads,
+            get_option / update_option — use tests/bootstrap-wp.php.
+        -->
+        <testsuite name="database">
+            <directory>tests/phpunit/Database</directory>
+        </testsuite>
+
+        <!--
+            MCP (Feature 017/F020/F025/F026): tests for the MCP boundary layer
+            under includes/MCP/ — enforcement gates on mcp_adapter_pre_tool_call
+            (F015 access control, F017 ability exposure, F020 tool curation).
+            Requires WP for filter dispatch — use tests/bootstrap-wp.php.
+        -->
+        <testsuite name="mcp">
+            <directory>tests/phpunit/MCP</directory>
+        </testsuite>
     </testsuites>
 
     <source>
