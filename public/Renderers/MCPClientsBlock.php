@@ -25,6 +25,7 @@ use AcrossAI_MCP_Manager\Includes\MCPClients\ClaudeDesktopClient;
 use AcrossAI_MCP_Manager\Includes\MCPClients\CodexClient;
 use AcrossAI_MCP_Manager\Includes\MCPClients\CursorClient;
 use AcrossAI_MCP_Manager\Includes\MCPClients\CustomClient;
+use AcrossAI_MCP_Manager\Includes\MCPClients\GeminiClient;
 use AcrossAI_MCP_Manager\Includes\MCPClients\GitHubCopilotClient;
 use AcrossAI_MCP_Manager\Includes\MCPClients\VSCodeClient;
 
@@ -93,6 +94,13 @@ final class MCPClientsBlock extends AbstractClientRenderer {
 			'config_file'   => '~/.cursor/mcp.json',
 			'top_level_key' => 'mcpServers',
 			'instructions'  => 'Generate a password → copy the JSON → open ~/.cursor/mcp.json → paste under mcpServers → restart Cursor.',
+		),
+		'gemini'         => array(
+			'emoji'         => '💎',
+			'description'   => 'Google Gemini CLI',
+			'config_file'   => '~/.gemini/settings.json',
+			'top_level_key' => 'mcpServers',
+			'instructions'  => 'Generate a password → copy the JSON → open ~/.gemini/settings.json (create it if missing) → paste under mcpServers → restart Gemini CLI.',
 		),
 		'custom'         => array(
 			'emoji'         => '⚙',
@@ -163,6 +171,7 @@ final class MCPClientsBlock extends AbstractClientRenderer {
 			GitHubCopilotClient::class,
 			CodexClient::class,
 			CursorClient::class,
+			GeminiClient::class,
 			CustomClient::class,
 		);
 

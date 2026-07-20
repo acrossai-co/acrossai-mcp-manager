@@ -13,13 +13,14 @@ use AcrossAI_MCP_Manager\Includes\MCPClients\ClaudeDesktopClient;
 use AcrossAI_MCP_Manager\Includes\MCPClients\CodexClient;
 use AcrossAI_MCP_Manager\Includes\MCPClients\CursorClient;
 use AcrossAI_MCP_Manager\Includes\MCPClients\CustomClient;
+use AcrossAI_MCP_Manager\Includes\MCPClients\GeminiClient;
 use AcrossAI_MCP_Manager\Includes\MCPClients\GitHubCopilotClient;
 use AcrossAI_MCP_Manager\Includes\MCPClients\VSCodeClient;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
 /**
- * Golden-fixture tests for the 7 concrete MCP clients.
+ * Golden-fixture tests for the 8 concrete MCP clients.
  *
  * Fixture files live in tests/phpunit/MCPClients/fixtures/
  *   <slug>-with-token.{json,txt}   — non-empty token golden output
@@ -43,6 +44,7 @@ final class ConcreteClientsTest extends TestCase {
 			'Codex'         => array( new CodexClient(),         'codex',          'Codex' ),
 			'Cursor'        => array( new CursorClient(),        'cursor',         'Cursor' ),
 			'Custom'        => array( new CustomClient(),        'custom',         'Custom Client' ),
+			'Gemini'        => array( new GeminiClient(),        'gemini',         'Gemini CLI' ),
 			'GitHubCopilot' => array( new GitHubCopilotClient(), 'github-copilot', 'GitHub Copilot' ),
 			'VSCode'        => array( new VSCodeClient(),        'vscode',         'VS Code' ),
 		);
