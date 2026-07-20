@@ -1806,3 +1806,83 @@ Callbacks MUST be idempotent per-item via `INFORMATION_SCHEMA.COLUMNS` inspectio
 **Where to look next**
 
 Before any commit that touches a `Schema.php`: run `git diff --stat includes/Database/` and verify every changed `Schema.php` has a paired `Table.php` change bumping `$version` AND adding a `$upgrades` entry. When adding a new Table module, register the module in `Main::reconcile_database_schemas()` alongside the existing 7 tables. If a new column addition can be safely deferred (feature-flagged behind operator opt-in that keys on new-column-present), the `$upgrades` callback can be omitted, but the version bump then must also be omitted — otherwise BerlinDB stamps the new version and the callback can never run later.
+
+### 2026-07-20 — D29 — Operator-visible `permission_callback` bypass permitted ONLY with six-layer defensive gating (F030)
+
+**Status**
+Active — Feature 030 (`DEC-F030-PERMISSION-CALLBACK-OPERATOR-OPT-IN-BYPASS`)
+
+**Why this is durable**
+
+Explicit, operator-visible bypass of an ability's `permission_callback` is a legitimate pattern under strict conditions but must never generalize to unguarded exposure widening. This entry codifies the six defensive layers required for any future bypass feature — future authors reaching for "just set `permission_callback = true`" must audit against this list first.
+
+**Decision**
+
+An explicit, operator-visible bypass of an ability's `permission_callback` is permitted ONLY when ALL six defensive layers are present:
+
+1. `manage_options` capability enforced on the toggle's save path (defensively re-verified inside the handler, not only at the router).
+2. Per-server nonce (canonical pattern: `acrossai_mcp_manager_<feature>_<server_id>`) bound to the specific server_id — nonce for server A must fail against server B.
+3. Persistent warning banner (`<div class="notice notice-warning inline">`) rendered whenever the toggle is currently ON — the operator SEES the security posture on every tab load.
+4. Native browser `confirm()` prompt fired on submit-to-ON — client-side friction, not a security control, but a documented UX safety net.
+5. Request scope narrowed to a specific MCP server via `CurrentServerHolder` — non-MCP callers (WP admin, non-MCP REST namespaces, WP-CLI) MUST fall through to the original callback unchanged.
+6. Ability scope narrowed to abilities exposed via the per-server junction table via `ExposureResolver::resolve()` — abilities not explicitly toggled on the Abilities tab are NOT bypassed even when the override flag is ON.
+
+Under these six layers, hooking `wp_register_ability_args` at a priority higher than every other known callback-injecting filter (F030 uses P999999 to beat sibling `acrossai-abilities-manager`'s P100000 — see `B35` for the slot map) and returning `true` unconditionally in the closure is a legitimate feature pattern.
+
+**Scoped carve-out from `D24` (`DEC-F026-ADVERTISEMENT-VS-CALL-TIME-DEFENSE-IN-DEPTH`) corollary v3.** D24's corollary states: "exposure ≠ authorization — companion filters widening exposure MUST NOT bypass the target ability's own `permission_callback`." D29 does NOT dilute D24 — D24 remains the default rule for every exposure-widening filter. D29 permits ONLY the narrow "operator-visible security-relevant toggle with all six layers" case. Any future proposal that lacks even one of the six layers falls back under D24 and MUST NOT ship.
+
+Reference impl: `includes/Abilities/PermissionOverrideProcessor.php`.
+
+**Tradeoffs**
+
+- **Gained**: Operator escape-hatch for scenarios where per-ability rule authoring is impractical (dev sites, prototype servers, agent-controlled contexts). Operator can grant broad access without editing PHP.
+- **Reconsider**: If any future feature proposes a `permission_callback` bypass without ALL six layers — this decision explicitly does NOT generalize. D24's corollary remains the default rule. Reject the proposal and route the requestor to per-ability rule authoring (F017 + sibling `acrossai-abilities-manager`).
+- **Related**: `D24` (`DEC-F026-ADVERTISEMENT-VS-CALL-TIME-DEFENSE-IN-DEPTH` corollary v3 — the default rule this carves out); `D30` (`DEC-F030-EXPLICIT-EXPOSURE-ONLY` — companion; narrows layer #6 to explicit-junction-row-only); `D25` (`DEC-F026-WP-REGISTER-ABILITY-ARGS-CALLBACK-SWAP` — same filter hook, different pattern); `B35` (filter-priority slot map for callback-swap consumers); `A17` (request-scoped REST context capture — layer #5's implementation).
+
+**Evidence**
+
+- `includes/Abilities/PermissionOverrideProcessor.php` — reference implementation, all six layers wired.
+- `admin/Partials/ServerTabs/AccessControlTab.php` — layers 3 (warning banner) + 4 (confirm prompt) + 6 (junction table via `ExposureResolver`).
+- `admin/Partials/Settings.php::handle_save_permission_override()` — layers 1 (cap) + 2 (nonce).
+- `docs/security-reviews/2026-07-20-030-per-server-permission-override-plan.md` + `-staged.md` — plan-phase + staged security review both confirm the six-layer posture.
+- `specs/030-per-server-permission-override/memory-synthesis.md` §Conflict Warnings — original surfacing of the D24 tension resolved by this entry.
+
+**Where to look next**
+
+Before shipping any new feature that returns `true` from a `permission_callback` (or from any closure wrapping one), audit against the six layers above. If ANY layer is absent, do NOT ship — either add the missing layer or refactor to a non-bypass alternative (per-user-rule authoring, per-role capability check, etc.).
+
+### 2026-07-20 — D30 — F030 intentionally passes empty `$meta` to `ExposureResolver::resolve()` — scoped carve-out from DEC-ABILITY-OVERRIDE-RESOLUTION
+
+**Status**
+Active — Feature 030 (`DEC-F030-EXPLICIT-EXPOSURE-ONLY`)
+
+**Why this is durable**
+
+Security-critical bypass features should require explicit operator opt-in per-ability, not inherit implicit visibility from a plugin author's meta declaration. Documents an intentional narrower semantic that would otherwise look like a bug — future maintainers must NOT "fix" the empty-`$meta` call as if it were an oversight.
+
+**Decision**
+
+F030's runtime override closure at `PermissionOverrideProcessor::inject_override()` calls `ExposureResolver::resolve( $server_id, $slug, array() )` with intentionally empty `$meta`. This is a scoped, documented deviation from `DEC-ABILITY-OVERRIDE-RESOLUTION`'s canonical "row exists → row wins; no row → `meta.mcp.public` fallback" contract.
+
+By passing empty meta, F030 collapses the fallback path to `false` — meaning the override applies ONLY to abilities the operator has EXPLICITLY toggled ON in the Abilities tab (junction row exists in `wp_acrossai_mcp_server_abilities`), NOT to abilities that are globally-public via `meta.mcp.public = true` without a per-server junction row.
+
+**Why narrower**: an unconditional `permission_callback → true` should require operator opt-in per-ability, not inherit implicit visibility from a third-party plugin author's meta declaration. The narrower scope keeps the six-layer defensive gating (`D29`) meaningful — layer #6 becomes "operator explicitly toggled this ability ON for this server," not "operator toggled the server ON and this ability happens to be `meta.mcp.public`."
+
+Reference impl: 20-line inline comment at `includes/Abilities/PermissionOverrideProcessor.php:123-142`.
+
+**Tradeoffs**
+
+- **Gained**: Security-critical `permission_callback → true` bypass requires explicit operator opt-in per-ability — cannot inherit implicit visibility. Operator's Abilities-tab toggle is the sole authorization signal.
+- **Made harder**: F030's exposure semantic diverges from F017's canonical resolution. Documented via inline comment + this entry so future maintainers don't "fix" it.
+- **Reconsider**: Only if a future feature needs bypass semantics that DO respect `meta.mcp.public` — must be a new documented decision, not an in-place change to `PermissionOverrideProcessor`. The correct extension point is a new processor with its own scoped decision entry.
+- **Related**: `D29` (six-layer bypass framework — this entry narrows layer #6); `DEC-ABILITY-OVERRIDE-RESOLUTION` (the F017 canonical semantic this carves out); `B32` (filter defaults MUST express plugin's canonical semantic — this entry EXPLICITLY invokes the "except when narrower is safer" clause).
+
+**Evidence**
+
+- `includes/Abilities/PermissionOverrideProcessor.php:107-153` — the closure body + 20-line inline comment explaining the empty-`$meta` decision.
+- `includes/Database/MCPServerAbility/ExposureResolver.php:53-76` — the canonical resolver F030 selectively narrows.
+- `docs/security-reviews/2026-07-20-030-per-server-permission-override-plan.md` — plan-phase review that first surfaced the tension (as V1 in `/speckit-architecture-guard-architecture-review`).
+
+**Where to look next**
+
+If a future feature needs to consult `ExposureResolver::resolve()` for a similar authorization-adjacent decision, evaluate whether it should pass real meta (canonical) or empty (F030-style narrower). Default: pass real meta unless you have an explicit reason to be narrower + a documented decision entry justifying it.

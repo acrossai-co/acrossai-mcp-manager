@@ -127,6 +127,18 @@ class Schema extends \BerlinDB\Database\Kern\Schema {
 			'default' => 1,
 		),
 
+		// F030 — per-server operator opt-in that bypasses each exposed ability's
+		// permission_callback for in-flight MCP requests to this specific server.
+		// Default 0 (OFF) preserves prior behaviour on upgrade. Runtime override
+		// gated by CurrentServerHolder + ExposureResolver (see
+		// includes/Abilities/PermissionOverrideProcessor.php).
+		array(
+			'name'    => 'override_abilities_permission',
+			'type'    => 'tinyint',
+			'length'  => '1',
+			'default' => 0,
+		),
+
 		// Audit timestamp — no explicit default; BerlinDB uses '0000-00-00 00:00:00'
 		// for datetime columns. 'created' flag handles auto-timestamping at the
 		// application layer (CURRENT_TIMESTAMP quoted by BerlinDB is invalid DDL).

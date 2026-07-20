@@ -43,9 +43,13 @@ class Table extends \BerlinDB\Database\Kern\Table {
 	 * matching callback would silently stamp the new version without
 	 * changing the physical schema.
 	 *
+	 * `1.1.2` (F030): forces the paired `upgrade_to_1_1_2()` callback to
+	 * ADD the `override_abilities_permission` column. Follows the D28
+	 * BerlinDB schema-drift-reconciliation contract byte-for-byte.
+	 *
 	 * @var string
 	 */
-	protected $version = '1.1.1';
+	protected $version = '1.1.2';
 
 	/**
 	 * BerlinDB per-version upgrade callbacks. Runs when `db_version` in
@@ -55,6 +59,7 @@ class Table extends \BerlinDB\Database\Kern\Table {
 	 */
 	protected $upgrades = array(
 		'1.1.1' => 'upgrade_to_1_1_1',
+		'1.1.2' => 'upgrade_to_1_1_2',
 	);
 
 	/**
@@ -166,6 +171,46 @@ class Table extends \BerlinDB\Database\Kern\Table {
 			// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.DirectDatabaseQuery.SchemaChange -- DDL with plugin-owned table name ($wpdb->prefix + hardcoded slug) + hardcoded column definitions; idempotent via existence check above. $wpdb->prepare() does not support DDL identifiers.
 			$wpdb->query( "ALTER TABLE `{$table}` " . $ddl );
 		}
+
+		return true;
+	}
+
+	/**
+	 * BerlinDB upgrade callback for 1.1.1 → 1.1.2 (F030).
+	 *
+	 * Adds the `override_abilities_permission tinyint(1) NOT NULL DEFAULT 0`
+	 * column to `wp_acrossai_mcp_servers`. Default 0 preserves prior behaviour
+	 * on every existing row.
+	 *
+	 * Idempotent via `INFORMATION_SCHEMA.COLUMNS` existence check. Mirrors
+	 * `upgrade_to_1_1_1()` shape verbatim per D28 3-part contract.
+	 *
+	 * @return bool
+	 */
+	protected function upgrade_to_1_1_2(): bool {
+		global $wpdb;
+
+		$table = $wpdb->prefix . 'acrossai_mcp_servers';
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Schema-drift read; INFORMATION_SCHEMA has no caching layer.
+		$existing = $wpdb->get_col(
+			$wpdb->prepare(
+				"SELECT COLUMN_NAME
+				 FROM INFORMATION_SCHEMA.COLUMNS
+				 WHERE TABLE_SCHEMA = %s
+				   AND TABLE_NAME = %s
+				   AND COLUMN_NAME = 'override_abilities_permission'",
+				DB_NAME,
+				$table
+			)
+		);
+
+		if ( ! empty( $existing ) ) {
+			return true;
+		}
+
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.DirectDatabaseQuery.SchemaChange -- DDL with plugin-owned table name + hardcoded column definition; idempotent via existence check above. $wpdb->prepare() does not support DDL identifiers.
+		$wpdb->query( "ALTER TABLE `{$table}` ADD COLUMN `override_abilities_permission` tinyint(1) NOT NULL DEFAULT 0" );
 
 		return true;
 	}
