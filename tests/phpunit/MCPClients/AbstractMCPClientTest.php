@@ -166,11 +166,11 @@ final class AbstractMCPClientTest extends TestCase {
 		}
 	}
 
-	public function testGetAllClientsReturnsExactlySevenClients(): void {
-		// Phase 4 FR-004 enumerates 7 concrete clients. This count is the
-		// load-bearing canary: adding an 8th (e.g. Windsurf) means
-		// updating this assertion.
-		$this->assertCount( 7, AbstractMCPClient::get_all_clients() );
+	public function testGetAllClientsReturnsExactlyEightClients(): void {
+		// Phase 4 FR-004 enumerated 7 concrete clients; F031 added Gemini as
+		// the 8th. This count is the load-bearing canary: adding a 9th
+		// (e.g. Windsurf) means updating this assertion.
+		$this->assertCount( 8, AbstractMCPClient::get_all_clients() );
 	}
 
 	public function testGetAllClientSlugsAreUnique(): void {
