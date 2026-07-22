@@ -241,6 +241,43 @@ final class FrontendAuth {
 			return;
 		}
 
+		// F015 Access Control connection-time gate — mirror the OAuth authorize + App
+		// Password gates so unauthorized users see a clear denial page instead of
+		// completing consent, receiving a token, and then silently 403-ing on every
+		// tool call. `$bound_server` is a slug; resolve to server_id for AC check.
+		$server_rows = \AcrossAI_MCP_Manager\Includes\Database\MCPServer\Query::instance()->query(
+			array(
+				'server_slug' => (string) $bound_server,
+				'number'      => 1,
+			)
+		);
+		$bound_server_id = ! empty( $server_rows ) ? (int) $server_rows[0]->id : 0;
+		$current_user_id = get_current_user_id();
+		if ( $bound_server_id > 0 && $current_user_id > 0 ) {
+			$ac = \AcrossAI_MCP_Manager\Includes\AccessControl\AcrossAI_MCP_Access_Control::instance();
+			if ( ! $ac->user_has_server_access( $current_user_id, $bound_server_id ) ) {
+				do_action(
+					'acrossai_mcp_access_control_denied',
+					$current_user_id,
+					(string) $bound_server,
+					null,
+					'cli_device_grant'
+				);
+				$body = '<p class="acrossai-mcp-frontend__lede">'
+					. esc_html__( 'Your account does not have permission to connect a CLI tool to this MCP server.', 'acrossai-mcp-manager' )
+					. '</p>';
+				$body .= '<p class="acrossai-mcp-frontend__hint">'
+					. esc_html__( 'Contact a site administrator to request access. This authorization request has NOT been approved and no credential has been issued.', 'acrossai-mcp-manager' )
+					. '</p>';
+				$this->render_branded_card(
+					'error',
+					esc_html__( 'Access Denied', 'acrossai-mcp-manager' ),
+					$body
+				);
+				return;
+			}
+		}
+
 		$approve_url = add_query_arg(
 			array(
 				'action'   => 'cli_auth_approve',

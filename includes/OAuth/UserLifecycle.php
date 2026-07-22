@@ -15,6 +15,7 @@ declare( strict_types = 1 );
 
 namespace AcrossAI_MCP_Manager\Includes\OAuth;
 
+use AcrossAI_MCP_Manager\Includes\Database\ConnectorApprovedUsers\Query as ConnectorApprovedUsersQuery;
 use AcrossAI_MCP_Manager\Includes\Database\OAuthAuthCodes\Query as AuthCodesQuery;
 use AcrossAI_MCP_Manager\Includes\Database\OAuthTokens\Query as TokensQuery;
 
@@ -68,5 +69,10 @@ final class UserLifecycle {
 		}
 
 		AuthCodesQuery::instance()->delete_by_user_id( $user_id );
+
+		// F032 FR-042 cascade extension — remove every connector approval row
+		// for this user across every (server, connector) pair. Site-wide by
+		// design; mirrors the tokens + auth codes cascade above.
+		ConnectorApprovedUsersQuery::instance()->delete_by_user_id( $user_id );
 	}
 }

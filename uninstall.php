@@ -61,6 +61,7 @@ $tables = array(
 	$wpdb->prefix . 'acrossai_mcp_server_tools',     // F020 per-server tool selection.
 	$wpdb->prefix . 'acrossai_mcp_oauth_clients',    // F021 OAuth clients.
 	$wpdb->prefix . 'acrossai_mcp_oauth_auth_codes', // F021 OAuth auth codes.
+	$wpdb->prefix . 'acrossai_mcp_connector_approved_users', // F032 ConnectorApprovedUsers — per-connector admin-approval list.
 );
 foreach ( $tables as $table ) {
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange

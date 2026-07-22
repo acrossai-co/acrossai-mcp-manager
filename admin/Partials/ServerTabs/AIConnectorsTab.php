@@ -103,7 +103,7 @@ final class AIConnectorsTab extends AbstractServerTab {
 		if ( '' === $selected_slug || ! isset( $slug_index[ $selected_slug ] ) ) {
 			$selected_slug = (string) array_key_first( $slug_index );
 		}
-		if ( ! in_array( $selected_panel, array( 'generate', 'connections', 'settings' ), true ) ) {
+		if ( ! in_array( $selected_panel, array( 'generate', 'connections', 'approved-users', 'settings' ), true ) ) {
 			$selected_panel = 'generate';
 		}
 
@@ -154,8 +154,22 @@ final class AIConnectorsTab extends AbstractServerTab {
 		$panels = array(
 			'generate'    => __( 'Generate', 'acrossai-mcp-manager' ),
 			'connections' => __( 'Connections', 'acrossai-mcp-manager' ),
-			'settings'    => __( 'Settings', 'acrossai-mcp-manager' ),
 		);
+
+		// Conditional "Approved Users" panel — only surfaces when the operator
+		// has enabled `require_admin_approval`. When the setting is off, the
+		// approval concept doesn't apply and the panel would just show empty
+		// lists, so we hide it to reduce noise on the L3 nav.
+		$server_id_for_settings = (int) ( $server['id'] ?? 0 );
+		if ( $server_id_for_settings > 0 ) {
+			$connector_settings = \AcrossAI_MCP_Manager\Includes\Connectors\ConnectorSettings::get( $server_id_for_settings, $selected_slug );
+			if ( ! empty( $connector_settings['require_admin_approval'] ) ) {
+				$panels['approved-users'] = __( 'Approved Users', 'acrossai-mcp-manager' );
+			}
+		}
+
+		$panels['settings'] = __( 'Settings', 'acrossai-mcp-manager' );
+
 		echo '<nav class="nav-tab-wrapper acrossai-mcp-ai-connectors__level3">';
 		foreach ( $panels as $slug => $label ) {
 			$active = $slug === $selected_panel ? ' nav-tab-active' : '';
@@ -183,6 +197,19 @@ final class AIConnectorsTab extends AbstractServerTab {
 		switch ( $panel ) {
 			case 'connections':
 				$this->render_connections_panel( $server, $profile );
+				break;
+			case 'approved-users':
+				// Fall through to `generate` if the setting is off — protects
+				// against direct URL access to `?panel=approved-users` when
+				// admin-approval is disabled (there's nothing meaningful to show).
+				$server_id          = (int) ( $server['id'] ?? 0 );
+				$slug               = $profile->get_slug();
+				$connector_settings = \AcrossAI_MCP_Manager\Includes\Connectors\ConnectorSettings::get( $server_id, $slug );
+				if ( ! empty( $connector_settings['require_admin_approval'] ) ) {
+					$this->render_approved_users_panel( $server, $profile );
+				} else {
+					$this->render_generate_panel( $server, $profile );
+				}
 				break;
 			case 'settings':
 				$this->render_settings_panel( $server, $profile );
@@ -297,6 +324,25 @@ final class AIConnectorsTab extends AbstractServerTab {
 			return;
 		}
 
+		// Per-row actions legend — explains what each button in the Actions column does.
+		echo '<div class="acrossai-mcp-connector-panel__actions-legend notice notice-info inline"><p><strong>' . esc_html__( 'What each action button does', 'acrossai-mcp-manager' ) . ':</strong></p><ul style="margin-left:1.5em;list-style:disc;">';
+		printf(
+			'<li><strong>%s</strong> — %s</li>',
+			esc_html__( 'Revoke tokens', 'acrossai-mcp-manager' ),
+			esc_html__( 'Marks every non-revoked token issued to this client on THIS server as revoked. The client row itself and its consent settings are preserved. Users can re-authorize the same client without re-registering.', 'acrossai-mcp-manager' )
+		);
+		printf(
+			'<li><strong>%s</strong> — %s</li>',
+			esc_html__( 'Delete client', 'acrossai-mcp-manager' ),
+			esc_html__( 'Revokes tokens for this client on THIS server AND removes the client row from the database. Users must go through the full re-registration flow from their AI host to reconnect. Cannot be undone.', 'acrossai-mcp-manager' )
+		);
+		printf(
+			'<li><strong>%s</strong> — %s</li>',
+			esc_html__( 'Revoke from all servers', 'acrossai-mcp-manager' ),
+			esc_html__( 'Nuclear option: revokes every non-revoked token for this client_id across EVERY MCP server on this site (not just this one). The client rows are preserved so users can re-authorize without re-registering. Intended for compromised-client incidents where you want to sever access site-wide immediately.', 'acrossai-mcp-manager' )
+		);
+		echo '</ul></div>';
+
 		echo '<table class="widefat striped acrossai-mcp-connector-panel__table">';
 		echo '<thead><tr>';
 		printf( '<th>%s</th>', esc_html__( 'Client ID', 'acrossai-mcp-manager' ) );
@@ -309,9 +355,18 @@ final class AIConnectorsTab extends AbstractServerTab {
 		echo '</tr></thead><tbody>';
 
 		foreach ( $all_rows as $row ) {
-			$active_count = AccessTokenRepository::count_active_by_client_id( (string) $row->client_id );
-			$user_ids     = AccessTokenRepository::get_active_user_ids_by_client_id( (string) $row->client_id );
-			$user_names   = array();
+			// Breakdown: access + refresh split, server-scoped (also closes an F032 read-side leak
+			// where the unscoped count would over-count if the same client_id existed on multiple servers).
+			$token_counts = AccessTokenRepository::count_active_by_client_id_and_server_id_grouped(
+				(string) $row->client_id,
+				(int) $row->server_id
+			);
+			// F032 (T042) — swap read-side listing to per-server helper. Closes the
+			// cross-server "Authorized users" display leak surfaced in the F032 audit
+			// where Server A's Connectors tab listed every user holding a token for
+			// the same client_id across every server.
+			$user_ids   = AccessTokenRepository::get_active_user_ids_by_client_id_and_server_id( (string) $row->client_id, (int) $row->server_id );
+			$user_names = array();
 			foreach ( $user_ids as $uid ) {
 				$user = get_userdata( (int) $uid );
 				if ( $user instanceof \WP_User ) {
@@ -324,14 +379,42 @@ final class AIConnectorsTab extends AbstractServerTab {
 			printf( '<td><code>%s</code></td>', esc_html( (string) $row->client_id ) );
 			printf( '<td>%s</td>', esc_html( '' !== $row->client_name ? $row->client_name : '—' ) );
 			printf( '<td>%s</td>', esc_html( $registered ) );
-			printf( '<td>%d</td>', (int) $active_count );
+			// Annotated breakdown per Option B — "2 (1 access · 1 refresh)".
+			if ( $token_counts['total'] > 0 ) {
+				printf(
+					'<td>%d <span class="description">(%s)</span></td>',
+					(int) $token_counts['total'],
+					esc_html(
+						sprintf(
+						/* translators: 1: access token count, 2: refresh token count */
+							__( '%1$d access · %2$d refresh', 'acrossai-mcp-manager' ),
+							(int) $token_counts['access'],
+							(int) $token_counts['refresh']
+						)
+					)
+				);
+			} else {
+				echo '<td>0</td>';
+			}
 			printf( '<td>%s</td>', esc_html( ! empty( $user_names ) ? implode( ', ', $user_names ) : '—' ) );
 			printf( '<td>%s</td>', esc_html( (string) $row->created_at ) );
+			// F032 (T042) — emit data-acrossai-server-id alongside data-acrossai-client-id
+			// on every Revoke/Delete button so the JS layer includes server_id in every
+			// mutating REST body. Row->server_id is (int) cast via B18 defense.
+			// "Revoke from all servers" — server-neutral escape hatch (D31 carve-out);
+			// only needs client_id, no server_id.
 			printf(
-				'<td><button type="button" class="button-link acrossai-mcp-connector-panel__revoke-btn" data-acrossai-client-id="%1$s">%2$s</button> | <button type="button" class="button-link-delete acrossai-mcp-connector-panel__delete-btn" data-acrossai-client-id="%1$s">%3$s</button></td>',
+				'<td>' .
+					'<button type="button" class="button-link acrossai-mcp-connector-panel__revoke-btn" data-acrossai-client-id="%1$s" data-acrossai-server-id="%4$s">%2$s</button>' .
+					' | <button type="button" class="button-link-delete acrossai-mcp-connector-panel__delete-btn" data-acrossai-client-id="%1$s" data-acrossai-server-id="%4$s">%3$s</button>' .
+					' | <button type="button" class="button-link-delete acrossai-mcp-connector-panel__revoke-all-btn" data-acrossai-client-id="%1$s" title="%6$s">%5$s</button>' .
+				'</td>',
 				esc_attr( (string) $row->client_id ),
 				esc_html__( 'Revoke tokens', 'acrossai-mcp-manager' ),
-				esc_html__( 'Delete client', 'acrossai-mcp-manager' )
+				esc_html__( 'Delete client', 'acrossai-mcp-manager' ),
+				esc_attr( (string) (int) $row->server_id ),
+				esc_html__( 'Revoke from all servers', 'acrossai-mcp-manager' ),
+				esc_attr__( 'Nuclear: revoke this client\'s tokens across EVERY server on this site. Intentional cross-server operation.', 'acrossai-mcp-manager' )
 			);
 			echo '</tr>';
 		}
@@ -341,7 +424,160 @@ final class AIConnectorsTab extends AbstractServerTab {
 	}
 
 	/**
-	 * Settings panel — enable/require-approval + revoke-all button + pending approval list.
+	 * Approved Users panel — pending approvals (with Approve + Deny buttons) +
+	 * currently-approved users (with Revoke button). Only visible when
+	 * `require_admin_approval` is enabled for this (server, connector) pair —
+	 * `render_panel()` falls through to `render_generate_panel` when the
+	 * setting is off, and `render_level3_bar()` hides the tab entirely.
+	 *
+	 * Backed by two data sources:
+	 *   - Pending: `ConnectorSettings::pending_user_ids()` (wp_options — legacy storage).
+	 *   - Approved: `ConnectorApprovedUsersQuery::find_by_server_and_connector()`
+	 *     (BerlinDB table `wp_acrossai_mcp_connector_approved_users`).
+	 *
+	 * @param array<string, mixed>                                               $server  Server row.
+	 * @param \AcrossAI_MCP_Manager\Includes\Connectors\AbstractConnectorProfile $profile Active profile.
+	 * @return void
+	 */
+	private function render_approved_users_panel( array $server, $profile ): void {
+		$server_id = (int) ( $server['id'] ?? 0 );
+		$slug      = $profile->get_slug();
+
+		$pending  = \AcrossAI_MCP_Manager\Includes\Connectors\ConnectorSettings::pending_user_ids( $server_id, $slug );
+		$approved = \AcrossAI_MCP_Manager\Includes\Database\ConnectorApprovedUsers\Query::instance()
+			->find_by_server_and_connector( $server_id, $slug );
+
+		echo '<div class="acrossai-mcp-connector-panel">';
+		printf( '<h3 class="acrossai-mcp-connector-panel__title">%s</h3>', esc_html__( 'Approved Users', 'acrossai-mcp-manager' ) );
+
+		// Per-panel legend explaining each action button, matching the Connections
+		// panel style so both panels feel consistent.
+		echo '<div class="acrossai-mcp-connector-panel__actions-legend notice notice-info inline"><p><strong>' . esc_html__( 'What each action button does', 'acrossai-mcp-manager' ) . ':</strong></p><ul style="margin-left:1.5em;list-style:disc;">';
+		printf(
+			'<li><strong>%s</strong> — %s</li>',
+			esc_html__( 'Approve', 'acrossai-mcp-manager' ),
+			esc_html__( 'Grants this user permission to complete the OAuth consent flow. On their next connect attempt they proceed directly to the consent screen (no further admin action needed).', 'acrossai-mcp-manager' )
+		);
+		printf(
+			'<li><strong>%s</strong> — %s</li>',
+			esc_html__( 'Deny', 'acrossai-mcp-manager' ),
+			esc_html__( 'Removes this user from the pending list without approving. The user must re-attempt the connect flow from their AI host if they want to try again.', 'acrossai-mcp-manager' )
+		);
+		printf(
+			'<li><strong>%s</strong> — %s</li>',
+			esc_html__( 'Revoke approval', 'acrossai-mcp-manager' ),
+			esc_html__( 'Removes this user from the approved list AND revokes every active OAuth token they hold for this connector on this server. The user is disconnected immediately and their next connect attempt re-enters the pending flow. Filter `acrossai_mcp_connector_revoke_tokens_on_approval_revoked` (default true) to opt out of the token cascade.', 'acrossai-mcp-manager' )
+		);
+		echo '</ul></div>';
+
+		// -----------------------------------------------------------------------------
+		// Pending approvals section — widefat striped table matching the Connections panel style.
+		// -----------------------------------------------------------------------------
+		printf( '<h4 class="acrossai-mcp-connector-panel__section-title">%s</h4>', esc_html__( 'Pending approvals', 'acrossai-mcp-manager' ) );
+
+		if ( empty( $pending ) ) {
+			printf(
+				'<p class="acrossai-mcp-connector-panel__empty description">%s</p>',
+				esc_html__( 'No pending approval requests.', 'acrossai-mcp-manager' )
+			);
+		} else {
+			echo '<table class="widefat striped acrossai-mcp-connector-panel__table">';
+			echo '<thead><tr>';
+			printf( '<th>%s</th>', esc_html__( 'User', 'acrossai-mcp-manager' ) );
+			printf( '<th>%s</th>', esc_html__( 'User ID', 'acrossai-mcp-manager' ) );
+			printf( '<th>%s</th>', esc_html__( 'Login', 'acrossai-mcp-manager' ) );
+			printf( '<th>%s</th>', esc_html__( 'Actions', 'acrossai-mcp-manager' ) );
+			echo '</tr></thead><tbody>';
+
+			foreach ( $pending as $pending_user_id ) {
+				$user = get_user_by( 'id', (int) $pending_user_id );
+				if ( ! $user ) {
+					continue;
+				}
+				echo '<tr>';
+				printf( '<td>%s</td>', esc_html( $user->display_name ) );
+				printf( '<td><code>#%d</code></td>', (int) $pending_user_id );
+				printf( '<td>%s</td>', esc_html( $user->user_login ) );
+				printf(
+					'<td>'
+					. '<button type="button" class="button-link acrossai-mcp-connector-panel__approve-btn" data-acrossai-connector-slug="%1$s" data-acrossai-user-id="%2$d">%3$s</button>'
+					. ' | <button type="button" class="button-link-delete acrossai-mcp-connector-panel__deny-btn" data-acrossai-connector-slug="%1$s" data-acrossai-user-id="%2$d">%4$s</button>'
+					. '</td>',
+					esc_attr( $slug ),
+					(int) $pending_user_id,
+					esc_html__( 'Approve', 'acrossai-mcp-manager' ),
+					esc_html__( 'Deny', 'acrossai-mcp-manager' )
+				);
+				echo '</tr>';
+			}
+
+			echo '</tbody></table>';
+		}
+
+		echo '<br>';
+
+		// -----------------------------------------------------------------------------
+		// Approved users section — same widefat striped table shape.
+		// -----------------------------------------------------------------------------
+		printf( '<h4 class="acrossai-mcp-connector-panel__section-title">%s</h4>', esc_html__( 'Approved users', 'acrossai-mcp-manager' ) );
+
+		if ( empty( $approved ) ) {
+			printf(
+				'<p class="acrossai-mcp-connector-panel__empty description">%s</p>',
+				esc_html__( 'No users have been approved yet. Users appear here after you Approve their pending request above.', 'acrossai-mcp-manager' )
+			);
+		} else {
+			echo '<table class="widefat striped acrossai-mcp-connector-panel__table">';
+			echo '<thead><tr>';
+			printf( '<th>%s</th>', esc_html__( 'User', 'acrossai-mcp-manager' ) );
+			printf( '<th>%s</th>', esc_html__( 'User ID', 'acrossai-mcp-manager' ) );
+			printf( '<th>%s</th>', esc_html__( 'Approved by', 'acrossai-mcp-manager' ) );
+			printf( '<th>%s</th>', esc_html__( 'Approved at', 'acrossai-mcp-manager' ) );
+			printf( '<th>%s</th>', esc_html__( 'Actions', 'acrossai-mcp-manager' ) );
+			echo '</tr></thead><tbody>';
+
+			foreach ( $approved as $row ) {
+				$user        = get_user_by( 'id', (int) $row->user_id );
+				$approved_by = (int) $row->approved_by > 0 ? get_user_by( 'id', (int) $row->approved_by ) : null;
+
+				echo '<tr>';
+				if ( $user ) {
+					printf( '<td>%s</td>', esc_html( $user->display_name ) );
+				} else {
+					printf( '<td><em>%s</em></td>', esc_html__( 'deleted', 'acrossai-mcp-manager' ) );
+				}
+				printf( '<td><code>#%d</code></td>', (int) $row->user_id );
+				if ( $approved_by ) {
+					printf(
+						'<td>%s <code>#%d</code></td>',
+						esc_html( $approved_by->display_name ),
+						(int) $row->approved_by
+					);
+				} else {
+					printf( '<td>%s</td>', esc_html__( '—', 'acrossai-mcp-manager' ) );
+				}
+				printf( '<td>%s</td>', esc_html( (string) $row->approved_at ) );
+				printf(
+					'<td><button type="button" class="button-link-delete acrossai-mcp-connector-panel__revoke-approval-btn" data-acrossai-connector-slug="%1$s" data-acrossai-user-id="%2$d">%3$s</button></td>',
+					esc_attr( $slug ),
+					(int) $row->user_id,
+					esc_html__( 'Revoke approval', 'acrossai-mcp-manager' )
+				);
+				echo '</tr>';
+			}
+
+			echo '</tbody></table>';
+		}
+
+		echo '</div>';
+	}
+
+	/**
+	 * Settings panel — enable/require-approval checkboxes + nuclear revoke button.
+	 *
+	 * The Pending approvals list was moved to the new `render_approved_users_panel`
+	 * (shown only when `require_admin_approval=true`). This panel is now purely
+	 * for connector-level configuration.
 	 *
 	 * @param array<string, mixed>                                               $server  Server row.
 	 * @param \AcrossAI_MCP_Manager\Includes\Connectors\AbstractConnectorProfile $profile Active profile.
@@ -351,7 +587,6 @@ final class AIConnectorsTab extends AbstractServerTab {
 		$server_id = (int) ( $server['id'] ?? 0 );
 		$slug      = $profile->get_slug();
 		$settings  = \AcrossAI_MCP_Manager\Includes\Connectors\ConnectorSettings::get( $server_id, $slug );
-		$pending   = \AcrossAI_MCP_Manager\Includes\Connectors\ConnectorSettings::pending_user_ids( $server_id, $slug );
 
 		echo '<div class="acrossai-mcp-connector-panel">';
 		printf( '<h3 class="acrossai-mcp-connector-panel__title">%s</h3>', esc_html__( 'Settings', 'acrossai-mcp-manager' ) );
@@ -374,7 +609,8 @@ final class AIConnectorsTab extends AbstractServerTab {
 			esc_html__( 'Require admin approval for new connections', 'acrossai-mcp-manager' )
 		);
 		echo '</label></p>';
-		echo '<p class="description">' . esc_html__( 'When enabled, a user must be pre-approved by an admin before they can complete the OAuth consent flow.', 'acrossai-mcp-manager' ) . '</p>';
+		echo '<p class="description">' . esc_html__( 'When enabled, a user must be pre-approved by an admin before they can complete the OAuth consent flow. Pending requests and the approved user list appear in the "Approved Users" panel.', 'acrossai-mcp-manager' ) . '</p>';
+		echo '<p class="description"><em>' . esc_html__( 'Note: Administrators (users with the manage_options capability) bypass this requirement and are auto-added to the approved list on first connection — they can always approve themselves anyway from the Approved Users panel, so the pending step would only add friction.', 'acrossai-mcp-manager' ) . '</em></p>';
 
 		printf(
 			'<p><button type="submit" class="button button-primary">%s</button></p>',
@@ -383,25 +619,6 @@ final class AIConnectorsTab extends AbstractServerTab {
 		echo '</form>';
 
 		echo '<hr>';
-
-		if ( ! empty( $pending ) ) {
-			printf( '<h4>%s</h4>', esc_html__( 'Pending approvals', 'acrossai-mcp-manager' ) );
-			echo '<ul class="acrossai-mcp-connector-panel__pending-list">';
-			foreach ( $pending as $pending_user_id ) {
-				$user = get_user_by( 'id', (int) $pending_user_id );
-				if ( ! $user ) {
-					continue;
-				}
-				printf(
-					'<li>%1$s (<code>#%2$d</code>) <button type="button" class="button button-small acrossai-mcp-connector-panel__approve-btn" data-acrossai-connector-slug="%3$s" data-acrossai-user-id="%2$d">%4$s</button></li>',
-					esc_html( $user->display_name ),
-					(int) $pending_user_id,
-					esc_attr( $slug ),
-					esc_html__( 'Approve', 'acrossai-mcp-manager' )
-				);
-			}
-			echo '</ul>';
-		}
 
 		printf(
 			'<p><button type="button" class="button button-secondary acrossai-mcp-connector-panel__nuclear-btn" data-acrossai-connector-slug="%s" data-acrossai-confirm="%s">%s</button></p>',

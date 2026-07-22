@@ -5,7 +5,13 @@
  * Bespoke methods:
  *   - consume_atomic()      — B10 CAS single-use pattern (mirrors CliAuthLog::redeem_atomic)
  *   - delete_expired()      — daily cron cleanup
- *   - delete_by_user_id()   — FR-042 cascade
+ *   - delete_by_user_id()   — FR-042 cascade (site-wide by design — F032 US4 regression)
+ *
+ * F032 (T034) — no client_id-mutating helpers on this table (auth codes are
+ * consumed atomically by `code_hash`, not by `client_id`). The `add_item`
+ * write path already accepts `server_id` in the payload (Row now has the
+ * property); persistence is handled inline by callers (AuthCodeRepository).
+ * `delete_by_user_id` stays server-neutral per FR-042.
  *
  * @package AcrossAI_MCP_Manager
  * @subpackage Includes\Database\OAuthAuthCodes

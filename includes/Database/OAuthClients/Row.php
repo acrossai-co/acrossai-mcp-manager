@@ -16,6 +16,7 @@ class Row extends \BerlinDB\Database\Kern\Row {
 
 	/** @var int */         public $id                         = 0;
 	/** @var string */      public $client_id                  = '';
+	/** @var int */         public $server_id                  = 0;
 	/** @var string|null */ public $client_secret_hash         = null;
 	/** @var string */      public $client_name                = '';
 	/** @var string */      public $redirect_uris              = '';
@@ -30,7 +31,9 @@ class Row extends \BerlinDB\Database\Kern\Row {
 	 */
 	public function __construct( $item ) {
 		parent::__construct( $item );
-		$this->id = (int) $this->id;
+		$this->id        = (int) $this->id;
+		// F032 — B18 defensive cast. Post-migration invariant: server_id is NEVER NULL (SQL NOT NULL).
+		$this->server_id = (int) $this->server_id;
 	}
 
 	/**
@@ -42,6 +45,7 @@ class Row extends \BerlinDB\Database\Kern\Row {
 		return array(
 			'id'                         => $this->id,
 			'client_id'                  => $this->client_id,
+			'server_id'                  => $this->server_id,
 			'client_secret_hash'         => $this->client_secret_hash,
 			'client_name'                => $this->client_name,
 			'redirect_uris'              => $this->decoded_redirect_uris(),

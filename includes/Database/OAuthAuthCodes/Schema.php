@@ -40,6 +40,15 @@ class Schema extends \BerlinDB\Database\Kern\Schema {
 			'length'  => '64',
 			'default' => '',
 		),
+		// F032 — first-class server binding. NOT NULL final state per FR-003 / Q4.
+		// Resolved from RFC 8707 `resource` param at authorize time (FR-010).
+		array(
+			'name'       => 'server_id',
+			'type'       => 'bigint',
+			'length'     => '20',
+			'unsigned'   => true,
+			'allow_null' => false,
+		),
 		array(
 			'name'     => 'user_id',
 			'type'     => 'bigint',

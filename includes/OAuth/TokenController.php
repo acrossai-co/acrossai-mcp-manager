@@ -137,9 +137,25 @@ final class TokenController {
 		$resource  = (string) $row->resource;
 		$scope     = '' !== $row->scope ? (string) $row->scope : 'mcp';
 
+		// F032 (T039) — copy server_id from the consumed auth_code row onto the
+		// emitted token. Post-migration invariant: server_id is NEVER 0 on any
+		// auth_code row (SQL NOT NULL) so a 0 here would indicate data corruption.
+		$server_id = (int) $row->server_id;
+
+		// F032 (T039) — defense-in-depth: verify the client we're minting for is
+		// bound to the same server as the auth_code. Should be structurally
+		// impossible after F032 (auth_code carries server_id resolved at authorize
+		// time against the same resource that the client belongs to) but guards
+		// any data-corruption case where the two diverged.
+		if ( $server_id > 0 && (int) $client->server_id !== $server_id ) {
+			self::respond_error( 'invalid_grant', 'server_id mismatch between client and auth_code', 400 );
+		}
+
 		$access  = AccessTokenRepository::issue(
 			array(
 				'client_id'       => $client_id,
+				// F032 (T039) — carry server binding through to token row.
+				'server_id'       => $server_id,
 				'user_id'         => $user_id,
 				'scope'           => $scope,
 				'resource'        => $resource,
@@ -149,6 +165,7 @@ final class TokenController {
 		$refresh = RefreshTokenRepository::issue(
 			array(
 				'client_id'       => $client_id,
+				'server_id'       => $server_id,
 				'user_id'         => $user_id,
 				'scope'           => $scope,
 				'resource'        => $resource,
@@ -250,9 +267,15 @@ final class TokenController {
 		$resource = (string) $row->resource;
 		$scope    = '' !== $row->scope ? (string) $row->scope : 'mcp';
 
+		// F032 (T040) — copy server_id from the prior refresh token row so the
+		// refreshed access + refresh pair inherit the same per-server binding.
+		// Post-migration invariant: prior token row's server_id is NEVER 0.
+		$server_id = (int) $row->server_id;
+
 		$access      = AccessTokenRepository::issue(
 			array(
 				'client_id'       => $client_id,
+				'server_id'       => $server_id,
 				'user_id'         => $user_id,
 				'scope'           => $scope,
 				'resource'        => $resource,
@@ -262,6 +285,7 @@ final class TokenController {
 		$new_refresh = RefreshTokenRepository::issue(
 			array(
 				'client_id'       => $client_id,
+				'server_id'       => $server_id,
 				'user_id'         => $user_id,
 				'scope'           => $scope,
 				'resource'        => $resource,

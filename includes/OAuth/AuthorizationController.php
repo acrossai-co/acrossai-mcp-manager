@@ -136,14 +136,82 @@ final class AuthorizationController {
 				self::redirect_error( $params['redirect_uri'], 'access_denied', 'This connector is disabled on this server.', $params['state'] );
 			}
 
-			// F024 FR-024-015 — admin-approval gate.
+			// F024 FR-024-015 — admin-approval gate. F032 FR-051 layers admin-bypass:
+			// admins with `manage_options` skip the pending queue and are auto-added
+			// to the approved list (self-approval, `approved_by = $user_id`). Rationale:
+			// admins can approve themselves in one click from the Approved Users
+			// panel anyway — the pending detour is UX friction, not a security
+			// boundary. Effective threat model is unchanged (manage_options is a
+			// strict superset of any approval decision they could make on themselves).
+			// Auto-insert keeps downstream code paths (revoke-approval cascade,
+			// observability listeners, panel rendering) treating admins consistently
+			// with explicitly-approved users.
 			$user_id = get_current_user_id();
 			if ( \AcrossAI_MCP_Manager\Includes\Connectors\ConnectorSettings::get( $server_id_for_settings, $slug_for_settings )['require_admin_approval']
 				&& ! \AcrossAI_MCP_Manager\Includes\Connectors\ConnectorSettings::is_user_approved( $server_id_for_settings, $slug_for_settings, $user_id )
 			) {
-				\AcrossAI_MCP_Manager\Includes\Connectors\ConnectorSettings::add_pending_user( $server_id_for_settings, $slug_for_settings, $user_id );
-				self::render_pending_approval( $client, $params );
-				exit;
+				if ( user_can( $user_id, 'manage_options' ) ) {
+					\AcrossAI_MCP_Manager\Includes\Database\ConnectorApprovedUsers\Query::instance()->approve(
+						$server_id_for_settings,
+						$slug_for_settings,
+						$user_id,
+						$user_id
+					);
+
+					/**
+					 * SEC-L1 remediation — fire a distinct observability action on
+					 * admin self-bypass so forensic reviewers can differentiate
+					 * self-service bypass rows from explicit-reviewer approval rows
+					 * in `wp_acrossai_mcp_connector_approved_users`. Without this,
+					 * both cases produce indistinguishable `(user_id, approved_by)`
+					 * tuples when approved_by === user_id — see B38 for the
+					 * generalizable pattern.
+					 *
+					 * @param int    $server_id      MCP server row id.
+					 * @param string $connector_slug Connector profile slug.
+					 * @param int    $user_id        Admin user_id (also = approved_by).
+					 * @param int    $timestamp      UNIX timestamp at fire site.
+					 */
+					do_action(
+						'acrossai_mcp_connector_admin_self_bypassed',
+						(int) $server_id_for_settings,
+						(string) $slug_for_settings,
+						(int) $user_id,
+						time()
+					);
+				} else {
+					\AcrossAI_MCP_Manager\Includes\Connectors\ConnectorSettings::add_pending_user( $server_id_for_settings, $slug_for_settings, $user_id );
+					self::render_pending_approval( $client, $params );
+					exit;
+				}
+			}
+		}
+
+		// F032 (F015 amendment) — Access Control connection-time gate.
+		// Blocks the OAuth authorize flow for users whose roles are not in the
+		// F015 allow-list. Prevents the UX pitfall where Claude/etc. show
+		// "connected" but every subsequent tool call 403s (invisible to
+		// operators). Fires the same observability action as the tool-call
+		// gate, but with context = 'oauth_authorize' so operators can differentiate.
+		// Fail-open per D19 via `user_has_server_access()` — degrades gracefully
+		// if the AC package is absent, server row missing, or manager null.
+		if ( $server_id_for_settings > 0 ) {
+			$authorize_user_id = get_current_user_id();
+			$ac                = \AcrossAI_MCP_Manager\Includes\AccessControl\AcrossAI_MCP_Access_Control::instance();
+			if ( ! $ac->user_has_server_access( $authorize_user_id, $server_id_for_settings ) ) {
+				do_action(
+					'acrossai_mcp_access_control_denied',
+					$authorize_user_id,
+					(string) $server_id_for_settings,
+					null,
+					'oauth_authorize'
+				);
+				self::redirect_error(
+					$params['redirect_uri'],
+					'access_denied',
+					'Your account does not have permission to connect to this MCP server. Contact a site administrator to request access.',
+					$params['state']
+				);
 			}
 		}
 
@@ -200,10 +268,19 @@ final class AuthorizationController {
 			self::redirect_error( $params['redirect_uri'], 'invalid_request', 'Missing or invalid authorize_action', $params['state'] );
 		}
 
+		// F032 (T038) — resolve server_id from the RFC 8707 `resource` param at
+		// authorize time (reuse `server_id_from_client_and_resource` — same
+		// route-matching walk already used by the connector-settings gate above).
+		// Persist onto the auth_code so TokenController can inherit it at
+		// code-exchange without re-parsing the resource URL.
+		$server_id_for_auth_code = self::server_id_from_client_and_resource( $client, $params['resource'] );
+
 		// Approve — mint an auth code, redirect with code + state + iss.
 		$issued = AuthCodeRepository::create(
 			array(
 				'client_id'             => $params['client_id'],
+				// F032 (T038) — server binding captured at authorize time (FR-011).
+				'server_id'             => $server_id_for_auth_code,
 				'user_id'               => get_current_user_id(),
 				'redirect_uri'          => $params['redirect_uri'],
 				'code_challenge'        => $params['code_challenge'],
@@ -448,12 +525,23 @@ final class AuthorizationController {
 	 * @return int
 	 */
 	private static function server_id_from_client_and_resource( ClientRow $client, string $resource_url ): int {
-		// Path 1: parse from admin-generated client_id.
+		// Path 0 (F032, canonical): `server_id` is a first-class NOT NULL column on the client row.
+		// This is the authoritative source of truth post-F032. The two legacy fallback paths below
+		// exist only as defense-in-depth for the theoretical case of a row created between F032
+		// deployment and its migration completing (should not happen — FR-028 gate blocks that).
+		// Historical: pre-F032 this method parsed the `server-{id}-` prefix from client_id which
+		// broke silently for DCR clients (random hex client_id) — see the git log at
+		// AuthorizationController.php:459.
+		if ( (int) $client->server_id > 0 ) {
+			return (int) $client->server_id;
+		}
+
+		// Path 1 (legacy fallback): parse from admin-generated client_id.
 		if ( preg_match( '/\Aserver-(\d+)-/', (string) $client->client_id, $m ) ) {
 			return (int) $m[1];
 		}
 
-		// Path 2: match resource URL path against server rows.
+		// Path 2 (legacy fallback): match resource URL path against server rows.
 		if ( '' === $resource_url ) {
 			return 0;
 		}

@@ -10,6 +10,7 @@ use AcrossAI_MCP_Manager\Includes\Database\MCPServerTool\Table as MCPServerToolT
 use AcrossAI_MCP_Manager\Includes\Database\OAuthClients\Table as OAuthClientsTable;
 use AcrossAI_MCP_Manager\Includes\Database\OAuthTokens\Table as OAuthTokensTable;
 use AcrossAI_MCP_Manager\Includes\Database\OAuthAuthCodes\Table as OAuthAuthCodesTable;
+use AcrossAI_MCP_Manager\Includes\Database\ConnectorApprovedUsers\Table as ConnectorApprovedUsersTable;
 use AcrossAI_MCP_Manager\Public\Partials\FrontendAuth;
 use WPBoilerplate\AccessControl\Database\Rule\RuleTable as WPB_AccessControl_RuleTable;
 
@@ -61,6 +62,11 @@ class Activator {
 		OAuthClientsTable::instance()->maybe_upgrade();
 		OAuthTokensTable::instance()->maybe_upgrade();
 		OAuthAuthCodesTable::instance()->maybe_upgrade();
+
+		// F032 ConnectorApprovedUsers — presence-based table backing the AI Connectors
+		// "Approved Users" panel + the require_admin_approval enforcement gate.
+		// No seeder — empty-table state is the correct initial state.
+		ConnectorApprovedUsersTable::instance()->maybe_upgrade();
 
 		if ( ! wp_next_scheduled( 'acrossai_mcp_manager_oauth_cleanup' ) ) {
 			wp_schedule_event( time() + DAY_IN_SECONDS, 'daily', 'acrossai_mcp_manager_oauth_cleanup' );

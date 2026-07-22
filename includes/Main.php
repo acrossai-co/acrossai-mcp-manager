@@ -217,6 +217,10 @@ final class Main {
 		\AcrossAI_MCP_Manager\Includes\Database\OAuthClients\Table::instance();
 		\AcrossAI_MCP_Manager\Includes\Database\OAuthTokens\Table::instance();
 		\AcrossAI_MCP_Manager\Includes\Database\OAuthAuthCodes\Table::instance();
+		// F032 — ConnectorApprovedUsers per-request boot per DEC-BERLINDB-TABLE-REQUEST-BOOT.
+		// Backs the AI Connectors "Approved Users" panel + the OAuth authorize
+		// require_admin_approval gate. Co-commit invariant with Activator maybe_upgrade().
+		\AcrossAI_MCP_Manager\Includes\Database\ConnectorApprovedUsers\Table::instance();
 	}
 
 	/**
@@ -253,9 +257,35 @@ final class Main {
 		\AcrossAI_MCP_Manager\Includes\Database\CliAuthLog\Table::instance()->maybe_upgrade();
 		\AcrossAI_MCP_Manager\Includes\Database\MCPServerAbility\Table::instance()->maybe_upgrade();
 		\AcrossAI_MCP_Manager\Includes\Database\MCPServerTool\Table::instance()->maybe_upgrade();
+		// F032 (T024 — REVISED 2026-07-21 after runtime bug):
+		// OAuthClients MUST fire FIRST because OAuthTokens + OAuthAuthCodes JOIN backfill
+		// against `oauth_clients.server_id` — that column MUST exist AND be populated before
+		// the JOIN runs. Original R2 ordering (Tokens/AuthCodes first) triggered
+		// "Unknown column 'c.server_id' in 'where clause'" and left the migration in a
+		// half-broken state. See debug.log 2026-07-21 08:25 for the observed failure.
+		// AGGREGATE OBSERVABILITY SIGNAL: moved out of OAuthClients callback into a
+		// coordinator fire below (Main is the natural coordinator; OAuthClients no longer
+		// needs to reach into sibling Tables via get_last_purge_count()).
 		\AcrossAI_MCP_Manager\Includes\Database\OAuthClients\Table::instance()->maybe_upgrade();
 		\AcrossAI_MCP_Manager\Includes\Database\OAuthTokens\Table::instance()->maybe_upgrade();
 		\AcrossAI_MCP_Manager\Includes\Database\OAuthAuthCodes\Table::instance()->maybe_upgrade();
+		\AcrossAI_MCP_Manager\Includes\Database\ConnectorApprovedUsers\Table::instance()->maybe_upgrade();
+
+		// F032 aggregate observability signal — fires exactly once per reconcile pass iff
+		// any of the three OAuth Tables purged legacy rows this pass. Coordinator lives
+		// here rather than in OAuthClients::upgrade_to_1_0_1 Step 6 to eliminate the
+		// cross-Table get_last_purge_count() coupling that trapped the original R2 design.
+		$clients_purged    = \AcrossAI_MCP_Manager\Includes\Database\OAuthClients\Table::instance()->get_last_purge_count();
+		$tokens_purged     = \AcrossAI_MCP_Manager\Includes\Database\OAuthTokens\Table::instance()->get_last_purge_count();
+		$auth_codes_purged = \AcrossAI_MCP_Manager\Includes\Database\OAuthAuthCodes\Table::instance()->get_last_purge_count();
+		if ( $clients_purged > 0 || $tokens_purged > 0 || $auth_codes_purged > 0 ) {
+			do_action(
+				'acrossai_mcp_oauth_legacy_dcr_purged',
+				$clients_purged,
+				$tokens_purged,
+				$auth_codes_purged
+			);
+		}
 	}
 
 	/**
@@ -581,6 +611,20 @@ final class Main {
 		 */
 		$oauth_connector_admin = \AcrossAI_MCP_Manager\Includes\OAuth\ConnectorAdminController::instance();
 		$this->loader->add_action( 'rest_api_init', $oauth_connector_admin, 'register_routes' );
+
+		// F032 — Default listener for `acrossai_mcp_connector_user_approval_revoked`.
+		// Cascades the approval-revoke into an active-token revoke for the same
+		// (server, connector, user) triple. Third-party plugins can
+		// `remove_action()` to disable OR filter
+		// `acrossai_mcp_connector_revoke_tokens_on_approval_revoked` to opt out.
+		// Wired here per §A1 (Main.php-only hook registration).
+		$this->loader->add_action(
+			'acrossai_mcp_connector_user_approval_revoked',
+			\AcrossAI_MCP_Manager\Includes\OAuth\ConnectorAdminController::class,
+			'cascade_revoke_tokens_on_approval_revoked',
+			10,
+			4
+		);
 
 		$this->loader->add_action(
 			'mcp_server_deleted',

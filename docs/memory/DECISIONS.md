@@ -1886,3 +1886,133 @@ Reference impl: 20-line inline comment at `includes/Abilities/PermissionOverride
 **Where to look next**
 
 If a future feature needs to consult `ExposureResolver::resolve()` for a similar authorization-adjacent decision, evaluate whether it should pass real meta (canonical) or empty (F030-style narrower). Default: pass real meta unless you have an explicit reason to be narrower + a documented decision entry justifying it.
+
+---
+
+## D31 / DEC-F032-OAUTH-SERVER-ID-FIRST-CLASS
+
+**Status**: Active — Feature 032
+
+**Why this is durable**
+
+Multi-tenant admin surfaces MUST have a first-class tenant column enforced at the SQL layer, NOT reconstructed from parsing tenant IDs out of composite identifier strings. F032 closes a critical cross-server privilege-escalation gap where an admin on Server A's Connectors tab could revoke or delete Server B's OAuth clients and tokens by modifying `client_id` in the outbound REST body — the pre-F032 code trusted a `server-{id}-` prefix on the `client_id` string as the ownership signal, which was not enforced by the schema, not validated by REST handlers, and did not exist at all for DCR-registered clients. Any future admin surface exposing per-tenant data must apply the same first-class-column pattern from day one.
+
+**Decision**
+
+`server_id BIGINT UNSIGNED NOT NULL` is a first-class column on `wp_acrossai_mcp_oauth_clients`, `wp_acrossai_mcp_oauth_tokens`, and `wp_acrossai_mcp_oauth_auth_codes` (added via D28 3-part contract per Table `$version` 1.0.0 → 1.0.1 + `upgrade_to_1_0_1()` callbacks, ordered Tokens → AuthCodes → Clients in `Main::reconcile_database_schemas()` so JOIN backfill can resolve source rows before client-side purge). `UNIQUE(client_id)` is replaced with composite `UNIQUE(client_id, server_id)` on `oauth_clients` so the same DCR connector can be registered on N servers as N independent rows. Every mutating REST endpoint MUST require `server_id` in the request body AND verify the referenced row's `server_id` matches — mismatch returns `WP_Error 'acrossai_mcp_oauth_cross_server'` status 403 (403 not 404 to prevent cross-server existence leak in response body) AND fires `do_action( 'acrossai_mcp_oauth_cross_server_attempted', $client_id, $server_id_requested, $user_id, $timestamp )` immediately BEFORE the `WP_Error` return (4-arg signature per SEC-032-001 remediation — MUST NOT include the actual owning server_id, which would recreate a cross-server oracle for any hooked listener). OAuth flow propagates `server_id` end-to-end: `AuthorizationController` resolves from RFC 8707 `resource` at authorize → `AuthCodeRepository` persists → `TokenController` copies onto emitted token at code-exchange → refresh flow inherits from prior token. `UserLifecycle::on_user_deleted()` STAYS server-neutral — user deletion is site-wide per FR-042 (regression-tested in `PerServerIsolationTest::test_user_deletion_still_cascades_across_all_servers`). DCR endpoint has a two-step URL check: (1) origin verify against `home_url()` per FR-027 / SEC-032-002 remediation (rejects attacker-origin URLs with `WP_Error 'invalid_target' 400` + fires `acrossai_mcp_oauth_dcr_resource_url_origin_mismatch` action); (2) path resolution via `MCPServerQuery`. DCR endpoint also gates against a rare deploy→migration race window with `WP_Error 'service_unavailable' 503` when the `server_id` column is absent per FR-028 / SEC-032-005 remediation. Legacy pre-F032 DCR rows (no `server-{id}-` prefix, `server_id IS NULL` after backfill) are AUTO-PURGED during the upgrade callback (per Q3 clarification, A-aggressive form) — live AI-host sessions disconnect on next request; users re-authorize via standard OAuth flow (README.txt + release-note carry FR-025 mandatory warning). Backfill of admin clients from `server-{id}-` prefix includes an orphan-server guard (parsed server_id MUST exist in `wp_acrossai_mcp_servers`; otherwise row is left NULL and purged alongside legacy DCR rows) per FR-005 amendment / SEC-032-003 remediation. Purge counts fire `do_action( 'acrossai_mcp_oauth_legacy_dcr_purged', $clients_deleted, $tokens_deleted, $auth_codes_deleted )` exactly once per upgrade run. Feature ships unconditionally — no `acrossai_mcp_manager_oauth_per_server_scoping_enabled` feature flag per Q2 clarification; rollback is via composer package downgrade if operationally required.
+
+**Tradeoffs**
+
+- **Gained**: cross-server privilege escalation impossible on all mutating admin endpoints. Read-side "authorized users" cross-server display leak closed. NOT NULL schema invariant enforced at SQL layer. Same DCR connector supported on multiple servers.
+- **Made harder**: OAuth data-plane changes require operator awareness — legacy DCR sessions disconnect on upgrade. Cross-Table coordination via registration order in `Main::reconcile_database_schemas()` (documented; a future refactor reordering would break aggregate observability signal counts — flagged in T024 comment block).
+- **Reconsider**: If future multi-tenant surface repeats this pattern, promote the aggregate observability coordination into a reusable helper on `Main` (currently OAuth-specific).
+- **Related**: `D28` (BerlinDB schema-drift reconciliation — the canonical contract F032 applies three times); `D19` (fail-open observability pattern — F032's three new signals follow it); `B34` (silent write-loss on schema drift — F032 is the fix for OAuth tables); `B37` (companion — see below).
+
+**Evidence**
+
+- `includes/Database/OAuth{Clients,Tokens,AuthCodes}/{Schema,Row,Table,Query}.php` — 12 files with F032 markers.
+- `includes/OAuth/{AuthorizationController,TokenController,ClientRegistrationController,ConnectorAdminController,Repositories/*}.php` — 8 files with F032 markers.
+- `includes/Main.php::reconcile_database_schemas()` — OAuth Tables ordered Tokens → AuthCodes → Clients per R2.
+- `admin/Partials/ServerTabs/AIConnectorsTab.php` — `data-acrossai-server-id` attribute + `get_active_user_ids_by_client_id_and_server_id` call.
+- `src/js/ai-connectors.js` — `server_id` in mutating REST body + 403 error message.
+- `tests/phpunit/OAuth/PerServerIsolationTest.php` — 10 tests covering all 4 user stories.
+- `tests/phpunit/Database/OAuth{Clients,Tokens,AuthCodes}/PerServerColumnUpgradeTest.php` — 3 schema-upgrade regression tests.
+- `docs/security-reviews/2026-07-21-032-oauth-per-server-scoping-plan-v2.md` — v2 plan review confirming 4 SEC remediations closed.
+
+**Where to look next**
+
+Any future admin surface that exposes per-tenant data (per-server abilities, per-server tools, per-server settings, per-server audit) MUST apply the same first-class-column pattern from day one. If tempted to encode tenant ownership in a composite identifier string (e.g., `tenant-{id}-{slug}-{rand}`), STOP — that's the exact anti-pattern F032 exists to close. See `B37` below for the generalizable grep-gate pattern.
+
+
+---
+
+## D32 / DEC-CONNECTOR-APPROVAL-REVOKE-CASCADE
+
+**Scope**: connector admin approval lifecycle → OAuth token lifecycle wiring; §V extensibility contract for opt-out.
+
+**Why this is durable**
+
+Revoking a user's connector approval and leaving their session live is a security foot-gun — the operator 'reject' UI action does not match the semantic effect (user keeps working until token expiry). But some deployments legitimately want the decoupled behaviour (approval = future eligibility, tokens = current session). The right shape is default-secure + filter-based opt-out, not a hardcoded coupling.
+
+**Decision**
+
+`ConnectorAdminController::handle_revoke_user_approval()` fires `do_action( 'acrossai_mcp_connector_user_approval_revoked', int $server_id, string $connector_slug, int $user_id, int $revoked_by )` immediately after the DELETE (idempotent — fires per admin intent, not per row deletion). The default listener `cascade_revoke_tokens_on_approval_revoked` (wired via `$this->loader->add_action(...)` in `Main::define_admin_hooks()` per §A1) enumerates every admin-generated + DCR client matching the connector profile (same shape as `mass_revoke_connector_tokens`), then calls `TokensQuery::revoke_by_user_and_server_and_client_ids()` to mark every matching non-revoked token as `revoked = 1`. Per revoked token fires `acrossai_mcp_manager_oauth_token_revoked` with `reason = 'approval_revoked'` (stable enum for downstream loggers to differentiate this cascade from admin/delete/nuclear paths). Two opt-out mechanisms: (a) `apply_filters( 'acrossai_mcp_connector_revoke_tokens_on_approval_revoked', true, ... )` — return false to skip only the token cascade (approval row still deleted); (b) `remove_action( 'acrossai_mcp_connector_user_approval_revoked', [ ConnectorAdminController::class, 'cascade_revoke_tokens_on_approval_revoked' ], 10 )` — remove the default listener entirely. Third-party plugins can also `add_action()` on the same hook to layer additional side effects (audit log, notification email, etc.) without disabling the default cascade.
+
+**Tradeoffs**
+
+- **Gained**: revoke-approval UI action now matches its intuitive meaning (user is disconnected immediately). Filter-based opt-out preserves §V Extensibility Without Core Modification for projects that want the pre-F032 decoupled behaviour.
+- **Made harder**: `handle_revoke_user_approval` docblock must accurately describe the default cascade AND the opt-out mechanisms — misleading docs would surprise both operators (unexpected token revoke) AND third-party plugin authors (surprised the cascade fires at all).
+- **Reconsider**: If future features add more approval-lifecycle → session-lifecycle cascades (e.g., 'suspend user' → 'revoke all tokens site-wide'), extract a shared `LifecycleCascadeRegistry` under `includes/Utilities/` — currently the cascade is a single hardcoded listener.
+- **Related**: `D19` (fail-open observability — this cascade fires observability actions on both success and opt-out paths); `D31 / DEC-F032-OAUTH-SERVER-ID-FIRST-CLASS` (same feature branch, complementary — approval-scoping is per (server, connector, user), matching the F032 per-server invariant).
+
+**Evidence**
+
+- `includes/OAuth/ConnectorAdminController.php::handle_revoke_user_approval` + `cascade_revoke_tokens_on_approval_revoked` methods.
+- `includes/Main.php::define_admin_hooks()` — listener wiring per §A1.
+- `includes/Database/OAuthTokens/Query.php::revoke_by_user_and_server_and_client_ids` + `revoke_by_client_id_and_user_id` — per-client loop implementation.
+
+**Where to look next**
+
+Any future admin action whose UI label implies immediate lifecycle change (revoke, suspend, ban, block) MUST evaluate whether existing session/credential state should cascade. If yes: use this pattern (default-secure fire + opt-out filter). If no: docblock the intentional decoupling explicitly to preempt reviewer confusion.
+
+---
+
+## D33 / DEC-OAUTH-AUTHORIZE-AC-GATE
+
+**Scope**: F015 Access Control enforcement extended to OAuth `/authorize` GET handler + CLI device-grant consent + Application Password generation — the three connection-time surfaces.
+
+**Why this is durable**
+
+Pre-F032 AC enforcement fired ONLY at `mcp_adapter_pre_tool_call` (tool-invocation time). A denied user could complete OAuth handshake, obtain tokens, see their AI host report 'connected' — then silently 403 every subsequent tool call. Invisible to operators, confusing to users, wasteful of storage (auth codes + tokens issued to users who can never invoke a tool). AC must gate at CREDENTIAL ISSUANCE time, not just tool-invocation time.
+
+**Decision**
+
+`AcrossAI_MCP_Access_Control::user_has_server_access( int $user_id, int $server_id ): bool` is a new shared helper — called by `AuthorizationController::handle_get()` (OAuth authorize) BEFORE consent renders, by CLI device-grant consent gate BEFORE the device code is issued, and by Application Password generation BEFORE the password is emitted. On `false` return, the caller MUST redirect with `error=access_denied` (OAuth) or emit `WP_Error` (CLI/AppPassword) + fire `do_action( 'acrossai_mcp_access_control_denied', int $user_id, string $server_slug, null $tool, string $context )` where `$context` is `'oauth_authorize'`, `'cli_device_grant'`, or `'application_password'` — operators can differentiate the surfaces via the context arg. Fail-open per D19: `user_has_server_access` returns `true` when the AC package is absent (Composer package not installed), the server row is missing (Q2 race — same race F015 tool-call gate handles), or the AC manager is null (boot failure). v2 vendor hierarchy handles admin bypass internally (admins pass every rule by default).
+
+**Tradeoffs**
+
+- **Gained**: unauthorized users see immediate, clear denial instead of confusing 'connected then silently 403' behaviour. No credentials issued to users who cannot use them. Consistent UX across all three connection-time surfaces (OAuth, CLI, AppPassword) via the shared helper.
+- **Made harder**: the AC helper must fail-open on defensive paths (D19) — a hard-fail on AC-missing would break every OAuth flow on installs without the optional AC package. Fail-open MUST NOT be interpreted as 'security bypass' — the OAuth flow still requires WP auth + PKCE + client validation.
+- **Reconsider**: If future connection-time surfaces multiply (e.g., MCP-over-WebSocket handshake, gRPC bearer bootstrap), extract the AC gate + observability fire into a `ConnectionTimeGate` helper — currently duplicated at the 3 call sites.
+- **Related**: `D18` (mcp_adapter_pre_tool_call — the tool-invocation-time enforcement site; this decision is its consent-time complement); `D19` (fail-open observability); `DEC-ACCESS-CONTROL-V2-ADOPTION` (F015 canonical wrapper — this decision reuses its manager surface).
+
+**Evidence**
+
+- `includes/AccessControl/AcrossAI_MCP_Access_Control.php::user_has_server_access` — shared helper.
+- `includes/OAuth/AuthorizationController.php::handle_get` — OAuth authorize call site with `context = 'oauth_authorize'`.
+- `includes/Main.php` — no new hook wiring (helper is called directly from consent code paths, not filter-driven).
+
+**Where to look next**
+
+Any future connection-time credential-issuance surface (WebSocket handshake, new token grant type, service-account impersonation) MUST call `user_has_server_access` BEFORE issuing credentials, MUST fire `acrossai_mcp_access_control_denied` with a distinct `$context` string on denial, and MUST fail-open when the AC package is absent per D19.
+
+---
+
+## D34 / DEC-CROSS-SERVER-NUCLEAR-REVOKE-CARVE-OUT
+
+**Scope**: `POST /wp-json/acrossai-mcp-manager/v1/oauth/revoke-client-tokens-all-servers` (FR-043) — deliberate carve-out from the F032 per-server invariant (D31).
+
+**Why this is durable**
+
+D31 (F032 core) requires every mutating OAuth admin endpoint to validate `server_id` and 403 on mismatch. That's the right default. But operators occasionally need site-wide response to a compromised `client_id` (e.g., a leaked Claude.ai token spreading via phishing). Requiring them to visit each server tab individually is unacceptable emergency-response latency. This endpoint is the sanctioned exception.
+
+**Decision**
+
+`ConnectorAdminController::handle_revoke_client_tokens_all_servers()` accepts ONLY `client_id` in the request body — NO `server_id` — and calls `TokensQuery::revoke_by_client_id_across_all_servers( string $client_id )` to revoke every non-revoked token for that client_id site-wide. It fires `do_action( 'acrossai_mcp_oauth_client_revoked_across_all_servers', string $client_id, int $revoked_token_count, int $user_id, int $timestamp )` exactly once per admin action. CRITICAL invariant: this endpoint MUST NOT fire `acrossai_mcp_oauth_cross_server_attempted` — that action (FR-023) is reserved for actual bypass ATTEMPTS by a caller who submitted a mismatched server_id. This endpoint is operator-intentional cross-server operation, not a bypass attempt; conflating the two observability streams would poison forensic logs with false-positive 'attempted bypass' records that are actually legitimate site-wide operator actions. The docblock on the handler cites this exception explicitly; the two `do_action` calls are mutually exclusive by static-code analysis.
+
+**Tradeoffs**
+
+- **Gained**: one-click site-wide emergency response for compromised client_ids. Clean observability streams — `acrossai_mcp_oauth_cross_server_attempted` remains a high-signal forensic marker (real bypass attempts only), `acrossai_mcp_oauth_client_revoked_across_all_servers` is the operator-intent marker.
+- **Made harder**: any future refactor that unifies the two admin revoke code paths MUST preserve the observability-action separation. Docblock + inline comment + this DECISIONS entry all cite the invariant explicitly.
+- **Reconsider**: If ops feedback surfaces need for a scoped variant (e.g., 'revoke across all servers in this network' for multisite), add it as a separate endpoint with a distinct observability action — do NOT overload this one.
+- **Related**: `D31` (F032 per-server invariant this deliberately carves out from); `D19` (fail-open observability — this endpoint's single observability action follows the pattern).
+
+**Evidence**
+
+- `includes/OAuth/ConnectorAdminController.php::handle_revoke_client_tokens_all_servers` — endpoint with docblocked D31 carve-out.
+- `includes/Database/OAuthTokens/Query.php::revoke_by_client_id_across_all_servers` — server-neutral bulk revoke.
+- `admin/Partials/ServerTabs/AIConnectorsTab.php::render_connections_panel` — "Revoke from all servers" button UI.
+
+**Where to look next**
+
+Any future operator-invoked cross-server admin action (bulk delete, bulk suspend, aggregated report) MUST be its own endpoint with its own observability action distinct from the bypass-attempt actions. If tempted to reuse a bypass-attempt observability action for a legitimate site-wide op, STOP — that pollutes forensic streams.

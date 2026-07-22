@@ -27,6 +27,7 @@ final class ClientRepository {
 	 *
 	 * Shape of $data (PSR-5 array shape kept for PHPStan level 8):
 	 *   client_id (string, required)
+	 *   server_id (int, required — F032 T041)
 	 *   client_secret (string|null, optional — null → public client)
 	 *   client_name (string, optional)
 	 *   redirect_uris (array<int, string>, required)
@@ -44,6 +45,8 @@ final class ClientRepository {
 
 		$args = array(
 			'client_id'                  => (string) $data['client_id'],
+			// F032 (T041) — required server binding. Post-migration NOT NULL invariant.
+			'server_id'                  => (int) ( $data['server_id'] ?? 0 ),
 			'client_secret_hash'         => $secret_hash,
 			'client_name'                => isset( $data['client_name'] ) ? (string) $data['client_name'] : '',
 			'redirect_uris'              => wp_json_encode( array_values( $data['redirect_uris'] ) ),

@@ -45,7 +45,11 @@ import '../scss/ai-connectors.scss';
 			'.acrossai-mcp-connector__generate-btn, .acrossai-mcp-connector__regenerate-btn, ' +
 			'[data-acrossai-copy], [data-acrossai-reveal], ' +
 			'.acrossai-mcp-connector-panel__revoke-btn, .acrossai-mcp-connector-panel__delete-btn, ' +
-			'.acrossai-mcp-connector-panel__nuclear-btn, .acrossai-mcp-connector-panel__approve-btn'
+			'.acrossai-mcp-connector-panel__revoke-all-btn, ' +
+			'.acrossai-mcp-connector-panel__nuclear-btn, ' +
+			'.acrossai-mcp-connector-panel__approve-btn, ' +
+			'.acrossai-mcp-connector-panel__deny-btn, ' +
+			'.acrossai-mcp-connector-panel__revoke-approval-btn'
 		);
 		if ( ! target ) {
 			return;
@@ -61,13 +65,19 @@ import '../scss/ai-connectors.scss';
 		} else if ( target.matches( '[data-acrossai-reveal]' ) ) {
 			handleReveal( target );
 		} else if ( target.matches( '.acrossai-mcp-connector-panel__revoke-btn' ) ) {
-			handleAdminAction( wrapper, target, 'revoke-client-tokens', 'Revoke every token for this client?' );
+			handleAdminAction( wrapper, target, 'revoke-client-tokens', 'Revoke every token for this client on this server?' );
 		} else if ( target.matches( '.acrossai-mcp-connector-panel__delete-btn' ) ) {
 			handleAdminAction( wrapper, target, 'delete-client', 'Delete this client? This revokes every token first and cannot be undone.' );
+		} else if ( target.matches( '.acrossai-mcp-connector-panel__revoke-all-btn' ) ) {
+			handleRevokeAllServers( wrapper, target );
 		} else if ( target.matches( '.acrossai-mcp-connector-panel__nuclear-btn' ) ) {
 			handleNuclear( wrapper, target );
 		} else if ( target.matches( '.acrossai-mcp-connector-panel__approve-btn' ) ) {
 			handleApprove( wrapper, target );
+		} else if ( target.matches( '.acrossai-mcp-connector-panel__deny-btn' ) ) {
+			handleDenyPending( wrapper, target );
+		} else if ( target.matches( '.acrossai-mcp-connector-panel__revoke-approval-btn' ) ) {
+			handleRevokeApproval( wrapper, target );
 		}
 	}
 
@@ -111,10 +121,47 @@ import '../scss/ai-connectors.scss';
 
 	function handleAdminAction( wrapper, btn, path, confirmMsg ) {
 		const clientId = btn.getAttribute( 'data-acrossai-client-id' );
-		if ( ! clientId ) { return; }
+		// F032 (T043) — server_id is now REQUIRED in the mutating REST body.
+		// Prefer the per-row attribute (emitted by AIConnectorsTab T042);
+		// fall back to the wrapper's data-server-id for backward compat.
+		const rowServerId = parseInt( btn.getAttribute( 'data-acrossai-server-id' ) || '0', 10 );
+		const ctxServerId = parseInt( wrapper.getAttribute( 'data-server-id' ) || '0', 10 );
+		const serverId    = rowServerId > 0 ? rowServerId : ctxServerId;
+		if ( ! clientId || ! serverId ) { return; }
 		if ( ! window.confirm( confirmMsg ) ) { return; }
 		btn.disabled = true;
-		postAdmin( wrapper, '/oauth/' + path, { client_id: clientId } )
+		postAdmin( wrapper, '/oauth/' + path, { client_id: clientId, server_id: serverId } )
+			.then( function ( response ) {
+				if ( response.status >= 200 && response.status < 300 ) {
+					window.location.reload();
+				} else {
+					// F032 (T043) — surface a distinct error for the cross-server 403 so
+					// operators understand it's not a generic permissions issue.
+					if ( response.status === 403 && response.data && 'acrossai_mcp_oauth_cross_server' === response.data.code ) {
+						window.alert( 'This action can only be performed for the server that owns this client — refresh the page and try again.' );
+					} else {
+						window.alert( 'Failed. See console.' );
+					}
+					// eslint-disable-next-line no-console
+					console.error( response );
+					btn.disabled = false;
+				}
+			} )
+			.catch( function () { btn.disabled = false; } );
+	}
+
+	function handleRevokeAllServers( wrapper, btn ) {
+		const clientId = btn.getAttribute( 'data-acrossai-client-id' );
+		if ( ! clientId ) { return; }
+		if ( ! window.confirm(
+			'Revoke every token for this client across EVERY server on this site?\n\n' +
+			'This is an intentional cross-server operation. Any active AI-host session ' +
+			'using this client on any server will disconnect on the next request. Users ' +
+			'will need to re-authorize their AI host to reconnect.\n\n' +
+			'Cannot be undone.'
+		) ) { return; }
+		btn.disabled = true;
+		postAdmin( wrapper, '/oauth/revoke-client-tokens-all-servers', { client_id: clientId } )
 			.then( function ( response ) {
 				if ( response.status >= 200 && response.status < 300 ) {
 					window.location.reload();
@@ -136,8 +183,24 @@ import '../scss/ai-connectors.scss';
 		const ctx = adminBase( wrapper );
 		btn.disabled = true;
 		postAdmin( wrapper, '/oauth/revoke-connector-tokens', { server_id: ctx.serverId, connector_slug: slug } )
-			.then( function () { window.location.reload(); } )
-			.catch( function () { btn.disabled = false; } );
+			.then( function ( response ) {
+				if ( response.status >= 200 && response.status < 300 ) {
+					const n = response.data && typeof response.data.revoked_count === 'number' ? response.data.revoked_count : 0;
+					window.alert( 'Revoked ' + n + ' token' + ( 1 === n ? '' : 's' ) + ' for this connector.' );
+					window.location.reload();
+				} else {
+					window.alert( 'Failed to revoke connector tokens. See console.' );
+					// eslint-disable-next-line no-console
+					console.error( response );
+					btn.disabled = false;
+				}
+			} )
+			.catch( function ( err ) {
+				window.alert( 'Network error. See console.' );
+				// eslint-disable-next-line no-console
+				console.error( err );
+				btn.disabled = false;
+			} );
 	}
 
 	function handleApprove( wrapper, btn ) {
@@ -148,6 +211,48 @@ import '../scss/ai-connectors.scss';
 		btn.disabled = true;
 		postAdmin( wrapper, '/oauth/approve-pending-consent', { server_id: ctx.serverId, connector_slug: slug, user_id: userId } )
 			.then( function () { window.location.reload(); } )
+			.catch( function () { btn.disabled = false; } );
+	}
+
+	function handleDenyPending( wrapper, btn ) {
+		const slug   = btn.getAttribute( 'data-acrossai-connector-slug' );
+		const userId = parseInt( btn.getAttribute( 'data-acrossai-user-id' ), 10 );
+		if ( ! slug || ! userId ) { return; }
+		if ( ! window.confirm( 'Deny this pending approval request?\n\nThe user is removed from the pending list without being approved. They must re-attempt the connect flow from their AI host if they want to try again.' ) ) { return; }
+		const ctx = adminBase( wrapper );
+		btn.disabled = true;
+		postAdmin( wrapper, '/oauth/deny-pending-consent', { server_id: ctx.serverId, connector_slug: slug, user_id: userId } )
+			.then( function ( response ) {
+				if ( response.status >= 200 && response.status < 300 ) {
+					window.location.reload();
+				} else {
+					window.alert( 'Failed. See console.' );
+					// eslint-disable-next-line no-console
+					console.error( response );
+					btn.disabled = false;
+				}
+			} )
+			.catch( function () { btn.disabled = false; } );
+	}
+
+	function handleRevokeApproval( wrapper, btn ) {
+		const slug   = btn.getAttribute( 'data-acrossai-connector-slug' );
+		const userId = parseInt( btn.getAttribute( 'data-acrossai-user-id' ), 10 );
+		if ( ! slug || ! userId ) { return; }
+		if ( ! window.confirm( 'Revoke this user\'s approval for this connector?\n\nThis will ALSO revoke every active OAuth token the user holds for this connector on this server — they will be disconnected immediately and their next connect attempt will re-enter the pending flow.\n\n(To opt out of the token cascade, hook the acrossai_mcp_connector_revoke_tokens_on_approval_revoked filter server-side.)' ) ) { return; }
+		const ctx = adminBase( wrapper );
+		btn.disabled = true;
+		postAdmin( wrapper, '/oauth/revoke-user-approval', { server_id: ctx.serverId, connector_slug: slug, user_id: userId } )
+			.then( function ( response ) {
+				if ( response.status >= 200 && response.status < 300 ) {
+					window.location.reload();
+				} else {
+					window.alert( 'Failed. See console.' );
+					// eslint-disable-next-line no-console
+					console.error( response );
+					btn.disabled = false;
+				}
+			} )
 			.catch( function () { btn.disabled = false; } );
 	}
 

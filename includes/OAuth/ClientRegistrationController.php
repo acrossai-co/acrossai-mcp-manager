@@ -35,6 +35,15 @@ final class ClientRegistrationController {
 	private static $instance = null;
 
 	/**
+	 * F032 (T049) — per-request cache for `oauth_clients_server_id_column_exists()`.
+	 * INFORMATION_SCHEMA lookup is expensive on every DCR request; cache the
+	 * result for the request lifetime. Null = not yet resolved.
+	 *
+	 * @var bool|null
+	 */
+	private static ?bool $server_id_column_exists_cache = null;
+
+	/**
 	 * Private constructor enforces singleton pattern.
 	 */
 	private function __construct() {
@@ -135,6 +144,19 @@ final class ClientRegistrationController {
 	 * @return \WP_REST_Response|\WP_Error
 	 */
 	public function handle_admin_generate( \WP_REST_Request $request ) {
+		// F032 (T051) — FR-028 race guard. If the plugin was just upgraded and
+		// Main::reconcile_database_schemas() has not yet fired, the oauth_clients
+		// server_id column is absent — refusing to INSERT prevents silent destruction
+		// by the auto-purge step. Applies to admin generate too since the underlying
+		// table constraint is the same.
+		if ( ! self::oauth_clients_server_id_column_exists() ) {
+			return new \WP_Error(
+				'service_unavailable',
+				__( 'Server initialization in progress; please retry in a few seconds.', 'acrossai-mcp-manager' ),
+				array( 'status' => 503 )
+			);
+		}
+
 		$server_id      = (int) $request->get_param( 'server_id' );
 		$connector_slug = (string) $request->get_param( 'connector_slug' );
 
@@ -163,7 +185,9 @@ final class ClientRegistrationController {
 			$regenerated = false;
 
 			if ( null !== $existing ) {
-				$revoked_ids = TokensQuery::instance()->revoke_by_client_id( $existing->client_id );
+				// F032 (T033) — revoke_by_client_id now requires server_id. Admin regenerate
+				// is per-server by construction — pass $server_id from the route param.
+				$revoked_ids = TokensQuery::instance()->revoke_by_client_id( $existing->client_id, $server_id );
 				foreach ( $revoked_ids as $token_id ) {
 					/**
 					 * Action: acrossai_mcp_manager_oauth_token_revoked
@@ -180,6 +204,8 @@ final class ClientRegistrationController {
 			$row_id = ClientRepository::create(
 				array(
 					'client_id'                  => $new_client_id,
+					// F032 (T051) — persist server binding from admin form context.
+					'server_id'                  => $server_id,
 					'client_secret'              => $new_client_secret,
 					'client_name'                => $profile->get_name(),
 					'redirect_uris'              => $profile->get_redirect_uri_whitelist(),
@@ -256,6 +282,21 @@ final class ClientRegistrationController {
 	 * @return \WP_REST_Response|\WP_Error
 	 */
 	public function handle_register( \WP_REST_Request $request ) {
+		// F032 (T050) — FR-028 race guard MUST run FIRST. If the plugin was just
+		// upgraded and Main::reconcile_database_schemas() has not yet fired, the
+		// oauth_clients.server_id column is absent — refusing to INSERT prevents
+		// silent destruction by the auto-purge step (SEC-032-005 remediation).
+		// Note (per SEC-032-007 disposition): the 503 intentionally OMITS the
+		// `Retry-After: 5` header — AI hosts (Claude.ai, ChatGPT, Cursor) already
+		// retry at 5-30s intervals without header guidance. May be added later.
+		if ( ! self::oauth_clients_server_id_column_exists() ) {
+			return new \WP_Error(
+				'service_unavailable',
+				__( 'Server initialization in progress; please retry in a few seconds.', 'acrossai-mcp-manager' ),
+				array( 'status' => 503 )
+			);
+		}
+
 		$content_type = strtolower( (string) $request->get_content_type()['value'] ?? '' );
 		if ( 'application/json' !== $content_type ) {
 			return new \WP_Error(
@@ -272,6 +313,53 @@ final class ClientRegistrationController {
 				__( 'Malformed JSON body.', 'acrossai-mcp-manager' ),
 				array( 'status' => 400 )
 			);
+		}
+
+		// F032 (T050, REVISED 2026-07-21) — resolve target MCP server for this DCR client.
+		//
+		// RFC 7591 (DCR) does NOT include `resource` in the registration body — that's an
+		// RFC 8707 concept for authorize/token endpoints, and real MCP hosts (Claude.ai,
+		// ChatGPT) do NOT send it at DCR time. Original F032 hard-required `resource` at
+		// DCR and broke Claude.ai's connect flow. Revised policy:
+		//
+		//   1. If `resource` provided AND valid (origin match + resolves to a server) → use it.
+		//   2. If `resource` provided but invalid → 400 invalid_target (unchanged).
+		//   3. If `resource` NOT provided AND exactly ONE MCP server is registered → auto-bind.
+		//      Common single-server case (>90% of installs); unambiguous binding.
+		//   4. If `resource` NOT provided AND multiple MCP servers exist → 400 with helpful
+		//      error pointing the client at the well-known metadata's `resource` value(s).
+		//
+		// FR-027 origin verification still applies when resource IS provided.
+		$resource = isset( $body['resource'] ) && is_string( $body['resource'] ) ? $body['resource'] : '';
+		$server_id = 0;
+
+		if ( '' !== $resource ) {
+			$server_id = self::resolve_server_id_from_resource_url( $resource );
+			// If path-resolution fails but origin was OK (else observability action already fired),
+			// fall through to single-server auto-bind. This covers the common case where
+			// DiscoveryController advertises a hardcoded fallback resource URL (`mcp/v1`) that
+			// doesn't match any real registered server's route.
+		}
+
+		if ( $server_id <= 0 ) {
+			$all_servers  = MCPServerQuery::instance()->query( array( 'number' => 100 ) );
+			$server_count = is_array( $all_servers ) ? count( $all_servers ) : 0;
+			if ( 1 === $server_count ) {
+				// Single-server auto-bind (covers both "no resource" and "resource unresolved" cases).
+				$server_id = (int) $all_servers[0]->id;
+			} elseif ( $server_count > 1 ) {
+				return new \WP_Error(
+					'invalid_target',
+					__( 'This site hosts multiple MCP servers; include an RFC 8707 "resource" parameter in the DCR request that matches one of the servers exposed by the /.well-known/oauth-protected-resource metadata.', 'acrossai-mcp-manager' ),
+					array( 'status' => 400 )
+				);
+			} else {
+				return new \WP_Error(
+					'invalid_target',
+					__( 'No MCP servers are registered on this site.', 'acrossai-mcp-manager' ),
+					array( 'status' => 400 )
+				);
+			}
 		}
 
 		$redirect_uris = isset( $body['redirect_uris'] ) && is_array( $body['redirect_uris'] )
@@ -382,6 +470,8 @@ final class ClientRegistrationController {
 			$row_id = ClientRepository::create(
 				array(
 					'client_id'                  => $new_client_id,
+					// F032 (T050) — persist server binding resolved from RFC 8707 resource.
+					'server_id'                  => $server_id,
 					'client_secret'              => $new_client_secret,
 					'client_name'                => $client_name,
 					'redirect_uris'              => $redirect_uris,
@@ -485,5 +575,119 @@ final class ClientRegistrationController {
 		sort( $canonical['response_types'] );
 
 		return hash( 'sha256', (string) wp_json_encode( $canonical ) );
+	}
+
+	/**
+	 * F032 (T048) — Resolve the RFC 8707 `resource` URL to an MCP server row id.
+	 *
+	 * TWO-STEP CHECK per FR-027 / SEC-032-002 remediation. Origin verification
+	 * precedes path resolution:
+	 *
+	 *   Step 1 (origin verification): wp_parse_url on both $resource and home_url();
+	 *     compare scheme + host (case-insensitive) + port. On mismatch: fire
+	 *     `acrossai_mcp_oauth_dcr_resource_url_origin_mismatch` action + return 0.
+	 *     Blocks phishing DCR bodies that pass a path from this site but an
+	 *     attacker-controlled origin.
+	 *
+	 *   Step 2 (path resolution): match the URL path against every registered
+	 *     MCP server's `<namespace>/<route>` prefix. Return matched server_id or 0.
+	 *
+	 * Caller converts 0 return into `WP_Error( 'invalid_target', 400 )`.
+	 *
+	 * @param string $resource RFC 8707 resource URL submitted in the DCR body.
+	 * @return int Matched server row id, or 0 on origin-mismatch OR path-mismatch.
+	 */
+	public static function resolve_server_id_from_resource_url( string $resource ): int {
+		if ( '' === $resource ) {
+			return 0;
+		}
+
+		// Step 1 — ORIGIN VERIFICATION (FR-027 / SEC-032-002).
+		$resource_parts = wp_parse_url( $resource );
+		$home_parts     = wp_parse_url( home_url() );
+
+		if (
+			! is_array( $resource_parts )
+			|| ! is_array( $home_parts )
+			|| empty( $resource_parts['scheme'] )
+			|| empty( $resource_parts['host'] )
+			|| strtolower( (string) $resource_parts['scheme'] ) !== strtolower( (string) ( $home_parts['scheme'] ?? '' ) )
+			|| strcasecmp( (string) $resource_parts['host'], (string) ( $home_parts['host'] ?? '' ) ) !== 0
+			|| ( $resource_parts['port'] ?? null ) !== ( $home_parts['port'] ?? null )
+		) {
+			// Fire scoped observability action for differentiation from path-mismatch.
+			do_action(
+				'acrossai_mcp_oauth_dcr_resource_url_origin_mismatch',
+				$resource,
+				get_current_user_id(),
+				time()
+			);
+			return 0;
+		}
+
+		// Step 2 — PATH RESOLUTION via MCPServer route matcher. Reuse the
+		// AuthorizationController route-matching walk shape (same normalized
+		// trailing-slash + prefix-match rules).
+		$resource_path = (string) wp_parse_url( $resource, PHP_URL_PATH );
+		if ( '' === $resource_path ) {
+			return 0;
+		}
+		$resource_path = rtrim( $resource_path, '/' );
+
+		$servers = MCPServerQuery::instance()->query( array( 'number' => 100 ) );
+		if ( empty( $servers ) ) {
+			return 0;
+		}
+
+		foreach ( $servers as $server_row ) {
+			$namespace = '' !== $server_row->server_route_namespace ? (string) $server_row->server_route_namespace : 'mcp';
+			$route     = (string) $server_row->server_route;
+			if ( '' === $route ) {
+				continue;
+			}
+			$server_url  = rest_url( trailingslashit( $namespace ) . $route );
+			$server_path = rtrim( (string) wp_parse_url( $server_url, PHP_URL_PATH ), '/' );
+			if ( '' === $server_path ) {
+				continue;
+			}
+			if ( $resource_path === $server_path || 0 === strpos( $resource_path, $server_path . '/' ) ) {
+				return (int) $server_row->id;
+			}
+		}
+		return 0;
+	}
+
+	/**
+	 * F032 (T049) — Per-request cached INFORMATION_SCHEMA lookup for the
+	 * oauth_clients.server_id column existence.
+	 *
+	 * Used by `handle_register` + `handle_admin_generate` as the FR-028 race
+	 * guard (SEC-032-005 remediation): if the plugin was just upgraded and
+	 * Main::reconcile_database_schemas() has not yet fired, the column is
+	 * absent — refusing to INSERT prevents silent destruction by the auto-purge
+	 * step on the subsequent admin request.
+	 *
+	 * @return bool True iff the server_id column exists on oauth_clients.
+	 */
+	private static function oauth_clients_server_id_column_exists(): bool {
+		if ( null !== self::$server_id_column_exists_cache ) {
+			return self::$server_id_column_exists_cache;
+		}
+
+		global $wpdb;
+		$table = $wpdb->prefix . 'acrossai_mcp_oauth_clients';
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
+		$col = $wpdb->get_col(
+			$wpdb->prepare(
+				"SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+				 WHERE TABLE_SCHEMA = %s AND TABLE_NAME = %s AND COLUMN_NAME = 'server_id'",
+				DB_NAME,
+				$table
+			)
+		);
+
+		self::$server_id_column_exists_cache = ! empty( $col );
+		return self::$server_id_column_exists_cache;
 	}
 }
