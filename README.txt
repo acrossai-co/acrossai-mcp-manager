@@ -4,7 +4,7 @@ Tags: mcp, ai, copilot, vscode, claude
 Requires at least: 7.0
 Requires PHP: 8.1
 Tested up to: 7.0
-Stable tag: 0.1.5
+Stable tag: 0.1.6
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -210,7 +210,7 @@ No additional software is needed on the WordPress side. Your MCP clients (VS Cod
 * **Internal: `ACROSSAI_MCP_MANAGER_VERSION` constant resynced.** Drifted at `0.0.9` across the 0.1.0 release; now correctly reads `0.1.1` matching the plugin header.
 * **Operator recipe for prior installs (optional cleanup):** Freemius' SDK previously wrote `fs_accounts`, `fs_active_plugins`, `fs_api_cache`, `fs_cache_*`, and `fs_debug_mode` rows to `wp_options`. Nothing this plugin loads reads or writes them post-F028. To purge: `DELETE FROM wp_options WHERE option_name LIKE 'fs_%';`. The plugin does NOT ship this as an automatic migration (per `D21` fresh-install-only retirement pattern established by F016).
 
-= Unreleased =
+= 0.1.6 =
 * **Feature 032 — OAuth per-server scoping (SECURITY FIX + BREAKING CHANGE for legacy DCR sessions).**
 
     ⚠️ **BEFORE UPGRADE — READ THIS**: this release deletes any pre-F032 DCR-registered OAuth client rows (those without a `server-{id}-` prefix — e.g., legacy Claude.ai / ChatGPT / Cursor / Cline connections) and their associated tokens + auth codes as part of the D28 upgrade migration. Any live AI-host session bound to a legacy DCR row will disconnect on the next request; affected users must re-run the OAuth authorize flow from their AI host to reconnect. All post-F032 DCR registrations are per-server and unaffected. Consider (a) snapshotting `wp_acrossai_mcp_oauth_{clients,tokens,auth_codes}` before upgrade, and (b) notifying users with active AI-host connections that they will need to re-authorize once after upgrade.
