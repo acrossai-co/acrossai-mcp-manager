@@ -37,6 +37,15 @@ class Schema extends \BerlinDB\Database\Kern\Schema {
 			'type'   => 'varchar',
 			'length' => '64',
 		),
+		// F032 — first-class server binding. NOT NULL final state (per FR-001 / Q4 clarification).
+		// Column added as NULL transiently by upgrade_to_1_0_1 then MODIFYed to NOT NULL as final step.
+		array(
+			'name'       => 'server_id',
+			'type'       => 'bigint',
+			'length'     => '20',
+			'unsigned'   => true,
+			'allow_null' => false,
+		),
 		// FR-040 SHA-256 invariant — DO NOT narrow. NULLABLE for public clients (token_endpoint_auth_method='none').
 		array(
 			'name'       => 'client_secret_hash',
@@ -101,10 +110,13 @@ class Schema extends \BerlinDB\Database\Kern\Schema {
 			'type'    => 'primary',
 			'columns' => array( 'id' ),
 		),
+		// F032 — replaces the previous UNIQUE(client_id) with composite so the same DCR
+		// connector (e.g. Claude Desktop) can register on multiple servers as distinct rows.
+		// Upgrade callback swaps order: ADD composite → DROP standalone so table is never unconstrained.
 		array(
-			'name'    => 'client_id',
+			'name'    => 'client_id_server_id',
 			'type'    => 'unique',
-			'columns' => array( 'client_id' ),
+			'columns' => array( 'client_id', 'server_id' ),
 		),
 		array(
 			'name'    => 'connector_slug',

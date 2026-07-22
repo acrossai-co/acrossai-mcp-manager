@@ -1373,3 +1373,130 @@ Any hit that interpolates a dynamic PHP value into a JS literal needs `wp_json_e
 **Where to look next**
 
 Any new admin PHP that emits inline `<script>` with dynamic interpolation — run the grep gate. Any use of `wp_json_encode()` OUTSIDE of JS-context is fine (it's a superset of `esc_html`'s safety guarantees for the string-content case), but the reverse is dangerous.
+
+---
+
+## B37 / B-CROSS-SERVER-BYPASS-VIA-CLIENT-ID-ONLY
+
+**Status**: Active — Feature 032; generalizable
+
+**Where it happened**
+
+Pre-F032 `wp_acrossai_mcp_oauth_clients` used `UNIQUE(client_id)` global. The admin-generated `client_id` convention `server-{id}-{slug}-{rand}` encoded server ownership as a string prefix — NOT as a first-class column. `ConnectorAdminController::handle_revoke_client_tokens` + `handle_delete_client` + `handle_revoke_connector_tokens` accepted only `client_id` in the request body and mutated the referenced row without cross-checking against the admin's current server context. An admin on Server A's Connectors tab could revoke or delete Server B's OAuth clients + tokens by modifying `client_id` in the outbound REST body. Same-shape read-side leak: `TokensQuery::get_active_user_ids_by_client_id()` returned users across every server holding tokens for the same `client_id`, which the AI Connectors tab displayed as the "authorized users" list — leaking Server B's user roster into Server A's admin surface. DCR-registered clients (Claude.ai / ChatGPT / Cursor / Cline) had no server binding at all, so the pattern was silently invisible for them.
+
+**Root cause**
+
+Multi-tenant admin endpoint accepted only a tenant-scoped identifier (`client_id`) without a matching tenant validation. Prefix parsing of `client_id` for ownership signal was (a) not schema-enforced, (b) not REST-validated, (c) inapplicable to DCR-registered clients that use random client_ids without the prefix.
+
+**Prevention (grep gate — generalizable beyond OAuth)**
+
+Any per-tenant admin REST endpoint MUST:
+1. Require the tenant identifier (e.g., `server_id`) in the request body — never derive from a composite identifier string.
+2. Look up the target row via composite key `(client_id, server_id)` — return 403 opaque on any mismatch.
+3. Fire an observability action BEFORE the 403 return — 4-arg signature (NEVER include the actual owning tenant id, which would recreate the oracle the response body is protecting).
+4. Include the tenant identifier as a first-class `NOT NULL` column on every table storing tenant-scoped data; do NOT encode it in a composite string.
+
+Grep gate to run on any file under `includes/OAuth/` OR any file exposing a mutating REST endpoint with a tenant-scoped resource:
+
+```bash
+grep -rn 'get_param.*client_id\|get_param.*token' <file>
+```
+
+Every hit MUST be accompanied by a matching `server_id` (or equivalent tenant) extraction + validation before the referenced row is touched. Companion to `D28` (schema-drift reconciliation — the schema-migration counterpart) and to `D31 / DEC-F032-OAUTH-SERVER-ID-FIRST-CLASS` (the SQL-level invariant this pattern enforces).
+
+**Evidence**
+
+- `docs/security-reviews/2026-07-21-032-oauth-per-server-scoping-plan.md` — v1 plan review that surfaced the gap.
+- `docs/security-reviews/2026-07-21-032-oauth-per-server-scoping-plan-v2.md` — v2 verifying all 5 SEC-032-001 through SEC-032-005 findings closed.
+- `includes/OAuth/ConnectorAdminController.php:175-259` — canonical remediation shape (handle_revoke_client_tokens + handle_delete_client with server_id validation + 4-arg observability fire).
+
+
+---
+
+## B38 / B-ADMIN-SELF-APPROVAL-AUDIT-TRAIL-AMBIGUITY
+
+**Scope**: any admin-bypass path that auto-inserts into an existing "reviewer-approved" table without a discriminator field OR a distinct observability action.
+
+**Why this is durable**
+
+When an admin bypasses a "reviewer must approve" workflow via a self-service shortcut, the auto-inserted row into the approval table looks IDENTICAL to a row where another admin explicitly approved this user — both cases produce `approved_by = X AND user_id = X` when the reviewer happens to be reviewing themselves (path A) OR the user self-bypassed (path B). Forensic reviewers examining the audit trail post-incident cannot distinguish the two intents. Path A is a legitimate reviewer decision; path B is a self-service convenience. Conflating them poisons the forensic signal — an investigator asking "did anyone review this?" gets the wrong answer.
+
+F032 FR-051 shipped the admin bypass without either a `bypass_reason` schema field OR a distinct observability action; SEC-L1 flagged the gap during the staged security review. Remediated by firing `acrossai_mcp_connector_admin_self_bypassed` — application-level fix chosen over schema-level (`bypass_reason` column) because the observability action is smaller diff, no D28 upgrade needed, and matches the plugin's existing observability pattern.
+
+**Pattern to avoid**
+
+Any future PR that adds an admin-only bypass to a workflow with a reviewer-approval semantic MUST ship EITHER:
+
+1. **Schema-level discriminator** — a `bypass_reason ENUM(...)` or `source ENUM('explicit_review', 'admin_self_bypass')` column on the approval table, populated distinctly by the two code paths.
+2. **Application-level observability** — a distinct `do_action` fired from the bypass branch with a 4-arg signature. Never emit only the shared "approval_granted" action from a self-bypass path.
+
+Grep gate for any file introducing an admin bypass:
+
+```bash
+grep -rn 'user_can.*manage_options.*approve' includes/ admin/
+```
+
+Every hit MUST be immediately followed by EITHER a schema write to a discriminator column OR a distinct `do_action` fire that a forensic listener can differentiate from the explicit-review path.
+
+**Evidence**
+
+- `docs/security-reviews/2026-07-22-032-oauth-per-server-scoping-staged.md` — staged review that flagged the gap as SEC-L1.
+- `includes/OAuth/AuthorizationController.php` — the FR-051 bypass branch + remediation fire site.
+- `specs/032-oauth-per-server-scoping/contracts/php-hooks.md` — `acrossai_mcp_connector_admin_self_bypassed` action contract.
+- `tests/phpunit/OAuth/AdminBypassTest.php` — verified test coverage that action fires ONLY on admin path, NOT on subscriber path.
+
+
+---
+
+## B39 / B-DYNAMIC-IN-CLAUSE-TRIGGERS-PHPCS-FALSE-POSITIVE
+
+**Scope**: any `$wpdb->prepare()` invocation with a dynamically-built `IN()` clause.
+
+**Why this is durable**
+
+The WordPress-Coding-Standards `WordPress.DB.PreparedSQL.InterpolatedNotPrepared` sniff cannot statically verify that `{$placeholders}` built via `implode( ',', array_fill( 0, count($items), '%s' ) )` is safe. Even when the interpolation is provably safe (every value flows through the same `prepare()` call), the sniff fires as a false-positive. Suppressing with `phpcs:ignore` + a defensive comment on every call site accumulates noise and hides real interpolation bugs the sniff was designed to catch.
+
+**Pattern to avoid**
+
+```php
+// AVOID — dynamic IN() clause requires phpcs:ignore + defensive comment.
+$placeholders = implode( ',', array_fill( 0, count( $client_ids ), '%s' ) );
+$args = array_merge( array( $table, $user_id ), $client_ids );
+// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Placeholders built from array count.
+$wpdb->query( $wpdb->prepare( "UPDATE %i WHERE user_id = %d AND client_id IN ({$placeholders})", $args ) );
+```
+
+**Pattern to prefer**
+
+Extract a per-item helper that uses only static placeholders. Wrap it in a loop. Zero `phpcs:ignore`, no dynamic SQL, easier to reason about, per-call trace granularity.
+
+```php
+public function revoke_by_client_id_and_user_id( string $client_id, int $server_id, int $user_id ): array {
+    // ... static placeholder query, PHPCS-clean.
+}
+
+public function revoke_by_user_and_server_and_client_ids( int $user_id, int $server_id, array $client_ids ): array {
+    $all = array();
+    foreach ( $client_ids as $client_id ) {
+        $all = array_merge( $all, $this->revoke_by_client_id_and_user_id( $client_id, $server_id, $user_id ) );
+    }
+    return $all;
+}
+```
+
+**When to accept the loop cost**: when `count($client_ids)` is bounded to double-digits (per-connector enumeration, per-user cascade). If the collection can grow unbounded (site-wide bulk operations), reconsider — a single UPDATE via a temp table or a chunked static query may be needed.
+
+**Grep gate**
+
+```bash
+grep -rn 'IN\s*({\$' --include='*.php' includes/
+```
+
+Every hit MUST be either (a) refactored to a per-item loop OR (b) justified in a docblock explaining why the dynamic clause is unavoidable + a defensive test that seeds a `';DROP TABLE'`-shaped input and asserts safe handling.
+
+**Reference impl**: `includes/Database/OAuthTokens/Query.php::revoke_by_client_id_and_user_id` + `revoke_by_user_and_server_and_client_ids`.
+
+**Evidence**
+
+- `docs/security-reviews/2026-07-22-032-oauth-per-server-scoping-staged.md` — SEC review's "Confirmed Secure Patterns" table cites this refactor.
+- `includes/Database/OAuthTokens/Query.php` — canonical per-item loop implementation.

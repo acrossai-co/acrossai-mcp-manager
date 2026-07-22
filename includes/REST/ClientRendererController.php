@@ -233,7 +233,31 @@ final class ClientRendererController {
 		$user_id     = get_current_user_id();
 		$client_slug = sanitize_key( (string) $request->get_param( 'client_slug' ) );
 		$server_id   = absint( (string) $request->get_param( 'server_id' ) );
-		$app_name    = sprintf(
+
+		// F015 Access Control connection-time gate — reject App Password generation for
+		// users whose roles are not in the allow-list. Without this, a user with the WP
+		// `create_application_passwords` cap but no MCP AC permission could generate a
+		// password that authenticates successfully at HTTP Basic but then 403s on every
+		// tool call. Matches the OAuth authorize gate on AuthorizationController.
+		if ( $server_id > 0 ) {
+			$ac = \AcrossAI_MCP_Manager\Includes\AccessControl\AcrossAI_MCP_Access_Control::instance();
+			if ( ! $ac->user_has_server_access( $user_id, $server_id ) ) {
+				do_action(
+					'acrossai_mcp_access_control_denied',
+					$user_id,
+					(string) $server_id,
+					$client_slug,
+					'app_password_generate'
+				);
+				return new WP_Error(
+					'acrossai_mcp_access_denied',
+					__( 'Your account does not have permission to connect to this MCP server. Contact a site administrator to request access.', 'acrossai-mcp-manager' ),
+					array( 'status' => 403 )
+				);
+			}
+		}
+
+		$app_name = sprintf(
 			'AcrossAI MCP — %1$s (server #%2$d)',
 			$client_slug,
 			$server_id

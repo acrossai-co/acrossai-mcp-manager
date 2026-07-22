@@ -45,6 +45,15 @@ class Schema extends \BerlinDB\Database\Kern\Schema {
 			'length'  => '64',
 			'default' => '',
 		),
+		// F032 — first-class server binding. NOT NULL final state per FR-002 / Q4.
+		// Populated at token issuance from auth_code.server_id + at refresh from prior_token.server_id.
+		array(
+			'name'       => 'server_id',
+			'type'       => 'bigint',
+			'length'     => '20',
+			'unsigned'   => true,
+			'allow_null' => false,
+		),
 		array(
 			'name'     => 'user_id',
 			'type'     => 'bigint',
@@ -127,6 +136,13 @@ class Schema extends \BerlinDB\Database\Kern\Schema {
 			'name'    => 'token_family_id',
 			'type'    => 'key',
 			'columns' => array( 'token_family_id' ),
+		),
+		// F032 — composite key accelerates the primary lookup pattern
+		// `WHERE server_id = ? AND client_id = ?` used by REST endpoints.
+		array(
+			'name'    => 'server_id_client_id',
+			'type'    => 'key',
+			'columns' => array( 'server_id', 'client_id' ),
 		),
 	);
 }

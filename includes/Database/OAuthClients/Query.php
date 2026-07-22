@@ -42,6 +42,21 @@ class Query extends \BerlinDB\Database\Kern\Query {
 	protected static $instance = null;
 
 	/**
+	 * F032 — per-request cache for find_by_client_id_and_server_id().
+	 * Mirrors F017 ExposureResolver::resolve() shape. Key: "<server_id>:<client_id>".
+	 *
+	 * @var array<string, Row|null>
+	 */
+	private array $find_by_composite_cache = array();
+
+	/**
+	 * F032 (T049) — per-request cache for `server_id_column_exists()` INFORMATION_SCHEMA lookup.
+	 *
+	 * @var bool|null
+	 */
+	private ?bool $server_id_column_exists_cache = null;
+
+	/**
 	 * Private constructor enforces singleton (A2/S6).
 	 */
 	private function __construct() { // phpcs:ignore Generic.CodeAnalysis.UselessOverridingMethod.Found -- visibility override enforces singleton.
@@ -65,6 +80,11 @@ class Query extends \BerlinDB\Database\Kern\Query {
 	 *
 	 * @param string $client_id Opaque client identifier.
 	 * @return Row|null
+	 * @deprecated F032 — DO NOT use for authorization/mutation decisions.
+	 *   This method is cross-server-unaware and will return the first matching row
+	 *   regardless of server_id. Callers on the mutation path MUST use
+	 *   find_by_client_id_and_server_id() so cross-server bypass is prevented.
+	 *   Retained for legacy read paths that have their own server-scoping upstream.
 	 */
 	public function find_by_id( string $client_id ): ?Row {
 		if ( '' === $client_id ) {
@@ -79,6 +99,95 @@ class Query extends \BerlinDB\Database\Kern\Query {
 		);
 
 		return isset( $rows[0] ) ? $rows[0] : null;
+	}
+
+	/**
+	 * F032 (FR-016 / SC-001) — cross-server-safe composite lookup.
+	 *
+	 * Look up a single client by the composite (client_id, server_id) key. This is the
+	 * canonical helper for every mutating REST endpoint that receives both values from
+	 * the request body: a null return signals cross-server mismatch (or missing client)
+	 * and callers MUST return a 403 acrossai_mcp_oauth_cross_server response paired
+	 * with an acrossai_mcp_oauth_cross_server_attempted observability action fire.
+	 *
+	 * Per-request cache mirrors F017 ExposureResolver::resolve() shape — repeated
+	 * lookups within the same request (e.g. authorization check + delete) share one query.
+	 *
+	 * @param string $client_id Opaque client identifier as submitted in the REST body.
+	 * @param int    $server_id MCP server row id as submitted in the REST body.
+	 * @return Row|null Row iff the (client_id, server_id) pair matches an existing row.
+	 */
+	public function find_by_client_id_and_server_id( string $client_id, int $server_id ): ?Row {
+		if ( '' === $client_id || $server_id <= 0 ) {
+			return null;
+		}
+
+		$cache_key = $server_id . ':' . $client_id;
+		if ( array_key_exists( $cache_key, $this->find_by_composite_cache ) ) {
+			return $this->find_by_composite_cache[ $cache_key ];
+		}
+
+		$rows = $this->query(
+			array(
+				'client_id' => $client_id,
+				'server_id' => $server_id,
+				'number'    => 1,
+			)
+		);
+
+		$row = isset( $rows[0] ) ? $rows[0] : null;
+
+		$this->find_by_composite_cache[ $cache_key ] = $row;
+
+		return $row;
+	}
+
+	/**
+	 * Clear the per-request cache. Called from tests and (defensively) after any
+	 * INSERT/UPDATE/DELETE that could invalidate cached rows.
+	 *
+	 * @internal
+	 */
+	public function clear_request_cache(): void {
+		$this->find_by_composite_cache = array();
+	}
+
+	/**
+	 * F032 (T049 / SEC-032-005 remediation) — Per-request cached INFORMATION_SCHEMA
+	 * lookup for the `oauth_clients.server_id` column existence.
+	 *
+	 * Used by `ClientRegistrationController::handle_register` +
+	 * `handle_admin_generate` as the FR-028 race guard: if the plugin was just
+	 * upgraded and `Main::reconcile_database_schemas()` has not yet fired, the
+	 * column is absent — refusing to INSERT prevents silent destruction by the
+	 * auto-purge step on the subsequent admin request.
+	 *
+	 * Lives on Query (not Controller) per T118c layering — Controllers MUST NOT
+	 * touch `$wpdb` directly.
+	 *
+	 * @since 0.1.6 (F032)
+	 * @return bool True iff the `server_id` column exists on `oauth_clients`.
+	 */
+	public function server_id_column_exists(): bool {
+		if ( null !== $this->server_id_column_exists_cache ) {
+			return $this->server_id_column_exists_cache;
+		}
+
+		global $wpdb;
+		$table = $wpdb->prefix . $this->table_name;
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$col = $wpdb->get_col(
+			$wpdb->prepare(
+				"SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+				 WHERE TABLE_SCHEMA = %s AND TABLE_NAME = %s AND COLUMN_NAME = 'server_id'",
+				DB_NAME,
+				$table
+			)
+		);
+
+		$this->server_id_column_exists_cache = ! empty( $col );
+		return $this->server_id_column_exists_cache;
 	}
 
 	/**
@@ -139,22 +248,42 @@ class Query extends \BerlinDB\Database\Kern\Query {
 	}
 
 	/**
-	 * F024 — List every DCR-registered client (connector_slug empty).
-	 * Caller filters by profile via `matches_dcr_client`.
+	 * List every DCR-registered client — i.e., any client whose `client_id` does NOT
+	 * carry the admin-generated `server-{id}-` prefix. Caller filters by profile via
+	 * `matches_dcr_client`.
 	 *
+	 * F029 attribution note: DCR clients can carry a non-empty `connector_slug` if
+	 * `handle_register` matched them to a registered profile (Claude etc.). The
+	 * original filter `WHERE connector_slug = ''` excluded these attributed rows
+	 * from the Connections panel — bug fix 2026-07-21: filter by
+	 * `client_id NOT LIKE 'server-%'` instead, which is what "DCR" semantically means.
+	 *
+	 * F032 (T010) — gains optional `$server_id` filter for per-server enumeration.
+	 *
+	 * @param int $server_id Optional MCP server row id (0 = all servers).
 	 * @return array<int, Row>
 	 */
-	public function find_dcr_clients(): array {
+	public function find_dcr_clients( int $server_id = 0 ): array {
 		global $wpdb;
 
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-		$rows = $wpdb->get_results(
-			$wpdb->prepare(
-				'SELECT * FROM %i WHERE connector_slug = %s ORDER BY id DESC',
-				$wpdb->prefix . $this->table_name,
-				''
-			)
-		);
+		if ( $server_id > 0 ) {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			$rows = $wpdb->get_results(
+				$wpdb->prepare(
+					"SELECT * FROM %i WHERE client_id NOT LIKE 'server-%%' AND server_id = %d ORDER BY id DESC",
+					$wpdb->prefix . $this->table_name,
+					$server_id
+				)
+			);
+		} else {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			$rows = $wpdb->get_results(
+				$wpdb->prepare(
+					"SELECT * FROM %i WHERE client_id NOT LIKE 'server-%%' ORDER BY id DESC",
+					$wpdb->prefix . $this->table_name
+				)
+			);
+		}
 
 		if ( ! is_array( $rows ) ) {
 			return array();

@@ -17,6 +17,7 @@ class Row extends \BerlinDB\Database\Kern\Row {
 	/** @var int */    public $id                    = 0;
 	/** @var string */ public $code_hash             = '';
 	/** @var string */ public $client_id             = '';
+	/** @var int */    public $server_id             = 0;
 	/** @var int */    public $user_id               = 0;
 	/** @var string */ public $redirect_uri          = '';
 	/** @var string */ public $code_challenge        = '';
@@ -32,9 +33,11 @@ class Row extends \BerlinDB\Database\Kern\Row {
 	 */
 	public function __construct( $item ) {
 		parent::__construct( $item );
-		$this->id      = (int) $this->id;
-		$this->user_id = (int) $this->user_id;
-		$this->used    = (int) $this->used;
+		$this->id        = (int) $this->id;
+		// F032 — B18 defensive cast. Post-migration invariant: server_id is NEVER NULL.
+		$this->server_id = (int) $this->server_id;
+		$this->user_id   = (int) $this->user_id;
+		$this->used      = (int) $this->used;
 	}
 
 	/**
@@ -45,6 +48,7 @@ class Row extends \BerlinDB\Database\Kern\Row {
 			'id'                    => $this->id,
 			'code_hash'             => $this->code_hash,
 			'client_id'             => $this->client_id,
+			'server_id'             => $this->server_id,
 			'user_id'               => $this->user_id,
 			'redirect_uri'          => $this->redirect_uri,
 			'code_challenge'        => $this->code_challenge,

@@ -128,3 +128,52 @@ This is a changelog entry, not a durable lesson. It records what happened, not w
 - **Future mistake prevented**: A future BerlinDB-backed table shipped without the guard could silently short-circuit `maybe_upgrade()` on any install where a prior activation failed mid-DDL. The bug is invisible until users complain about missing rows/features.
 - **Evidence**: The observed `wp_acrossai_mcp_servers doesn't exist` symptom that originally motivated Feature 011 on the developer's local install (2026-07-02).
 - **Where to look**: The four subclass file paths — `includes/Database/{MCPServer,CliAuthLog,OAuthToken,OAuthAudit}/Table.php` — each contains a `public function maybe_upgrade(): void` override. Canonical sibling reference at `/Users/raftaar1191/local-sites/wordpress-7-0/app/public/wp-content/plugins/acrossai-abilities-manager/includes/Modules/Abilities/Database/AcrossAI_Abilities_Table.php:96-101`.
+
+## 2026-07-21 — F032 OAuth Per-Server Scoping
+
+**Milestone**: shipped the P1 security fix closing a critical cross-server privilege-escalation gap on the AI Connectors admin surface.
+
+**Why durable**: first application of the D28 3-part contract to THREE coordinated tables (`oauth_clients`, `oauth_tokens`, `oauth_auth_codes`), with cross-Table observability aggregation coordinated via registration order in `Main::reconcile_database_schemas()`. Established the "first-class tenant column, never composite-string prefix" invariant (`D31` + `B37`) that generalizes to any future multi-tenant admin surface. Codified two new observability signals (`acrossai_mcp_oauth_cross_server_attempted`, `acrossai_mcp_oauth_legacy_dcr_purged`) both fired with 4-arg signatures that intentionally do NOT include the actual owning tenant id — preserving the "response body doesn't leak cross-server existence" invariant on the signal path too.
+
+**Future mistake prevented**: any future PR adding a per-tenant admin REST endpoint that accepts only a tenant-scoped identifier without matching tenant validation. Grep gate in `B37`.
+
+**Evidence**: `specs/032-oauth-per-server-scoping/{spec,plan,tasks,research,data-model,quickstart}.md` + `specs/032-oauth-per-server-scoping/contracts/*.md` (4 REST contracts) + `docs/security-reviews/2026-07-21-032-oauth-per-server-scoping-{plan,plan-v2,tasks}.md` + `docs/planings-tasks/032-oauth-per-server-scoping.md` (planning brief in 011-berlindb-migration shape).
+
+**Where to look**: `D31` (canonical decision), `B37` (grep gate for future features), planning-doc `TASK-9 §Memory hygiene` for the templates used.
+
+## 2026-07-22 — F032 extended scope (folded into original F032 spec-kit)
+
+**Milestone**: after the original F032 core landed, an additional 22 FRs (FR-029..FR-050) + 9 SCs (SC-013..SC-021) + 4 new user stories (US5-US8) were built inline on the same branch and folded back into the F032 spec/plan/tasks via `/speckit-analyze` → in-place spec expansion. Rationale for one-spec fold-in vs. splitting into F033/F034/F035: all touch the same call sites (ConnectorAdminController + AIConnectorsTab + Main.php hook wiring); splitting would fragment a single audit surface. Alternative (splitting) evaluated and rejected — see analyze report.
+
+**What was added**:
+- **NEW BerlinDB module** `wp_acrossai_mcp_connector_approved_users` (US5) — 4 files, 6 columns, 4 indexes, F017 MCPServerAbility shape, F011 phantom-version guard, DEC-BERLINDB-SUBCLASS-NO-USE-COLLISION leading-\ FQN. Fresh-install-only per D21.
+- **NEW admin panel** "Approved Users" between Connections and Settings when `require_admin_approval = true` (US5) — level-3 nav conditional render + `render_approved_users_panel()` with Pending + Approved sections.
+- **NEW hook contract** `acrossai_mcp_connector_user_approval_revoked` + opt-out filter `acrossai_mcp_connector_revoke_tokens_on_approval_revoked` (US6) — default listener cascades approval-revoke → token-revoke; codified as D32.
+- **NEW nuclear endpoint** `POST /oauth/revoke-client-tokens-all-servers` (US7) — deliberate D31 carve-out with mutually-exclusive observability action (`acrossai_mcp_oauth_client_revoked_across_all_servers` NEVER co-fires with `acrossai_mcp_oauth_cross_server_attempted`); codified as D34.
+- **NEW annotated token display** `"2 (1 access · 1 refresh)"` in Connections panel (US7) — replaces opaque totals so operators can distinguish access vs refresh at a glance.
+- **NEW AC connection-time gate** at OAuth authorize / CLI device-grant / Application Password (US8) — shared `user_has_server_access()` helper, fail-open per D19, fires `acrossai_mcp_access_control_denied` with distinct `$context` per surface; codified as D33.
+- **NEW cascade** — UserLifecycle::on_user_deleted extended with `ConnectorApprovedUsersQuery::delete_by_user_id()` (FR-037 / FR-042 extension).
+- **NEW REST endpoints** `POST /oauth/deny-pending-consent` + `POST /oauth/revoke-user-approval` (US6, both under shared `admin_permission` = manage_options + wp_rest nonce).
+- **NEW enriched 403** at F015 AC tool-call boundary — includes `server_slug` + `user_roles` (FR-050).
+- **NEW cascade DB helpers** `TokensQuery::{revoke_by_user_and_server_and_client_ids, revoke_by_client_id_and_user_id, revoke_by_client_id_across_all_servers, count_active_by_client_id_and_server_id_grouped}` — every raw query uses `$wpdb->prepare()` with `0`/`0`/`` (per-client loop avoided dynamic `IN()` PHPCS false-positive).
+
+**Testing status**: Implementation shipped on-branch (PHPCS clean 12/12, PHPStan L8 clean); tests outstanding per audit gaps C1/C2/C3 → new tasks T079-T080 + T087-T088 + T094-T095 + T099 in tasks.md Phase 8-11. Deliberate deviation from tests-first for the folded-in scope — MUST close testing gaps before merge per §II.
+
+**Why durable**: proves the "in-branch scope expansion + `/speckit-analyze` gap detection + in-place spec fold-in" workflow. Alternative (fragmenting into F033/F034/F035 mid-branch) would have created 3× the audit surface with the same code delivered. Fold-in is safe here because all changes touch the same audit surface + share the same security review chain.
+
+**Where to look**: `D32 / DEC-CONNECTOR-APPROVAL-REVOKE-CASCADE`, `D33 / DEC-OAUTH-AUTHORIZE-AC-GATE`, `D34 / DEC-CROSS-SERVER-NUCLEAR-REVOKE-CARVE-OUT`, `specs/032-oauth-per-server-scoping/{spec,plan,tasks}.md` §"F032 Extended Scope" sections, `specs/032-oauth-per-server-scoping/tasks.md` §Phase 8-11 (T068-T104).
+
+## 2026-07-22 — F032 SEC-L1 remediation (staged-review follow-up)
+
+**Milestone**: applied SEC-L1 remediation from the F032 staged security review — added distinct `acrossai_mcp_connector_admin_self_bypassed` observability action to the FR-051 admin-bypass branch so forensic reviewers can differentiate self-service bypass rows from explicit-reviewer approval rows in `wp_acrossai_mcp_connector_approved_users`.
+
+**Why durable**: codifies `B38 / B-ADMIN-SELF-APPROVAL-AUDIT-TRAIL-AMBIGUITY` as a durable pattern. Any future admin bypass path that auto-inserts into a reviewer-approved table MUST ship either a schema-level discriminator OR a distinct observability action — never both semantics into the same signal.
+
+**What was added**:
+- **NEW action** `acrossai_mcp_connector_admin_self_bypassed( int $server_id, string $connector_slug, int $user_id, int $timestamp )` — 4-arg fire-and-forget observability from FR-051 bypass branch. No filter opt-out (pure observability, not enforcement). Documented in `contracts/php-hooks.md` + spec.md FR-051 + SC-023.
+- **NEW test coverage** in `tests/phpunit/OAuth/AdminBypassTest.php` — 2 new methods verifying (a) admin bypass fires the action exactly once with 4 correct args, (b) subscriber path MUST NOT fire the action.
+- **NEW durable memory entry** `B38 / B-ADMIN-SELF-APPROVAL-AUDIT-TRAIL-AMBIGUITY` in `docs/memory/BUGS.md` — grep-gate + prevention pattern for future admin bypasses.
+
+**Chosen approach**: application-level (distinct action) over schema-level (`bypass_reason` column) — smaller diff, no D28 upgrade needed, matches the plugin's existing observability pattern.
+
+**Where to look**: `B38 / B-ADMIN-SELF-APPROVAL-AUDIT-TRAIL-AMBIGUITY`, `specs/032-oauth-per-server-scoping/spec.md` FR-051 + SC-023, `specs/032-oauth-per-server-scoping/contracts/php-hooks.md`, `docs/security-reviews/2026-07-22-032-oauth-per-server-scoping-staged.md`.

@@ -21,6 +21,8 @@ declare( strict_types = 1 );
 
 namespace AcrossAI_MCP_Manager\Includes\Connectors;
 
+use AcrossAI_MCP_Manager\Includes\Database\ConnectorApprovedUsers\Query as ConnectorApprovedUsersQuery;
+
 defined( 'ABSPATH' ) || exit;
 
 final class ConnectorSettings {
@@ -77,20 +79,26 @@ final class ConnectorSettings {
 	/**
 	 * List of user_ids pre-approved to authorize this connector.
 	 *
+	 * Backed by the ConnectorApprovedUsers BerlinDB table since the introduction
+	 * of the "Approved Users" panel. Signature preserved byte-for-byte for
+	 * backward compatibility with all existing callers (AuthorizationController,
+	 * ConnectorAdminController, AIConnectorsTab).
+	 *
 	 * @param int    $server_id Server row id.
 	 * @param string $slug      Connector slug.
 	 * @return array<int, int>
 	 */
 	public static function approved_user_ids( int $server_id, string $slug ): array {
-		$raw = get_option( self::approved_key( $server_id, $slug ), array() );
-		if ( ! is_array( $raw ) ) {
-			return array();
-		}
-		return array_values( array_filter( array_map( 'intval', $raw ), static fn( int $id ): bool => $id > 0 ) );
+		$rows = ConnectorApprovedUsersQuery::instance()->find_by_server_and_connector( $server_id, $slug );
+		return array_values( array_map( static fn( $r ): int => (int) $r->user_id, $rows ) );
 	}
 
 	/**
 	 * Add a user_id to the pre-approved list. No-op if already present.
+	 *
+	 * Backed by the ConnectorApprovedUsers BerlinDB table. Signature preserved
+	 * for backward compatibility. Records the current user_id as `approved_by`
+	 * for audit purposes.
 	 *
 	 * @param int    $server_id Server row id.
 	 * @param string $slug      Connector slug.
@@ -101,16 +109,19 @@ final class ConnectorSettings {
 		if ( $user_id <= 0 ) {
 			return;
 		}
-		$list = self::approved_user_ids( $server_id, $slug );
-		if ( in_array( $user_id, $list, true ) ) {
-			return;
-		}
-		$list[] = $user_id;
-		update_option( self::approved_key( $server_id, $slug ), array_values( $list ), false );
+		ConnectorApprovedUsersQuery::instance()->approve(
+			$server_id,
+			$slug,
+			$user_id,
+			(int) get_current_user_id()
+		);
 	}
 
 	/**
 	 * True iff the user is pre-approved for this connector on this server.
+	 *
+	 * Backed by the ConnectorApprovedUsers BerlinDB table. Signature preserved
+	 * for backward compatibility.
 	 *
 	 * @param int    $server_id Server row id.
 	 * @param string $slug      Connector slug.
@@ -118,7 +129,7 @@ final class ConnectorSettings {
 	 * @return bool
 	 */
 	public static function is_user_approved( int $server_id, string $slug, int $user_id ): bool {
-		return in_array( $user_id, self::approved_user_ids( $server_id, $slug ), true );
+		return ConnectorApprovedUsersQuery::instance()->is_user_approved( $server_id, $slug, $user_id );
 	}
 
 	/**
@@ -177,14 +188,20 @@ final class ConnectorSettings {
 	 * Delete every wp_option row associated with this (server_id, slug).
 	 * Called from the F024 disable-connector nuclear path.
 	 *
+	 * Note: the approved-users list migrated from wp_options to the
+	 * ConnectorApprovedUsers BerlinDB table — the legacy `approved_key()`
+	 * delete is retained as an idempotent cleanup for any leftover legacy
+	 * option row on pre-migration installs (no-op if the option doesn't exist).
+	 *
 	 * @param int    $server_id Server row id.
 	 * @param string $slug      Connector slug.
 	 * @return void
 	 */
 	public static function delete_all( int $server_id, string $slug ): void {
 		delete_option( self::settings_key( $server_id, $slug ) );
-		delete_option( self::approved_key( $server_id, $slug ) );
 		delete_option( self::pending_key( $server_id, $slug ) );
+		// Legacy wp_options cleanup (pre-migration installs).
+		delete_option( sprintf( 'acrossai_mcp_connector_approved_users_%d_%s', $server_id, sanitize_key( $slug ) ) );
 	}
 
 	/**
@@ -196,17 +213,6 @@ final class ConnectorSettings {
 	 */
 	private static function settings_key( int $server_id, string $slug ): string {
 		return sprintf( 'acrossai_mcp_connector_settings_%d_%s', $server_id, sanitize_key( $slug ) );
-	}
-
-	/**
-	 * Build the wp_options key for the approved-users list.
-	 *
-	 * @param int    $server_id Server row id.
-	 * @param string $slug      Connector slug.
-	 * @return string
-	 */
-	private static function approved_key( int $server_id, string $slug ): string {
-		return sprintf( 'acrossai_mcp_connector_approved_users_%d_%s', $server_id, sanitize_key( $slug ) );
 	}
 
 	/**

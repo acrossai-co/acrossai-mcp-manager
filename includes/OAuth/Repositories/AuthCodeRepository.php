@@ -25,6 +25,7 @@ final class AuthCodeRepository {
 	 *
 	 * Shape of $data:
 	 *   client_id (string, required)
+	 *   server_id (int, required — F032 T041)
 	 *   user_id (int, required)
 	 *   redirect_uri (string, required)
 	 *   code_challenge (string, required — 43 chars)
@@ -43,6 +44,8 @@ final class AuthCodeRepository {
 			array(
 				'code_hash'             => SecretsVault::hash( $raw ),
 				'client_id'             => (string) $data['client_id'],
+				// F032 (T041) — required server binding. Post-migration NOT NULL invariant.
+				'server_id'             => (int) ( $data['server_id'] ?? 0 ),
 				'user_id'               => (int) $data['user_id'],
 				'redirect_uri'          => (string) $data['redirect_uri'],
 				'code_challenge'        => (string) $data['code_challenge'],

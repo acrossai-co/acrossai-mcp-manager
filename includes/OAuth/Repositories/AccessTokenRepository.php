@@ -28,6 +28,7 @@ final class AccessTokenRepository {
 	 *
 	 * Shape of $data:
 	 *   client_id (string, required)
+	 *   server_id (int, required — F032 T041)
 	 *   user_id (int, required)
 	 *   scope (string, optional — default 'mcp')
 	 *   resource (string, optional)
@@ -46,6 +47,8 @@ final class AccessTokenRepository {
 				'token_hash'      => SecretsVault::hash( $raw ),
 				'token_type'      => 'access',
 				'client_id'       => (string) $data['client_id'],
+				// F032 (T041) — required server binding. Post-migration NOT NULL invariant.
+				'server_id'       => (int) ( $data['server_id'] ?? 0 ),
 				'user_id'         => (int) $data['user_id'],
 				'scope'           => isset( $data['scope'] ) && '' !== $data['scope'] ? (string) $data['scope'] : 'mcp',
 				'resource'        => isset( $data['resource'] ) ? (string) $data['resource'] : '',
@@ -93,13 +96,31 @@ final class AccessTokenRepository {
 	}
 
 	/**
-	 * Distinct user_ids holding a non-revoked token for a client
-	 * (F024 Connections panel).
+	 * Count non-revoked tokens for a (client, server) pair, grouped by token_type.
+	 *
+	 * Returns `array{access:int, refresh:int, total:int}` — enables the Connections
+	 * panel to render the "2 (1 access · 1 refresh)" annotated total.
 	 *
 	 * @param string $client_id Client identifier.
+	 * @param int    $server_id MCP server row id.
+	 * @return array{access:int, refresh:int, total:int}
+	 */
+	public static function count_active_by_client_id_and_server_id_grouped( string $client_id, int $server_id ): array {
+		return TokensQuery::instance()->count_active_by_client_id_and_server_id_grouped( $client_id, $server_id );
+	}
+
+	/**
+	 * Distinct user_ids holding a non-revoked token for a (client, server) pair
+	 * (F024 Connections panel).
+	 *
+	 * F032 (T042) BREAKING — renamed from `get_active_user_ids_by_client_id`
+	 * + gains required `int $server_id`. Closes cross-server read leak.
+	 *
+	 * @param string $client_id Client identifier.
+	 * @param int    $server_id MCP server row id.
 	 * @return array<int, int>
 	 */
-	public static function get_active_user_ids_by_client_id( string $client_id ): array {
-		return TokensQuery::instance()->get_active_user_ids_by_client_id( $client_id );
+	public static function get_active_user_ids_by_client_id_and_server_id( string $client_id, int $server_id ): array {
+		return TokensQuery::instance()->get_active_user_ids_by_client_id_and_server_id( $client_id, $server_id );
 	}
 }

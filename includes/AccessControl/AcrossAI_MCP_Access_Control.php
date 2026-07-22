@@ -226,6 +226,56 @@ final class AcrossAI_MCP_Access_Control {
 	}
 
 	/**
+	 * F032 (F015 amendment) — shared connection-time AC check.
+	 *
+	 * Used by the OAuth authorize gate, CLI device-grant consent gate, and
+	 * Application Password generation gate so unauthorized users are blocked
+	 * BEFORE receiving any credential — instead of being blocked only at
+	 * tool-call time (which is confusing UX because clients like Claude show
+	 * "connected" then silently 403 on invocation).
+	 *
+	 * Fail-open per D18/D19 / DEC-ACCESS-CONTROL-V2-ADOPTION: returns TRUE if
+	 * the AC package is absent, the server row is missing (Q2 race), or the
+	 * manager is null — degrades gracefully without breaking connect flows.
+	 * v2 vendor hierarchy handles admin bypass internally.
+	 *
+	 * @since 0.1.6 (F032)
+	 * @param int $user_id   The WordPress user id attempting to connect.
+	 * @param int $server_id The MCP server row id being connected to.
+	 * @return bool True if user may connect; false only if AC explicitly denies.
+	 */
+	public function user_has_server_access( int $user_id, int $server_id ): bool {
+		if ( ! $this->is_available() ) {
+			return true; // Fail-open.
+		}
+		if ( $user_id <= 0 || $server_id <= 0 ) {
+			return true; // No context to evaluate; defer to downstream gates.
+		}
+
+		$rows = MCPServerQuery::instance()->query(
+			array(
+				'id'     => $server_id,
+				'number' => 1,
+			)
+		);
+		if ( empty( $rows ) ) {
+			return true; // Server missing — same Q2 fail-open as tool-call gate.
+		}
+
+		$server_slug = (string) $rows[0]->server_slug;
+		if ( '' === $server_slug ) {
+			return true;
+		}
+
+		$manager = $this->get_manager();
+		if ( null === $manager ) {
+			return true; // Manager boot failed — fail-open.
+		}
+
+		return (bool) $manager->user_has_access( $user_id, 'acrossai-mcp-manager', $server_slug );
+	}
+
+	/**
 	 * Filter callback for `mcp_adapter_pre_tool_call` — the MCP-boundary
 	 * enforcement site (FR-007, D18 canonical hook, Q2 + Q3 observability).
 	 *
@@ -300,10 +350,27 @@ final class AcrossAI_MCP_Access_Control {
 		 */
 		do_action( 'acrossai_mcp_access_control_denied', $user_id, $server_slug, $tool_name, 'mcp_tool_call' );
 
+		// Enriched error data — surfaced to any MCP client that renders WP_Error details.
+		// Includes the current user's roles + resolved server slug so operators can debug
+		// without hunting through server logs. Never leaks admin-only info: user_login /
+		// email / capabilities are intentionally omitted.
+		$user       = get_userdata( $user_id );
+		$user_roles = ( $user instanceof \WP_User ) ? array_values( $user->roles ) : array();
+
 		return new \WP_Error(
 			'acrossai_mcp_access_denied',
-			__( 'You do not have permission to invoke tools on this MCP server.', 'acrossai-mcp-manager' ),
-			array( 'status' => 403 )
+			sprintf(
+				/* translators: 1: MCP server slug, 2: comma-separated list of user's WP roles */
+				__( 'Access denied by the "%1$s" server\'s Access Control policy. Your account roles (%2$s) are not in the allow-list. Contact a site administrator to request access.', 'acrossai-mcp-manager' ),
+				$server_slug,
+				empty( $user_roles ) ? __( 'none', 'acrossai-mcp-manager' ) : implode( ', ', $user_roles )
+			),
+			array(
+				'status'      => 403,
+				'server_slug' => $server_slug,
+				'user_roles'  => $user_roles,
+				'gate'        => 'mcp_tool_call',
+			)
 		);
 	}
 

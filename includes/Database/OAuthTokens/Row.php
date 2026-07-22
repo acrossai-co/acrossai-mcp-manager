@@ -18,6 +18,7 @@ class Row extends \BerlinDB\Database\Kern\Row {
 	/** @var string */ public $token_hash      = '';
 	/** @var string */ public $token_type      = 'access';
 	/** @var string */ public $client_id       = '';
+	/** @var int */    public $server_id       = 0;
 	/** @var int */    public $user_id         = 0;
 	/** @var string */ public $scope           = 'mcp';
 	/** @var string */ public $resource        = '';
@@ -31,10 +32,12 @@ class Row extends \BerlinDB\Database\Kern\Row {
 	 */
 	public function __construct( $item ) {
 		parent::__construct( $item );
-		$this->id      = (int) $this->id;
-		$this->user_id = (int) $this->user_id;
+		$this->id        = (int) $this->id;
+		// F032 — B18 defensive cast. Post-migration invariant: server_id is NEVER NULL.
+		$this->server_id = (int) $this->server_id;
+		$this->user_id   = (int) $this->user_id;
 		// B18: $wpdb returns tinyint as string. Cast at boundary.
-		$this->revoked = (int) $this->revoked;
+		$this->revoked   = (int) $this->revoked;
 	}
 
 	/**
@@ -46,6 +49,7 @@ class Row extends \BerlinDB\Database\Kern\Row {
 			'token_hash'      => $this->token_hash,
 			'token_type'      => $this->token_type,
 			'client_id'       => $this->client_id,
+			'server_id'       => $this->server_id,
 			'user_id'         => $this->user_id,
 			'scope'           => $this->scope,
 			'resource'        => $this->resource,
