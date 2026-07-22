@@ -20,6 +20,7 @@ namespace AcrossAI_MCP_Manager\Includes\OAuth;
 
 use AcrossAI_MCP_Manager\Includes\Connectors\ConnectorProfileRegistry;
 use AcrossAI_MCP_Manager\Includes\Database\MCPServer\Query as MCPServerQuery;
+use AcrossAI_MCP_Manager\Includes\Database\OAuthClients\Query as ClientsQuery;
 use AcrossAI_MCP_Manager\Includes\Database\OAuthTokens\Query as TokensQuery;
 use AcrossAI_MCP_Manager\Includes\OAuth\Repositories\ClientRepository;
 use AcrossAI_MCP_Manager\Includes\OAuth\Security\RateLimiter;
@@ -33,15 +34,6 @@ final class ClientRegistrationController {
 
 	/** @var ClientRegistrationController|null */
 	private static $instance = null;
-
-	/**
-	 * F032 (T049) — per-request cache for `oauth_clients_server_id_column_exists()`.
-	 * INFORMATION_SCHEMA lookup is expensive on every DCR request; cache the
-	 * result for the request lifetime. Null = not yet resolved.
-	 *
-	 * @var bool|null
-	 */
-	private static ?bool $server_id_column_exists_cache = null;
 
 	/**
 	 * Private constructor enforces singleton pattern.
@@ -149,7 +141,7 @@ final class ClientRegistrationController {
 		// server_id column is absent — refusing to INSERT prevents silent destruction
 		// by the auto-purge step. Applies to admin generate too since the underlying
 		// table constraint is the same.
-		if ( ! self::oauth_clients_server_id_column_exists() ) {
+		if ( ! ClientsQuery::instance()->server_id_column_exists() ) {
 			return new \WP_Error(
 				'service_unavailable',
 				__( 'Server initialization in progress; please retry in a few seconds.', 'acrossai-mcp-manager' ),
@@ -289,7 +281,7 @@ final class ClientRegistrationController {
 		// Note (per SEC-032-007 disposition): the 503 intentionally OMITS the
 		// `Retry-After: 5` header — AI hosts (Claude.ai, ChatGPT, Cursor) already
 		// retry at 5-30s intervals without header guidance. May be added later.
-		if ( ! self::oauth_clients_server_id_column_exists() ) {
+		if ( ! ClientsQuery::instance()->server_id_column_exists() ) {
 			return new \WP_Error(
 				'service_unavailable',
 				__( 'Server initialization in progress; please retry in a few seconds.', 'acrossai-mcp-manager' ),
@@ -655,39 +647,5 @@ final class ClientRegistrationController {
 			}
 		}
 		return 0;
-	}
-
-	/**
-	 * F032 (T049) — Per-request cached INFORMATION_SCHEMA lookup for the
-	 * oauth_clients.server_id column existence.
-	 *
-	 * Used by `handle_register` + `handle_admin_generate` as the FR-028 race
-	 * guard (SEC-032-005 remediation): if the plugin was just upgraded and
-	 * Main::reconcile_database_schemas() has not yet fired, the column is
-	 * absent — refusing to INSERT prevents silent destruction by the auto-purge
-	 * step on the subsequent admin request.
-	 *
-	 * @return bool True iff the server_id column exists on oauth_clients.
-	 */
-	private static function oauth_clients_server_id_column_exists(): bool {
-		if ( null !== self::$server_id_column_exists_cache ) {
-			return self::$server_id_column_exists_cache;
-		}
-
-		global $wpdb;
-		$table = $wpdb->prefix . 'acrossai_mcp_oauth_clients';
-
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
-		$col = $wpdb->get_col(
-			$wpdb->prepare(
-				"SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
-				 WHERE TABLE_SCHEMA = %s AND TABLE_NAME = %s AND COLUMN_NAME = 'server_id'",
-				DB_NAME,
-				$table
-			)
-		);
-
-		self::$server_id_column_exists_cache = ! empty( $col );
-		return self::$server_id_column_exists_cache;
 	}
 }

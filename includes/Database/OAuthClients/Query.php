@@ -50,6 +50,13 @@ class Query extends \BerlinDB\Database\Kern\Query {
 	private array $find_by_composite_cache = array();
 
 	/**
+	 * F032 (T049) — per-request cache for `server_id_column_exists()` INFORMATION_SCHEMA lookup.
+	 *
+	 * @var bool|null
+	 */
+	private ?bool $server_id_column_exists_cache = null;
+
+	/**
 	 * Private constructor enforces singleton (A2/S6).
 	 */
 	private function __construct() { // phpcs:ignore Generic.CodeAnalysis.UselessOverridingMethod.Found -- visibility override enforces singleton.
@@ -143,6 +150,44 @@ class Query extends \BerlinDB\Database\Kern\Query {
 	 */
 	public function clear_request_cache(): void {
 		$this->find_by_composite_cache = array();
+	}
+
+	/**
+	 * F032 (T049 / SEC-032-005 remediation) — Per-request cached INFORMATION_SCHEMA
+	 * lookup for the `oauth_clients.server_id` column existence.
+	 *
+	 * Used by `ClientRegistrationController::handle_register` +
+	 * `handle_admin_generate` as the FR-028 race guard: if the plugin was just
+	 * upgraded and `Main::reconcile_database_schemas()` has not yet fired, the
+	 * column is absent — refusing to INSERT prevents silent destruction by the
+	 * auto-purge step on the subsequent admin request.
+	 *
+	 * Lives on Query (not Controller) per T118c layering — Controllers MUST NOT
+	 * touch `$wpdb` directly.
+	 *
+	 * @since 0.1.6 (F032)
+	 * @return bool True iff the `server_id` column exists on `oauth_clients`.
+	 */
+	public function server_id_column_exists(): bool {
+		if ( null !== $this->server_id_column_exists_cache ) {
+			return $this->server_id_column_exists_cache;
+		}
+
+		global $wpdb;
+		$table = $wpdb->prefix . $this->table_name;
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$col = $wpdb->get_col(
+			$wpdb->prepare(
+				"SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+				 WHERE TABLE_SCHEMA = %s AND TABLE_NAME = %s AND COLUMN_NAME = 'server_id'",
+				DB_NAME,
+				$table
+			)
+		);
+
+		$this->server_id_column_exists_cache = ! empty( $col );
+		return $this->server_id_column_exists_cache;
 	}
 
 	/**
