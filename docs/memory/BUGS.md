@@ -1500,3 +1500,99 @@ Every hit MUST be either (a) refactored to a per-item loop OR (b) justified in a
 
 - `docs/security-reviews/2026-07-22-032-oauth-per-server-scoping-staged.md` — SEC review's "Confirmed Secure Patterns" table cites this refactor.
 - `includes/Database/OAuthTokens/Query.php` — canonical per-item loop implementation.
+
+## B40 / B-WRAPPER-CLOSURE-MUST-FORWARD-ARGS-AND-PRESERVE-WP-ERROR
+
+**Scope**: any closure that wraps a user callback (`permission_callback`, `execute_callback`, filter/action callback, decorator around a stored callable).
+
+**Status**: Active — Feature 033 (generalizable beyond F030).
+
+**Why this is durable**
+
+Two silent-failure mistakes in the same file combine into a catastrophic security bypass. Both look reasonable in code review when read in isolation. Documenting the combined pattern makes future callback-wrapping code either avoid the shape or self-audit. F030 shipped with both bugs and let any authenticated user (down to `subscriber`) invoke any registered ability via `mcp-adapter/execute-ability` on the default MCP server, bypassing the Abilities-tab exposure gate entirely.
+
+**Failure mode**
+
+1. **Args silently dropped.** A wrapping closure declared as `static function () use ( ... )` (zero parameters) silently discards every argument the caller passes. `call_user_func( $original )` inside the closure then invokes the original with no args, causing callbacks that inspect `$input` (e.g. `Execute::check_permission` reading `$input['ability_name']`) to enter the "input missing" branch — which typically returns `WP_Error`.
+
+2. **`WP_Error` coerced to `true`.** `return (bool) call_user_func( $original );` casts the resulting `WP_Error` object to boolean `true` (all PHP objects cast to true). The vendor's `if ( true !== $permission )` check in `vendor/wordpress/mcp-adapter/includes/Handlers/Tools/ToolsHandler.php:148` reads it as "permission granted" and proceeds to `execute()`.
+
+**Combined effect**: bug 1 FORCES the callback into a `WP_Error` branch it wouldn't otherwise take, bug 2 HIDES the `WP_Error` from the vendor. Live-reproduced with `acrossai-abilities-manager/site-title-get` (`is_exposed=0` in `wp_acrossai_mcp_server_abilities`) as a subscriber-level user: response was 200 with the site title, not the expected 403.
+
+Fixing only one leg leaves the bypass open:
+
+- **Only fix (1)** → original callback returns `WP_Error(acrossai_mcp_ability_not_exposed_for_server)`; bug (2) still coerces it to `true`.
+- **Only fix (2)** → original callback still sees empty input, returns `WP_Error(missing_ability_name)`; vendor now denies but the callback's intended input-driven logic never runs — subtle misbehaviour that hides the underlying bug.
+
+**Pattern to avoid**
+
+```php
+// AVOID — closure accepts no args, silently drops caller input.
+// AVOID — (bool) cast converts WP_Error into true, defeats vendor's `if ( true !== $permission )` check.
+$args['permission_callback'] = static function () use ( $slug, $original ) {
+    // ...six-layer check...
+    return self::call_original( $original );
+};
+
+private static function call_original( $original ): bool {
+    if ( is_callable( $original ) ) {
+        return (bool) call_user_func( $original );
+    }
+    return false;
+}
+```
+
+**Pattern to prefer**
+
+```php
+// Variadic + forward args; preserve WP_Error before any bool coercion.
+$args['permission_callback'] = static function ( ...$callback_args ) use ( $slug, $original ) {
+    // ...six-layer check...
+    return self::call_original( $original, $callback_args );
+};
+
+private static function call_original( $original, array $args = array() ) {
+    if ( ! is_callable( $original ) ) {
+        return false;
+    }
+    $result = call_user_func_array( $original, $args );
+    if ( is_wp_error( $result ) ) {
+        return $result;
+    }
+    return (bool) $result;
+}
+```
+
+**Grep gates**
+
+```bash
+# Callback-wrapping closures declared parameterless — any hit inside a *_callback filter installer needs review.
+grep -rn "static function () use\|function () use" includes/ admin/ | grep -iE "permission|callback|filter|action"
+
+# Bool casts around callback invocations — any hit inside a wrapping helper needs an is_wp_error() guard immediately before.
+grep -rn "(bool) call_user_func" includes/ admin/
+```
+
+Every hit needs either (a) accept `...$args` and forward via `call_user_func_array`, or (b) an explicit code comment explaining why the wrapper is intentionally parameterless AND why WP_Error coercion is safe in that specific context.
+
+**Reference impl**
+
+- `includes/Abilities/PermissionOverrideProcessor.php:116` — variadic closure signature (post-fix).
+- `includes/Abilities/PermissionOverrideProcessor.php:201-210` — `call_original` preserves `WP_Error`.
+
+**Evidence**
+
+- `tests/phpunit/Abilities/PermissionOverrideProcessorTest.php` — three regression tests: args forwarding, WP_Error preservation, role-parameterised end-to-end across `subscriber` / `contributor` / `author` / `editor` / `administrator`.
+- `docs/planings-tasks/033-f030-permission-callback-wrapper-fix.md` — full reproduction + root cause trace.
+- PR #45 — the fix commit + regression tests.
+- Vendor boundary that the coercion silently defeats: `vendor/wordpress/mcp-adapter/includes/Handlers/Tools/ToolsHandler.php:148`.
+
+**Where to look**
+
+Any diff that adds a filter callback which wraps another callback in a closure. Includes but not limited to: `wp_register_ability_args`, `wp_authenticate*`, `rest_pre_dispatch`, `pre_do_shortcode_tag`, decorator classes that stash an original callable and re-invoke it later, plugin bridges.
+
+**Related**
+
+- B35 — F030 filter-priority footrace (same file, adjacent concern).
+- D29 — F030 six-layer bypass decision (this bug lived inside the six-layer implementation).
+- B32 — Filter defaults MUST use canonical resolver (similar "silent" security-adjacent pattern in the same subsystem).
