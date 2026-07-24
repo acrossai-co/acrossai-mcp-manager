@@ -106,17 +106,24 @@ final class PermissionOverrideProcessor {
 	public function inject_override( array $args, string $slug ): array {
 		$original = $args['permission_callback'] ?? null;
 
-		$args['permission_callback'] = static function () use ( $slug, $original ) {
+		// SEC — closure MUST accept variadic args and forward them to the
+		// original callback via `self::call_original( $original, $callback_args )`.
+		// The prior `static function ()` signature silently dropped the caller's
+		// args, so callbacks that inspect input (e.g. Execute::check_permission
+		// reading `$input['ability_name']`) returned WP_Error unconditionally,
+		// which `call_original` then coerced to `true` — a bypass affecting
+		// every ability. See PermissionOverrideProcessorTest for the regression.
+		$args['permission_callback'] = static function ( ...$callback_args ) use ( $slug, $original ) {
 			// Layer 2 — no MCP server in flight → fall through.
 			$server_id = CurrentServerHolder::instance()->get_server_id();
 			if ( null === $server_id ) {
-				return self::call_original( $original );
+				return self::call_original( $original, $callback_args );
 			}
 
 			// Layer 1 + 3 — read the server row (per-request cached).
 			$row = self::get_server_row( $server_id );
 			if ( null === $row || 0 === (int) $row->override_abilities_permission ) {
-				return self::call_original( $original );
+				return self::call_original( $original, $callback_args );
 			}
 
 			// Layer 4 — only overwrite abilities exposed to this server.
@@ -141,7 +148,7 @@ final class PermissionOverrideProcessor {
 			// declaration. The narrower scope keeps the six-layer defensive
 			// gating meaningful.
 			if ( ! ExposureResolver::resolve( $server_id, $slug, array() ) ) {
-				return self::call_original( $original );
+				return self::call_original( $original, $callback_args );
 			}
 
 			// All layers hold — operator opted in, request scope matches,
@@ -180,14 +187,26 @@ final class PermissionOverrideProcessor {
 	 * original is null or non-callable, return `false` — matches the WP
 	 * Abilities API deny-by-default semantics for missing callbacks.
 	 *
-	 * @param mixed $original The original permission_callback captured by the closure.
-	 * @return bool
+	 * SEC — `WP_Error` returns MUST propagate unchanged. `(bool) $wp_error_object`
+	 * evaluates to `true` in PHP (all objects cast to true), which would silently
+	 * convert a deny into an allow at the vendor's
+	 * `if ( true !== $permission )` check in ToolsHandler::call_tool.
+	 *
+	 * @param mixed        $original The original permission_callback captured by the closure.
+	 * @param array<mixed> $args     Args forwarded from the wrapping closure. Passed through
+	 *                               so callbacks that read their input (e.g.
+	 *                               Execute::check_permission) see the ability's real args.
+	 * @return bool|\WP_Error
 	 */
-	private static function call_original( $original ): bool {
-		if ( is_callable( $original ) ) {
-			return (bool) call_user_func( $original );
+	private static function call_original( $original, array $args = array() ) {
+		if ( ! is_callable( $original ) ) {
+			return false;
 		}
-		return false;
+		$result = call_user_func_array( $original, $args );
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+		return (bool) $result;
 	}
 
 	/**

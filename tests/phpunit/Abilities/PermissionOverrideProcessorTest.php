@@ -19,6 +19,7 @@ use AcrossAI_MCP_Manager\Includes\Database\MCPServer\Query as MCPServerQuery;
 use AcrossAI_MCP_Manager\Includes\Database\MCPServerAbility\ExposureResolver;
 use AcrossAI_MCP_Manager\Includes\Database\MCPServerAbility\Query as MCPServerAbilityQuery;
 use WP\MCP\Core\McpServer;
+use WP_Error;
 use WP_UnitTestCase;
 
 // phpcs:disable Squiz.Commenting.FunctionComment.Missing -- descriptive names.
@@ -152,6 +153,120 @@ class PermissionOverrideProcessorTest extends WP_UnitTestCase {
 		$wrapped = PermissionOverrideProcessor::instance()->inject_override( $args, 'foo/bar' );
 
 		$this->assertFalse( call_user_func( $wrapped['permission_callback'] ) );
+	}
+
+	/**
+	 * Regression — the wrapping closure had signature `static function ()` which
+	 * silently dropped the caller's args. Downstream callbacks that inspect
+	 * their input (e.g. Execute::check_permission reading `$input['ability_name']`)
+	 * saw an empty array and produced a WP_Error, which call_original then
+	 * coerced to true — see test_wp_error_from_original_is_preserved_not_coerced.
+	 */
+	public function test_closure_forwards_args_to_original_callback(): void {
+		$captured = null;
+		$args     = array(
+			'permission_callback' => function ( $input = null ) use ( &$captured ): bool {
+				$captured = $input;
+				return true;
+			},
+		);
+
+		$wrapped = PermissionOverrideProcessor::instance()->inject_override( $args, 'foo/bar' );
+		$input   = array(
+			'ability_name' => 'foo/bar',
+			'parameters'   => array( 'x' => 1 ),
+		);
+		call_user_func_array( $wrapped['permission_callback'], array( $input ) );
+
+		$this->assertSame(
+			$input,
+			$captured,
+			'The wrapping closure MUST forward its args to the original permission_callback.'
+		);
+	}
+
+	/**
+	 * Regression — `(bool) call_user_func( $original )` in call_original() cast
+	 * every object return (including WP_Error) to boolean true, silently
+	 * converting a deny into an allow at the vendor's
+	 * `if ( true !== $permission )` check.
+	 */
+	public function test_wp_error_from_original_is_preserved_not_coerced_to_true(): void {
+		$args = array(
+			'permission_callback' => function (): WP_Error {
+				return new WP_Error( 'test_deny', 'test WP_Error preservation' );
+			},
+		);
+
+		$wrapped = PermissionOverrideProcessor::instance()->inject_override( $args, 'foo/bar' );
+		$result  = call_user_func( $wrapped['permission_callback'] );
+
+		$this->assertInstanceOf(
+			WP_Error::class,
+			$result,
+			'A WP_Error from the original callback MUST propagate. Casting to bool silently grants access.'
+		);
+		$this->assertSame( 'test_deny', $result->get_error_code() );
+	}
+
+	/**
+	 * Full regression across the five stock WordPress roles.
+	 *
+	 * The original callback mirrors Execute::check_permission's real shape:
+	 * refuses when input lacks ability_name (returning WP_Error), otherwise
+	 * checks a role-scoped capability. Against the buggy F030 wrapper:
+	 *   (1) the closure dropped the input array,
+	 *   (2) call_original cast the resulting WP_Error to true,
+	 * causing every role — including subscriber — to be granted access.
+	 * After the fix, only administrator (which has `manage_options`) is
+	 * allowed; every other role receives the false the original produced.
+	 *
+	 * @dataProvider provide_wp_roles
+	 */
+	public function test_wrapper_preserves_role_gated_denials( string $role, bool $expected_allowed ): void {
+		$user_id = self::factory()->user->create( array( 'role' => $role ) );
+		wp_set_current_user( $user_id );
+
+		$args = array(
+			'permission_callback' => function ( $input = array() ) {
+				if ( ! is_array( $input ) || empty( $input['ability_name'] ) ) {
+					return new WP_Error( 'missing_ability_name', 'ability_name required' );
+				}
+				return current_user_can( 'manage_options' );
+			},
+		);
+
+		$wrapped   = PermissionOverrideProcessor::instance()->inject_override( $args, 'foo/bar' );
+		$call_args = array(
+			'ability_name' => 'foo/bar',
+			'parameters'   => array(),
+		);
+		$result    = call_user_func_array( $wrapped['permission_callback'], array( $call_args ) );
+
+		if ( $expected_allowed ) {
+			$this->assertTrue(
+				$result,
+				"Role {$role} has manage_options — wrapper MUST return true."
+			);
+		} else {
+			$this->assertFalse(
+				$result,
+				"Role {$role} lacks manage_options — wrapper MUST return false, not silently allow via WP_Error coercion."
+			);
+		}
+	}
+
+	/**
+	 * @return array<string, array{string, bool}>
+	 */
+	public static function provide_wp_roles(): array {
+		return array(
+			'subscriber'    => array( 'subscriber', false ),
+			'contributor'   => array( 'contributor', false ),
+			'author'        => array( 'author', false ),
+			'editor'        => array( 'editor', false ),
+			'administrator' => array( 'administrator', true ),
+		);
 	}
 
 	public function test_clear_request_cache_returns_passthrough(): void {
