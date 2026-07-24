@@ -4,7 +4,7 @@ Tags: mcp, ai, copilot, vscode, claude
 Requires at least: 7.0
 Requires PHP: 8.1
 Tested up to: 7.0
-Stable tag: 0.1.6
+Stable tag: 0.1.7
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -180,6 +180,10 @@ No additional software is needed on the WordPress side. Your MCP clients (VS Cod
 4. Per-provider configuration file locations and top-level keys
 
 == Changelog ==
+
+= 0.1.7 =
+* **Feature 033 — Security fix: F030 permission_callback wrapper dropped args and coerced `WP_Error` to `true`.** Two bugs in `PermissionOverrideProcessor::inject_override` combined into a plugin-wide `permission_callback` bypass. The wrapper closure was declared `static function () use ( ... )` — zero parameters — so every arg the caller passed was silently discarded. Downstream callbacks that read their input (notably `Execute::check_permission` looking up `$input['ability_name']`) saw an empty array and returned `WP_Error( 'missing_ability_name', ... )`. The wrapper's `call_original` helper then did `return (bool) call_user_func( $original );` — casting the `WP_Error` object to boolean `true` (PHP casts every object to true). The vendor's `if ( true !== $permission )` check in `ToolsHandler::call_tool` (`vendor/wordpress/mcp-adapter/includes/Handlers/Tools/ToolsHandler.php:148`) read that as "permission granted" and proceeded to `execute()`. **Impact**: any authenticated user with any role (including `subscriber`) could invoke any registered ability via `mcp-adapter/execute-ability` on the default MCP server, even when the Abilities tab had explicitly disabled the ability (`is_exposed=0` row in `wp_acrossai_mcp_server_abilities`) and the ability itself declared `meta.mcp.public = false`. **Fix**: closure is now `static function ( ...$callback_args ) use ( ... )` and forwards `$callback_args` on every fall-through path; `call_original` returns `bool|WP_Error` — `WP_Error` results propagate unchanged, only scalar returns are coerced. The six-layer allow-path semantics (`DEC-F030-PERMISSION-CALLBACK-OPERATOR-OPT-IN-BYPASS`) are unchanged — only the fall-through path is affected. **Test coverage**: three new regression tests in `PermissionOverrideProcessorTest.php` — args forwarding, `WP_Error` preservation, and a `@dataProvider`-parameterised role sweep across `subscriber` / `contributor` / `author` / `editor` / `administrator` proving low-privilege roles are correctly denied post-fix. **Durable memory captured as `B40 / B-WRAPPER-CLOSURE-MUST-FORWARD-ARGS-AND-PRESERVE-WP-ERROR`** — generalizable pattern for any closure wrapping a user callback (permission_callback, execute_callback, filter/action decorators, plugin bridges). **Follow-up tracked as issue #46**: filter-time eligibility gate refactor to skip installing the wrapper entirely for abilities that could never satisfy F030's six defensive layers — eliminates the wrapper-bug class for the vast majority of abilities.
+* **Internal: `ACROSSAI_MCP_MANAGER_VERSION` constant bumped to `0.1.7` matching the plugin header.**
 
 = 0.1.5 =
 * **Feature 031 — Add Google Gemini CLI as a supported MCP client.** The server-edit Clients tab now surfaces a Gemini card (💎 pill) alongside the existing 7. Uses the same npx `@automattic/mcp-wordpress-remote@latest` bridge + WP Application Password Basic auth as Claude Desktop / Cursor / other stdio-based clients; config paste target is `~/.gemini/settings.json` under the standard `mcpServers` key. `GeminiClient` is a near-verbatim mirror of `ClaudeDesktopClient` (slug `gemini`, name `Gemini CLI`, byte-for-byte identical `get_config_snippet` shape) — no new auth mechanism, no new abstraction, no new render path. Registered in `MCPClientsBlock::$default_classes` + `CLIENT_META['gemini']`. Test suite canary bumped from 7 → 8 concrete clients; `mcpclients` PHPUnit suite now runs 74 tests / 124 assertions (up from 67/111 pre-F031).
