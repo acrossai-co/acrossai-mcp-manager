@@ -55,4 +55,46 @@ final class CursorClient extends AbstractMCPClient {
 			),
 		);
 	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	public function get_icon(): string {
+		return '⚡';
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	public function get_description(): string {
+		return __( 'Cursor AI Code Editor', 'acrossai-mcp-manager' );
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	public function get_config_file(): string {
+		return '~/.cursor/mcp.json';
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	public function get_top_level_key(): string {
+		return 'mcpServers';
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	public function get_instructions(): string {
+		return __( 'Generate a password → copy the JSON → open ~/.cursor/mcp.json → paste under mcpServers → restart Cursor.', 'acrossai-mcp-manager' );
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	public function get_priority(): int {
+		return 60;
+	}
 }
