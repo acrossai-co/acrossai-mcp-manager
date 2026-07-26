@@ -4,7 +4,7 @@ Tags: mcp, ai, copilot, vscode, claude
 Requires at least: 7.0
 Requires PHP: 8.1
 Tested up to: 7.0
-Stable tag: 0.1.7
+Stable tag: 0.1.8
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -181,7 +181,7 @@ No additional software is needed on the WordPress side. Your MCP clients (VS Cod
 
 == Changelog ==
 
-= Unreleased =
+= 0.1.8 =
 * **Feature 034 — MCP client subsystem refactor: metadata methods + canonical filter-aware enumeration.** Each concrete MCP client class (`ClaudeDesktopClient`, `ClaudeCodeClient`, `VSCodeClient`, `GitHubCopilotClient`, `CodexClient`, `CursorClient`, `GeminiClient`, `CustomClient`) now declares its own display metadata via six new methods on `AbstractMCPClient` — `get_icon()`, `get_description()`, `get_config_file()`, `get_top_level_key()`, `get_instructions()`, plus `get_priority(): int` (default `100`, built-ins pre-assigned `10, 20, 30, ..., 80` to preserve pre-refactor sub-nav order). Replaces the private `CLIENT_META` const in `MCPClientsBlock` (deleted). Enumeration collapses to a single canonical entry point `AbstractMCPClient::get_all_registered_clients()` that fires the existing `acrossai_mcp_client_classes` filter with a `DEFAULT_CLIENT_CLASSES` seed, validates FQNs per SEC-013-008 (silent-skip on invalid), validates slugs against `/[a-z0-9-]{1,64}/` (`_doing_it_wrong` under `WP_DEBUG` on violators), dedups by slug with later-wins, and sorts by `(priority ASC, slug ASC)` — mirroring `ConnectorProfileRegistry::get_profiles()` line-for-line. The pre-F034 glob-based `AbstractMCPClient::get_all_clients()` (which ignored the filter) is deleted. `MCPClientsBlock::render_body()` shrinks from 32 lines to 6 (single call to the canonical enumeration + iteration; no inline default-classes array, no local filter loop, no metadata lookups by slug). Third-party client subclasses contributed via the filter now have a symmetric way to declare their own icon / description / config-file / top-level-key / instructions / sub-nav slot instead of being stranded in the Renderer's private const. **Byte-identical rendered output** for the eight built-in clients on the server-edit → Clients tab. **No breaking changes for existing third-party subclasses** — the six new methods default to empty strings (or 100 for priority). **Test coverage**: new `GetAllRegisteredClientsTest.php` covers default state / filter contribution / invalid FQN skip / bad slug reject / duplicate slug later-wins / priority sort with slug tiebreaker; new `ConcreteClientMetadataTest.php` data-provider parameterized over all 8 built-ins asserts each returns the migrated metadata values; new `MCPClientsBlockRenderTest.php` under the `renderers` suite verifies FR-016 render byte-identity via DOM markers AND exercises the SEC-034-001 preservation invariant (hostile third-party subclass returning `<script>` payloads MUST be escaped at render). `mcpclients` PHPUnit suite grows to 86 tests / 181 assertions (up from 74 pre-F034). **Durable memory captured as `D35 / DEC-F034-SELF-CONTAINED-SUBSYSTEM-CONTRACT`** — generalizable pattern for every future subsystem with an abstract base + filter-based subclass contribution + per-subclass display metadata.
 
 = 0.1.7 =
