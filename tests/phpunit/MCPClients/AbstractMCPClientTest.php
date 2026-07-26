@@ -12,7 +12,11 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
 /**
- * Tests for AbstractMCPClient helpers + the get_all_clients() factory.
+ * Tests for AbstractMCPClient helpers + the six default metadata methods (F034).
+ *
+ * Enumeration coverage lives in GetAllRegisteredClientsTest (F034). The pre-F034
+ * glob-based get_all_clients() factory + its four tests were removed as part of
+ * that refactor — replaced by the filter-aware get_all_registered_clients().
  *
  * Per SC-003 this entire suite runs WITHOUT bootstrapping WordPress —
  * proof that the MCPClients module is pure service layer (FR-008).
@@ -145,43 +149,31 @@ final class AbstractMCPClientTest extends TestCase {
 		);
 	}
 
-	// ─── get_all_clients factory ────────────────────────────────────────────
+	// ─── F034 default metadata methods ──────────────────────────────────────
 
-	public function testGetAllClientsExcludesAbstractClass(): void {
-		$clients = AbstractMCPClient::get_all_clients();
-		foreach ( $clients as $client ) {
-			$this->assertNotInstanceOf( \ReflectionClass::class, $client );
-			$reflection = new \ReflectionClass( $client );
-			$this->assertFalse(
-				$reflection->isAbstract(),
-				'get_all_clients() returned an instance of an abstract class: ' . $reflection->getName()
-			);
-			$this->assertNotSame( AbstractMCPClient::class, $reflection->getName() );
-		}
+	/**
+	 * A bare subclass implementing only the three original abstract methods
+	 * (slug, name, snippet) MUST inherit empty-string defaults for the five
+	 * F034 string metadata methods. This locks the backwards-compatibility
+	 * invariant from FR-002: adding the abstract-level metadata contract
+	 * MUST NOT break existing external subclasses.
+	 */
+	public function testDefaultMetadataMethodsReturnEmptyStrings(): void {
+		$s = $this->newSubject();
+		$this->assertSame( '', $s->get_icon(), 'get_icon() default MUST be empty string.' );
+		$this->assertSame( '', $s->get_description(), 'get_description() default MUST be empty string.' );
+		$this->assertSame( '', $s->get_config_file(), 'get_config_file() default MUST be empty string.' );
+		$this->assertSame( '', $s->get_top_level_key(), 'get_top_level_key() default MUST be empty string.' );
+		$this->assertSame( '', $s->get_instructions(), 'get_instructions() default MUST be empty string.' );
 	}
 
-	public function testGetAllClientsReturnsAbstractMCPClientInstances(): void {
-		foreach ( AbstractMCPClient::get_all_clients() as $client ) {
-			$this->assertInstanceOf( AbstractMCPClient::class, $client );
-		}
-	}
-
-	public function testGetAllClientsReturnsExactlyEightClients(): void {
-		// Phase 4 FR-004 enumerated 7 concrete clients; F031 added Gemini as
-		// the 8th. This count is the load-bearing canary: adding a 9th
-		// (e.g. Windsurf) means updating this assertion.
-		$this->assertCount( 8, AbstractMCPClient::get_all_clients() );
-	}
-
-	public function testGetAllClientSlugsAreUnique(): void {
-		$slugs = array_map(
-			static fn( AbstractMCPClient $c ) => $c->get_client_slug(),
-			AbstractMCPClient::get_all_clients()
-		);
-		$this->assertSame(
-			array_unique( $slugs ),
-			$slugs,
-			'Two MCPClient subclasses returned the same slug — violates FR-007 uniqueness invariant.'
-		);
+	/**
+	 * F034 FR-018 — default priority is 100. WP-idiomatic (matches add_action
+	 * default). Third-party contributions without an explicit override sort
+	 * AFTER all eight built-ins (which use 10, 20, 30, ..., 80).
+	 */
+	public function testDefaultPriorityReturns100(): void {
+		$s = $this->newSubject();
+		$this->assertSame( 100, $s->get_priority(), 'get_priority() default MUST be int 100.' );
 	}
 }

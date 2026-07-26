@@ -59,4 +59,46 @@ final class GeminiClient extends AbstractMCPClient {
 			),
 		);
 	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	public function get_icon(): string {
+		return '💎';
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	public function get_description(): string {
+		return __( 'Google Gemini CLI', 'acrossai-mcp-manager' );
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	public function get_config_file(): string {
+		return '~/.gemini/settings.json';
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	public function get_top_level_key(): string {
+		return 'mcpServers';
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	public function get_instructions(): string {
+		return __( 'Generate a password → copy the JSON → open ~/.gemini/settings.json (create it if missing) → paste under mcpServers → restart Gemini CLI.', 'acrossai-mcp-manager' );
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	public function get_priority(): int {
+		return 70;
+	}
 }

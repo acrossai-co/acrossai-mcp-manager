@@ -57,4 +57,46 @@ final class VSCodeClient extends AbstractMCPClient {
 			),
 		);
 	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	public function get_icon(): string {
+		return '▤';
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	public function get_description(): string {
+		return __( 'Visual Studio Code', 'acrossai-mcp-manager' );
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	public function get_config_file(): string {
+		return '~/.vscode/mcp.json';
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	public function get_top_level_key(): string {
+		return 'servers';
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	public function get_instructions(): string {
+		return __( 'Generate a password → copy the JSON → open .vscode/mcp.json in your workspace (or user-level ~/.vscode/mcp.json) → paste under servers → reload VS Code.', 'acrossai-mcp-manager' );
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	public function get_priority(): int {
+		return 30;
+	}
 }

@@ -82,49 +82,178 @@ abstract class AbstractMCPClient {
 	abstract public function get_config_snippet( string $server_url, string $auth_token );
 
 	// ─────────────────────────────────────────────────────────────────────────
-	// Public static factory (FR-010 — V3=both per Q3 2026-06-17).
+	// F034 metadata contract (non-abstract, empty-string defaults for
+	// backwards-compatibility per FR-002). Concrete subclasses MAY override
+	// each; a bare subclass implementing only the three original abstract
+	// methods above continues to compile and enumerate correctly.
 	// ─────────────────────────────────────────────────────────────────────────
 
 	/**
-	 * Discover and instantiate every concrete client in this module.
+	 * Icon hint — emoji or short display marker. Rendered next to the client
+	 * name in the sub-nav. Empty when unset (no icon glyph rendered).
 	 *
-	 * Internal mechanism: glob `includes/MCPClients/*.php`, skip the
-	 * abstract class itself, autoload each remaining class, instantiate
-	 * only when class_exists() AND is_subclass_of() both succeed.
+	 * @return string
+	 */
+	public function get_icon(): string {
+		return '';
+	}
+
+	/**
+	 * One-line description (translated). Shown below the client name in its
+	 * panel. Empty when unset (no description text rendered).
 	 *
-	 * This preserves SC-002 ("adding a new client = exactly one new
-	 * file") — no edits to this factory needed when a new client lands.
+	 * @return string
+	 */
+	public function get_description(): string {
+		return '';
+	}
+
+	/**
+	 * Config file path hint (e.g. `~/.claude.json`). Untranslated technical
+	 * string. Rendered in the paste instructions. Empty when unset.
 	 *
-	 * Returned array is sorted by class file name (alphabetical) — most
-	 * filesystems return glob() results sorted; we don't re-sort to
-	 * preserve OS-native ordering. Consumers wanting a specific order
-	 * should sort by `get_client_slug()` themselves.
+	 * @return string
+	 */
+	public function get_config_file(): string {
+		return '';
+	}
+
+	/**
+	 * JSON/TOML top-level key the snippet gets pasted under (e.g. `mcpServers`).
+	 * Untranslated. Empty when unset.
+	 *
+	 * @return string
+	 */
+	public function get_top_level_key(): string {
+		return '';
+	}
+
+	/**
+	 * Setup instructions (translated). Rendered below the config snippet.
+	 * Empty when unset (no instructions block).
+	 *
+	 * @return string
+	 */
+	public function get_instructions(): string {
+		return '';
+	}
+
+	/**
+	 * Sub-nav slot preference. Lower values sort earlier. WP-idiomatic
+	 * (matches `add_action` priority semantics). Default 100 places
+	 * third-party contributions AFTER all eight built-ins (which use
+	 * 10, 20, 30, ..., 80). Consumed by `get_all_registered_clients()`
+	 * during the sort phase; tiebreaker for equal priorities is slug ASC.
+	 *
+	 * @return int
+	 */
+	public function get_priority(): int {
+		return 100;
+	}
+
+	// ─────────────────────────────────────────────────────────────────────────
+	// F034 canonical filter-aware enumeration. Sole entry point for
+	// "which MCP clients are registered on this site." Mirrors the shape of
+	// ConnectorProfileRegistry::get_profiles() at
+	// includes/Connectors/ConnectorProfileRegistry.php:57-118 (adapted for
+	// the FQN-string contribution shape used by acrossai_mcp_client_classes).
+	//
+	// Seed value for the extension filter — the eight built-in clients in
+	// insertion order. Actual runtime sort uses get_priority() per FR-010.
+	// ─────────────────────────────────────────────────────────────────────────
+
+	public const DEFAULT_CLIENT_CLASSES = array(
+		ClaudeDesktopClient::class,
+		ClaudeCodeClient::class,
+		VSCodeClient::class,
+		GitHubCopilotClient::class,
+		CodexClient::class,
+		CursorClient::class,
+		GeminiClient::class,
+		CustomClient::class,
+	);
+
+	/**
+	 * Canonical enumeration of every registered MCP client.
+	 *
+	 * Fires `acrossai_mcp_client_classes` exactly once per call with
+	 * `DEFAULT_CLIENT_CLASSES` as the seed. Validates each contributed FQN
+	 * (silent-skip on invalid per SEC-013-008) and each contributed subclass
+	 * slug (regex `/\A[a-z0-9-]{1,64}\z/` with `_doing_it_wrong` under
+	 * `WP_DEBUG` for violators). Dedups by slug (later-wins). Sorts by
+	 * `(get_priority() ASC, get_client_slug() ASC)`.
+	 *
+	 * Returned instances are fresh (no caching). Consumers should call this
+	 * method once per admin render, not per lookup.
 	 *
 	 * @return AbstractMCPClient[]
 	 */
-	public static function get_all_clients(): array {
-		$clients = array();
-		$files   = glob( __DIR__ . '/*.php' );
-		if ( false === $files ) {
-			return $clients;
-		}
+	public static function get_all_registered_clients(): array {
+		/**
+		 * Filter: acrossai_mcp_client_classes
+		 *
+		 * Companion plugins append their own AbstractMCPClient subclass FQNs.
+		 * Invalid FQNs (non-string, missing class, not extending AbstractMCPClient)
+		 * are silently skipped per SEC-013-008. Bad slugs and duplicate slugs
+		 * fire `_doing_it_wrong` under WP_DEBUG.
+		 *
+		 * @since 0.0.6
+		 * @experimental May change without notice before 1.0.0.
+		 *
+		 * @param string[] $client_class_fqns Ordered list of AbstractMCPClient subclass FQNs.
+		 */
+		$class_fqns = (array) apply_filters( 'acrossai_mcp_client_classes', self::DEFAULT_CLIENT_CLASSES );
 
-		foreach ( $files as $file ) {
-			$basename = basename( $file, '.php' );
-			if ( 'AbstractMCPClient' === $basename ) {
-				continue;
-			}
-			$fqn = __NAMESPACE__ . '\\' . $basename;
-			if ( ! class_exists( $fqn ) ) {
+		$seen = array();
+		foreach ( $class_fqns as $fqn ) {
+			if ( ! is_string( $fqn ) || ! class_exists( $fqn ) ) {
 				continue;
 			}
 			if ( ! is_subclass_of( $fqn, self::class ) ) {
 				continue;
 			}
-			$clients[] = new $fqn();
+			$instance = new $fqn();
+			$slug     = $instance->get_client_slug();
+			if ( '' === $slug || ! preg_match( '/\A[a-z0-9-]{1,64}\z/', $slug ) ) {
+				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+					_doing_it_wrong(
+						'AcrossAI_MCP_Manager\\Includes\\MCPClients\\AbstractMCPClient::get_all_registered_clients',
+						sprintf(
+							/* translators: %s: rejected slug from a third-party MCP client subclass */
+							esc_html__( 'Client slug %s does not match /[a-z0-9-]{1,64}/ — subclass discarded.', 'acrossai-mcp-manager' ),
+							esc_html( $slug )
+						),
+						'0.1.7'
+					);
+				}
+				continue;
+			}
+			if ( isset( $seen[ $slug ] ) && defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				_doing_it_wrong(
+					'AcrossAI_MCP_Manager\\Includes\\MCPClients\\AbstractMCPClient::get_all_registered_clients',
+					sprintf(
+						/* translators: %s: duplicate slug from a third-party MCP client subclass */
+						esc_html__( 'Duplicate client slug %s — later contribution wins.', 'acrossai-mcp-manager' ),
+						esc_html( $slug )
+					),
+					'0.1.7'
+				);
+			}
+			$seen[ $slug ] = $instance;
 		}
 
-		return $clients;
+		usort(
+			$seen,
+			static function ( AbstractMCPClient $a, AbstractMCPClient $b ): int {
+				$priority_cmp = $a->get_priority() <=> $b->get_priority();
+				if ( 0 !== $priority_cmp ) {
+					return $priority_cmp;
+				}
+				return $a->get_client_slug() <=> $b->get_client_slug();
+			}
+		);
+
+		return array_values( $seen );
 	}
 
 	// ─────────────────────────────────────────────────────────────────────────

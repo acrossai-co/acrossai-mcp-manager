@@ -63,4 +63,46 @@ final class ClaudeCodeClient extends AbstractMCPClient {
 			),
 		);
 	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	public function get_icon(): string {
+		return '📄';
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	public function get_description(): string {
+		return __( 'Anthropic Claude Code CLI', 'acrossai-mcp-manager' );
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	public function get_config_file(): string {
+		return '~/.claude.json';
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	public function get_top_level_key(): string {
+		return 'mcpServers';
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	public function get_instructions(): string {
+		return __( 'Generate a password → copy the JSON → open the config file path above → paste under the top-level key → restart Claude Code.', 'acrossai-mcp-manager' );
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	public function get_priority(): int {
+		return 20;
+	}
 }

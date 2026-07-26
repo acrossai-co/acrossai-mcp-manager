@@ -529,3 +529,51 @@ mid-request server registrations).
 - `includes/Main.php:578-583` (wiring — three hooks at priorities 5/999/999)
 - `DEC-F026-WP-REGISTER-ABILITY-ARGS-CALLBACK-SWAP` (D25 — the reason
   A17 exists in this codebase; the callback swap creates the need)
+
+---
+
+### 2026-07-26 - A18 — In-memory WP function stubs permit pure-PHP behavioural tests of code that fires WP hooks
+
+**Status**
+Active — Feature 034; scoped carve-out from A12.
+
+**Why this is durable**
+
+A12 mandates that pure-PHP suites (SC-003 architectural claim) load ONLY composer autoload — the empty test harness IS the proof of pure-service purity. But when pure-service code needs to fire a WP hook/filter as its intended extension seam (e.g., F034's `AbstractMCPClient::get_all_registered_clients()` firing `acrossai_mcp_client_classes`), truly-empty bootstrap makes the tests unrunnable — the very functions the code needs to call don't exist. A18 documents the scoped carve-out: minimal in-memory function/constant stubs in `tests/bootstrap.php` are permitted, guarded by `function_exists()` / `defined()` so production WordPress (when present) always takes precedence.
+
+**Decision**
+
+A pure-PHP test bootstrap MAY define in-memory stubs for WP core symbols under the following constraints:
+
+1. **Guarded**: every stub is wrapped in `if ( ! function_exists( '<name>' ) )` or `if ( ! defined( '<name>' ) )`. Production WordPress ALWAYS wins — the stubs never override real WP.
+2. **Minimal**: only symbols the code-under-test actually calls. No blanket `wp-includes/` shim; no "just in case" stubs.
+3. **In-memory only**: no DB, no filesystem, no options table. Stubs MAY use `$GLOBALS` for per-request state (e.g., filter storage) but MUST provide a `acrossai_test_reset_*()` helper that consumers call from `setUp()` to clear that state between tests.
+4. **Contract-preserving**: stubs replicate WP core's documented behaviour for the tested surface. Example: `apply_filters` MUST sort callbacks by priority ASC then call each with `($value, ...$args)` and return the final value — do NOT invent shortcuts or reorderings.
+5. **No production import**: the plugin's production code MUST NOT depend on stub presence. Stubs live only in `tests/bootstrap.php`; the code under test calls `apply_filters()` / `_doing_it_wrong()` / `esc_html()` normally.
+
+**Rejected alternatives**
+
+- **Full WP bootstrap for the affected suite**: reintroduces the very dependency SC-003 forbids; degrades startup time; obscures the pure-service claim.
+- **Mock the WP calls inside the plugin logic** (e.g., wrap `apply_filters` in a plugin-owned `HookDispatcher` service): adds indirection to production code purely for testability. Anti-pattern.
+- **Skip testing the hook-firing code path**: violates the plan-phase test coverage gate; leaves the SEC-013-008 silent-skip / dedup / slug-regex behaviour untested.
+
+**Tradeoffs**
+
+- **Gained**: SC-003 pure-PHP suite continues to run without WP; behavioural coverage of extension-seam code (filter callbacks, `_doing_it_wrong` under WP_DEBUG) works without full WP bootstrap; test suite starts in ~50ms instead of the ~2s WP-bootstrap suites take.
+- **Made harder**: developer adding a new pure-PHP test now needs to check whether the code-under-test fires WP functions; if yes, the corresponding stub must exist in `tests/bootstrap.php`. Documented via this A18 entry so future developers find the rule.
+- **Reconsider**: if stub count grows past ~10 unique WP functions OR the stubs start needing complex state (e.g., simulating a full WP option table, user session, or REST request), that signals the code-under-test has drifted from pure-service and the suite should either move to `bootstrap-wp.php` (full WP) OR the code should be refactored back to pure. The stub-count ceiling is the load-bearing signal for this decision.
+
+**Evidence**
+
+- `tests/bootstrap.php:26-96` — six WP function stubs (`add_filter`, `apply_filters`, `_doing_it_wrong`, `esc_html`, `__`, `esc_html__`) + `WP_DEBUG` constant + `acrossai_test_reset_filters()` helper.
+- `includes/MCPClients/AbstractMCPClient.php:205` — `apply_filters('acrossai_mcp_client_classes', ...)` — the call the stubs enable testing.
+- `tests/phpunit/MCPClients/GetAllRegisteredClientsTest.php` — 6 test methods using the stubs; suite green.
+- `tests/phpunit/MCPClients/AbstractMCPClientTest.php` — testing defaults; `esc_html__` stub also exercised here.
+
+**Where to look next**
+
+- Any future feature adding a new WP hook/filter/constant call inside a pure-PHP module (`includes/MCPClients/`, `includes/Utilities/`, other A11 pure-service classes): MUST either (a) add the corresponding stub to `tests/bootstrap.php` under this A18 carve-out, or (b) move the affected tests to the WP-bootstrap suite (`tests/bootstrap-wp.php`).
+- Choose (a) when the WP surface being touched is small (1–2 functions per new feature) and the code stays A11 pure-service.
+- Choose (b) when the code needs multiple WP subsystems (options, users, DB, REST). Do NOT accumulate 10+ stubs in `tests/bootstrap.php` — that's the "code drifted from pure-service" signal per the Reconsider tradeoff above.
+- `A12` — the general rule this carve-out scopes.
+- `DEC-F034-SELF-CONTAINED-SUBSYSTEM-CONTRACT` (D35) — the F034 feature that established this pattern.

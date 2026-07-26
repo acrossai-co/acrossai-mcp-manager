@@ -57,4 +57,46 @@ final class GitHubCopilotClient extends AbstractMCPClient {
 			),
 		);
 	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	public function get_icon(): string {
+		return '🐱';
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	public function get_description(): string {
+		return __( 'GitHub Copilot in VS Code (user-level MCP config)', 'acrossai-mcp-manager' );
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	public function get_config_file(): string {
+		return '~/.vscode/mcp.json';
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	public function get_top_level_key(): string {
+		return 'servers';
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	public function get_instructions(): string {
+		return __( 'Generate a password → copy the JSON → open the user-level ~/.vscode/mcp.json → paste under servers → restart VS Code + GitHub Copilot extension.', 'acrossai-mcp-manager' );
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	public function get_priority(): int {
+		return 40;
+	}
 }

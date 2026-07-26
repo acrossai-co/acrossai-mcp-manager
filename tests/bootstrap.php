@@ -23,3 +23,84 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 // Composer autoloader (PSR-4 mapping: AcrossAI_MCP_Manager\Includes\* → includes/*).
 require_once dirname( __DIR__ ) . '/vendor/autoload.php';
+
+// ────────────────────────────────────────────────────────────────────────────
+// F034 — minimal in-memory stubs for the WP core symbols the MCPClients
+// module now calls from `AbstractMCPClient::get_all_registered_clients()`.
+// These stubs preserve the SC-003 "no WP bootstrap" contract: plugin code
+// under test still runs against a WP-free environment, but tests can register
+// filter callbacks + observe _doing_it_wrong invocations without pulling in
+// wp-phpunit. Real WP core provides equivalent behaviour post-bootstrap.
+// ────────────────────────────────────────────────────────────────────────────
+
+if ( ! isset( $GLOBALS['acrossai_test_filters'] ) ) {
+	$GLOBALS['acrossai_test_filters'] = array();
+}
+if ( ! isset( $GLOBALS['acrossai_test_doing_it_wrong'] ) ) {
+	$GLOBALS['acrossai_test_doing_it_wrong'] = array();
+}
+
+if ( ! function_exists( 'add_filter' ) ) {
+	function add_filter( string $hook, callable $callback, int $priority = 10, int $accepted_args = 1 ): bool {
+		unset( $accepted_args );
+		$GLOBALS['acrossai_test_filters'][ $hook ][ $priority ][] = $callback;
+		return true;
+	}
+}
+
+if ( ! function_exists( 'apply_filters' ) ) {
+	function apply_filters( string $hook, $value, ...$args ) {
+		if ( empty( $GLOBALS['acrossai_test_filters'][ $hook ] ) ) {
+			return $value;
+		}
+		$priorities = $GLOBALS['acrossai_test_filters'][ $hook ];
+		ksort( $priorities, SORT_NUMERIC );
+		foreach ( $priorities as $callbacks ) {
+			foreach ( $callbacks as $callback ) {
+				$value = $callback( $value, ...$args );
+			}
+		}
+		return $value;
+	}
+}
+
+if ( ! function_exists( '_doing_it_wrong' ) ) {
+	function _doing_it_wrong( string $function_name, string $message, string $version ): void {
+		$GLOBALS['acrossai_test_doing_it_wrong'][] = array(
+			'function' => $function_name,
+			'message'  => $message,
+			'version'  => $version,
+		);
+	}
+}
+
+if ( ! defined( 'WP_DEBUG' ) ) {
+	define( 'WP_DEBUG', true );
+}
+
+if ( ! function_exists( 'acrossai_test_reset_filters' ) ) {
+	function acrossai_test_reset_filters(): void {
+		$GLOBALS['acrossai_test_filters']         = array();
+		$GLOBALS['acrossai_test_doing_it_wrong'] = array();
+	}
+}
+
+if ( ! function_exists( 'esc_html' ) ) {
+	function esc_html( string $text ): string {
+		return htmlspecialchars( $text, ENT_QUOTES, 'UTF-8' );
+	}
+}
+
+if ( ! function_exists( '__' ) ) {
+	function __( string $text, string $domain = 'default' ): string {
+		unset( $domain );
+		return $text;
+	}
+}
+
+if ( ! function_exists( 'esc_html__' ) ) {
+	function esc_html__( string $text, string $domain = 'default' ): string {
+		unset( $domain );
+		return htmlspecialchars( $text, ENT_QUOTES, 'UTF-8' );
+	}
+}

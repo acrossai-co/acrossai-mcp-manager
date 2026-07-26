@@ -3,9 +3,15 @@
  * The MCP Clients configuration block — sub-nav + per-client config.
  *
  * Feature 013 — dispatches per-client configuration rendering across the
- * 7 F004 MCPClients (Claude Desktop, Claude Code, VS Code, GitHub Copilot,
- * Codex, Cursor, Custom Client) via the acrossai_mcp_client_classes filter
- * (Clarifications Q4).
+ * 8 built-in MCPClients (Claude Desktop, Claude Code, VS Code, GitHub Copilot,
+ * Codex, Cursor, Gemini, Custom) plus any third-party subclass contributed
+ * via the `acrossai_mcp_client_classes` filter.
+ *
+ * Post-F034: enumeration + validation + sort happen inside
+ * `AbstractMCPClient::get_all_registered_clients()` (single canonical entry
+ * point). Per-client display metadata (icon, description, config file,
+ * top-level key, instructions, priority) is read via method calls on each
+ * client instance — no private const on this class, no direct filter loop.
  *
  * NOT gated by any F012 toggle (FR-019).
  *
@@ -20,14 +26,6 @@
 namespace AcrossAI_MCP_Manager\Public\Renderers;
 
 use AcrossAI_MCP_Manager\Includes\MCPClients\AbstractMCPClient;
-use AcrossAI_MCP_Manager\Includes\MCPClients\ClaudeCodeClient;
-use AcrossAI_MCP_Manager\Includes\MCPClients\ClaudeDesktopClient;
-use AcrossAI_MCP_Manager\Includes\MCPClients\CodexClient;
-use AcrossAI_MCP_Manager\Includes\MCPClients\CursorClient;
-use AcrossAI_MCP_Manager\Includes\MCPClients\CustomClient;
-use AcrossAI_MCP_Manager\Includes\MCPClients\GeminiClient;
-use AcrossAI_MCP_Manager\Includes\MCPClients\GitHubCopilotClient;
-use AcrossAI_MCP_Manager\Includes\MCPClients\VSCodeClient;
 
 // Exit if accessed directly.
 defined( 'ABSPATH' ) || exit;
@@ -41,75 +39,6 @@ defined( 'ABSPATH' ) || exit;
  * @experimental May change without notice before 1.0.0.
  */
 final class MCPClientsBlock extends AbstractClientRenderer {
-
-	/**
-	 * Per-client display metadata (emoji + description + config file path +
-	 * top-level JSON key + instructions). Keyed by AbstractMCPClient::get_client_slug().
-	 * Extracted from each client class's docblock into a display-layer table so
-	 * F004 MCPClients don't need new methods (F013 constraint: "do not re-implement
-	 * any MCPClient class").
-	 *
-	 * @since 0.0.6
-	 * @var array<string, array{emoji:string,description:string,config_file:string,top_level_key:string,instructions:string}>
-	 */
-	private const CLIENT_META = array(
-		'claude-desktop' => array(
-			'emoji'         => '🍰',
-			'description'   => 'Anthropic Claude Desktop App',
-			'config_file'   => '~/Library/Application Support/Claude/claude_desktop_config.json',
-			'top_level_key' => 'mcpServers',
-			'instructions'  => 'Generate a password → copy the JSON → open the config file path above → paste under the top-level key → restart Claude Desktop.',
-		),
-		'claude-code'    => array(
-			'emoji'         => '📄',
-			'description'   => 'Anthropic Claude Code CLI',
-			'config_file'   => '~/.claude.json',
-			'top_level_key' => 'mcpServers',
-			'instructions'  => 'Generate a password → copy the JSON → open the config file path above → paste under the top-level key → restart Claude Code.',
-		),
-		'vscode'         => array(
-			'emoji'         => '▤',
-			'description'   => 'Visual Studio Code',
-			'config_file'   => '~/.vscode/mcp.json',
-			'top_level_key' => 'servers',
-			'instructions'  => 'Generate a password → copy the JSON → open .vscode/mcp.json in your workspace (or user-level ~/.vscode/mcp.json) → paste under servers → reload VS Code.',
-		),
-		'github-copilot' => array(
-			'emoji'         => '🐱',
-			'description'   => 'GitHub Copilot in VS Code (user-level MCP config)',
-			'config_file'   => '~/.vscode/mcp.json',
-			'top_level_key' => 'servers',
-			'instructions'  => 'Generate a password → copy the JSON → open the user-level ~/.vscode/mcp.json → paste under servers → restart VS Code + GitHub Copilot extension.',
-		),
-		'codex'          => array(
-			'emoji'         => '🐙',
-			'description'   => 'OpenAI Codex CLI',
-			'config_file'   => '~/.codex/config.toml',
-			'top_level_key' => 'mcp_servers',
-			'instructions'  => 'Generate a password → copy the TOML snippet → open ~/.codex/config.toml → paste under [mcp_servers] → restart Codex CLI.',
-		),
-		'cursor'         => array(
-			'emoji'         => '⚡',
-			'description'   => 'Cursor AI Code Editor',
-			'config_file'   => '~/.cursor/mcp.json',
-			'top_level_key' => 'mcpServers',
-			'instructions'  => 'Generate a password → copy the JSON → open ~/.cursor/mcp.json → paste under mcpServers → restart Cursor.',
-		),
-		'gemini'         => array(
-			'emoji'         => '💎',
-			'description'   => 'Google Gemini CLI',
-			'config_file'   => '~/.gemini/settings.json',
-			'top_level_key' => 'mcpServers',
-			'instructions'  => 'Generate a password → copy the JSON → open ~/.gemini/settings.json (create it if missing) → paste under mcpServers → restart Gemini CLI.',
-		),
-		'custom'         => array(
-			'emoji'         => '⚙',
-			'description'   => 'Custom MCP Client Implementation',
-			'config_file'   => 'depends on your client',
-			'top_level_key' => 'depends on your client',
-			'instructions'  => 'Use the JSON below as a starting point — most MCP clients accept the same command / args / env shape. Consult your client\'s docs for the exact config file path and top-level key.',
-		),
-	);
 
 	/**
 	 * Singleton instance.
@@ -152,9 +81,11 @@ final class MCPClientsBlock extends AbstractClientRenderer {
 	/**
 	 * Renders the block body — sub-nav pills + selected client's config.
 	 *
-	 * NOT gated by any F012 toggle (FR-019). Iterates over the client class
-	 * FQNs returned by the acrossai_mcp_client_classes filter. Invalid FQNs
-	 * silently skipped per FR-016b + SEC-013-008.
+	 * NOT gated by any F012 toggle (FR-019). Client enumeration is delegated
+	 * to `AbstractMCPClient::get_all_registered_clients()` post-F034 — that
+	 * method fires the `acrossai_mcp_client_classes` filter, validates FQNs
+	 * per SEC-013-008 (silent-skip on invalid), validates slugs, dedups, and
+	 * sorts by `(get_priority() ASC, get_client_slug() ASC)`.
 	 *
 	 * @since 0.0.6
 	 * @experimental May change without notice before 1.0.0.
@@ -164,38 +95,12 @@ final class MCPClientsBlock extends AbstractClientRenderer {
 	 * @return void
 	 */
 	protected function render_body( array $server, array $context ): void {
-		$default_classes = array(
-			ClaudeDesktopClient::class,
-			ClaudeCodeClient::class,
-			VSCodeClient::class,
-			GitHubCopilotClient::class,
-			CodexClient::class,
-			CursorClient::class,
-			GeminiClient::class,
-			CustomClient::class,
-		);
-
-		/**
-		 * Filter — third-party plugins may append their own AbstractMCPClient subclass FQNs.
-		 * Invalid FQNs silently skipped per SEC-013-008.
-		 *
-		 * @since 0.0.6
-		 * @experimental May change without notice before 1.0.0.
-		 *
-		 * @param string[] $client_class_fqns Ordered list of AbstractMCPClient subclass FQNs.
-		 */
-		$class_fqns = (array) apply_filters( 'acrossai_mcp_client_classes', $default_classes );
-
-		$clients = array();
-		foreach ( $class_fqns as $fqn ) {
-			if ( ! is_string( $fqn ) || ! class_exists( $fqn ) ) {
-				continue;
-			}
-			if ( ! is_subclass_of( $fqn, AbstractMCPClient::class ) ) {
-				continue;
-			}
-			$clients[] = new $fqn();
-		}
+		// F034: single canonical enumeration path. The `acrossai_mcp_client_classes`
+		// filter is fired inside `AbstractMCPClient::get_all_registered_clients()`
+		// with the eight-class default seed. Validation (FQN + slug regex + dedup)
+		// and sort (priority ASC, slug ASC) happen there — this method is a pure
+		// consumer, no metadata lookup by slug, no inline default array.
+		$clients = AbstractMCPClient::get_all_registered_clients();
 
 		if ( empty( $clients ) ) {
 			printf(
@@ -236,8 +141,7 @@ final class MCPClientsBlock extends AbstractClientRenderer {
 		echo '<div class="acrossai-client-tabs-nav">';
 		foreach ( $clients as $client ) {
 			$slug      = $client->get_client_slug();
-			$meta      = self::CLIENT_META[ $slug ] ?? array( 'emoji' => '' );
-			$emoji     = (string) ( $meta['emoji'] ?? '' );
+			$emoji     = $client->get_icon();
 			$is_active = ( $client === $active_client );
 			$url       = add_query_arg( 'client', $slug, (string) $context['submit_target_url'] );
 			$css_class = $is_active ? 'acrossai-client-tab acrossai-client-tab-active' : 'acrossai-client-tab';
@@ -265,25 +169,23 @@ final class MCPClientsBlock extends AbstractClientRenderer {
 	 * @return void
 	 */
 	private function render_client_details( array $server, array $context, AbstractMCPClient $client ): void {
-		$slug = $client->get_client_slug();
-		$meta = self::CLIENT_META[ $slug ] ?? array(
-			'emoji'         => '',
-			'description'   => '',
-			'config_file'   => '',
-			'top_level_key' => '',
-			'instructions'  => '',
-		);
+		$slug          = $client->get_client_slug();
+		$emoji         = $client->get_icon();
+		$description   = $client->get_description();
+		$config_file   = $client->get_config_file();
+		$top_level_key = $client->get_top_level_key();
+		$instructions  = $client->get_instructions();
 
 		// Heading + subtitle.
 		printf(
 			'<h2>%1$s %2$s</h2>',
-			esc_html( (string) ( $meta['emoji'] ?? '' ) ),
+			esc_html( $emoji ),
 			esc_html( $client->get_client_name() )
 		);
-		if ( ! empty( $meta['description'] ) ) {
+		if ( '' !== $description ) {
 			printf(
 				'<p class="description">%s</p>',
-				esc_html( (string) $meta['description'] )
+				esc_html( $description )
 			);
 		}
 
@@ -301,20 +203,20 @@ final class MCPClientsBlock extends AbstractClientRenderer {
 		echo '</div>';
 
 		// Config File row.
-		if ( ! empty( $meta['config_file'] ) ) {
+		if ( '' !== $config_file ) {
 			printf(
 				'<div class="acrossai-mcp-meta-row"><span class="acrossai-mcp-meta-label">%1$s</span><span class="acrossai-mcp-meta-value">%2$s</span></div>',
 				esc_html__( 'Config File', 'acrossai-mcp-manager' ),
-				esc_html( (string) $meta['config_file'] )
+				esc_html( $config_file )
 			);
 		}
 
 		// Top-Level Key row.
-		if ( ! empty( $meta['top_level_key'] ) ) {
+		if ( '' !== $top_level_key ) {
 			printf(
 				'<div class="acrossai-mcp-meta-row"><span class="acrossai-mcp-meta-label">%1$s</span><span class="acrossai-mcp-meta-value">"%2$s"</span></div>',
 				esc_html__( 'Top-Level Key', 'acrossai-mcp-manager' ),
-				esc_html( (string) $meta['top_level_key'] )
+				esc_html( $top_level_key )
 			);
 		}
 
@@ -347,10 +249,10 @@ final class MCPClientsBlock extends AbstractClientRenderer {
 		echo '</div>';
 
 		// Instructions callout — reuse WP core notice styles.
-		if ( ! empty( $meta['instructions'] ) ) {
+		if ( '' !== $instructions ) {
 			printf(
 				'<div class="notice notice-info inline"><p>%1$s</p><p>%2$s</p></div>',
-				esc_html( (string) $meta['instructions'] ),
+				esc_html( $instructions ),
 				esc_html__( 'The generated password belongs to your current WordPress user. Access Control still applies to every MCP request, so a user who is not allowed for this server will receive an access denied response even if they have a saved config.', 'acrossai-mcp-manager' )
 			);
 		}

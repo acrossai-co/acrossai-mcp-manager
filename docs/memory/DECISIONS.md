@@ -2016,3 +2016,48 @@ D31 (F032 core) requires every mutating OAuth admin endpoint to validate `server
 **Where to look next**
 
 Any future operator-invoked cross-server admin action (bulk delete, bulk suspend, aggregated report) MUST be its own endpoint with its own observability action distinct from the bypass-attempt actions. If tempted to reuse a bypass-attempt observability action for a legitimate site-wide op, STOP — that pollutes forensic streams.
+
+---
+
+### 2026-07-25 — D35 — Self-contained subsystem contract: abstract base owns metadata + enumeration; Renderers are consumers only (F034)
+
+**Status**
+Active
+
+**Why this is durable**
+
+Any subsystem with (a) an abstract base + concrete subclasses contributed via a filter AND (b) per-subclass display metadata will drift into "metadata orphaned in the Renderer" the moment a third-party subclass gets contributed — because Renderers cannot know metadata for classes they don't own. F034 fixed this specific drift for the MCP client subsystem; captured as a pattern for every future subsystem with the same shape.
+
+**Decision**
+
+Every subsystem matching the two criteria above MUST:
+
+1. Declare all display metadata as **method-with-default overrides on the abstract base** — not as a private const on any Renderer, admin partial, or list-table. Reference: F034 added `get_icon`, `get_description`, `get_config_file`, `get_top_level_key`, `get_instructions`, `get_priority` to `AbstractMCPClient` with empty-string / 100 defaults per FR-002.
+2. Expose enumeration via a **single canonical static method on the abstract** that fires the extension filter with a class-level default seed, validates FQNs (`is_string` + `class_exists` + `is_subclass_of`), validates slugs (`/^[a-z0-9-]{1,64}$/`), dedups by slug with `_doing_it_wrong` under `WP_DEBUG`, and sorts deterministically. Reference: `AbstractMCPClient::get_all_registered_clients()` (F034) mirrors `ConnectorProfileRegistry::get_profiles()` (F021).
+3. Renderers, admin partials, and any other consumer of the subsystem MUST call the canonical enumeration method and read metadata via the abstract's method calls — NEVER re-implement the filter loop, NEVER hardcode a subclass FQN list, NEVER carry a metadata const keyed by slug.
+
+**Tradeoffs**
+
+- **Gained**: third-party contributions become first-class citizens (no orphaned metadata); one canonical enumeration path per subsystem eliminates drift bugs of the B32 class; adding new subclass fields = one method on the abstract, one override per concrete = no PR churn to display layers.
+- **Made harder**: every new subsystem field (icon / description / priority / whatever) requires ALL concrete subclasses to add the override to preserve current UI — but this is enforced at the sensible layer (the class that owns the identity), not scattered across display consumers.
+- **Reconsider**: If a future subsystem has metadata that legitimately depends on runtime context (server_id, user role, request path), the abstract's parameter-less getter shape is insufficient. In that case, pass the context to the getter (`get_icon( int $server_id ): string`) rather than reverting to a Renderer-side lookup.
+
+**Related**
+
+- Reference implementation (sibling pattern): `includes/Connectors/AbstractConnectorProfile.php` + `includes/Connectors/ConnectorProfileRegistry.php` (F021).
+- Retroactive application: F034 for `AbstractMCPClient` + `MCPClientsBlock`.
+- B32 (canonical filter-default): F034 IS the direct application of B32 to the MCP client subsystem.
+- Future F036 (planned public discovery API `ConnectionMethodRegistry` under `public/Discovery/`) depends on this decision — it delegates to both subsystem registries instead of re-implementing.
+
+**Evidence**
+
+- `includes/MCPClients/AbstractMCPClient.php` — post-F034 abstract with 6 metadata methods + `DEFAULT_CLIENT_CLASSES` const + `get_all_registered_clients()` static method.
+- `includes/MCPClients/{ClaudeDesktop,ClaudeCode,VSCode,GitHubCopilot,Codex,Cursor,Gemini,Custom}Client.php` — 8 concrete classes with 6 method overrides each.
+- `public/Renderers/MCPClientsBlock.php` — `render_body()` is 6 lines (was 32 pre-F034); no `CLIENT_META` const; no inline filter loop.
+- `tests/phpunit/MCPClients/GetAllRegisteredClientsTest.php` — canonical enumeration tests.
+- `tests/phpunit/MCPClients/ConcreteClientMetadataTest.php` — data-provider parameterized metadata assertions across 8 built-ins.
+- `specs/034-mcp-client-metadata-refactor/` — the full feature dossier including memory-synthesis reasoning.
+
+**Where to look next**
+
+Any new subsystem that adds an abstract base + `apply_filters('acrossai_mcp_*_classes', ...)` extension seam. Before shipping, audit: are all display fields on the abstract? Is enumeration in ONE canonical method? Do consumers delegate rather than re-implement? If any answer is no, apply this pattern before merge.
