@@ -2061,3 +2061,44 @@ Every subsystem matching the two criteria above MUST:
 **Where to look next**
 
 Any new subsystem that adds an abstract base + `apply_filters('acrossai_mcp_*_classes', ...)` extension seam. Before shipping, audit: are all display fields on the abstract? Is enumeration in ONE canonical method? Do consumers delegate rather than re-implement? If any answer is no, apply this pattern before merge.
+
+---
+
+### 2026-07-27 — D36 — Public `@experimental` API classes MUST be `final class` — extension via filter, never subclass (F035)
+
+**Status**
+
+Active
+
+**Why this is durable**
+
+Public `public/` classes marked `@experimental until plugin 1.0.0` per DEC-CLIENT-RENDERER-PUBLIC-API face two competing extension pressures: (a) developers wanting to subclass to override behaviour, (b) plugin author wanting to freeze the contract shape at 1.0.0 with minimum churn. F035 codifies the resolution and generalizes it as a policy for every future `public/` `@experimental` class: **`final class` + filter-only extension seams**. The class ships with N filter surfaces (F035 has 4: two of its own — `acrossai_mcp_npm_methods`, `acrossai_mcp_connection_methods` — plus two inherited via delegation — `acrossai_mcp_client_classes`, `acrossai_mcp_manager_connector_profiles`); every legitimate extension use case flows through these.
+
+**Decision / Finding**
+
+Any new `public/` class marked `@experimental until plugin 1.0.0` MUST be declared `final class`. Extension happens via WordPress filters (per constitution §V), never via subclass. Rationale — three failure modes prevented:
+
+1. **Singleton state fragmentation**: A subclass `SubX::instance()` would return a different instance than base `X::instance()`, because `protected static ?self $_instance = null` on the base only holds the base instance. Two consumers reading "the registry" would see two different memoization caches. Third-party filter callbacks would fire twice per request (once per instance's per-request enumeration).
+2. **Delegation invariant defeat**: A subclass could override a delegation method (e.g., F035's `get_clients()` that delegates to `AbstractMCPClient::get_all_registered_clients()`) and re-fire the underlying filter (`acrossai_mcp_client_classes`) directly. Source-time grep gates (SC-005 style in F035) would still pass (they scan the class file itself), but the runtime contract — "underlying filter fires exactly once" — would be silently broken. Double-invoke of third-party callbacks; side effects fired twice.
+3. **`@experimental` shape drift**: A subclass could add public methods or change return shapes in ways downstream JSON-round-trip consumers never anticipated. Freezing a `final class` at 1.0.0 requires only auditing the base class's own surface. Freezing an open class requires auditing every possible subclass in every companion plugin.
+
+Third-party plugins needing a different discovery-API shape use **composition** (own class in own namespace calling the singleton) not inheritance. Concrete pattern: `\BuddyBoss\MCP\CustomDiscoveryRegistry` internally calls `ConnectionMethodRegistry::instance()->get_all()` and reshapes the result. Same shape as F034's `MCPClientsBlock` — consumes canonical enumeration, doesn't extend the abstract.
+
+**Enforcement**: source-level `final class X` keyword. PHP fatals at class-load time with "Class Y cannot extend final class X" if anyone attempts to subclass. Zero runtime cost.
+
+**Reversibility**: `final` is dropped later? Non-breaking (adds subclass support). `final` added later to a formerly-open class? BREAKING (existing subclasses fatal at class-load). Err on the side of shipping `final` — subtractive relaxation is safe; additive tightening isn't.
+
+**Reference implementation**
+
+- `public/Discovery/ConnectionMethodRegistry.php:44` — `final class ConnectionMethodRegistry`
+- Documented extension paths: 4 filter seams cited in class-level docblock + `docs/planings-tasks/036-connection-method-discovery-api.md` §Extension paths
+
+**Tradeoffs / Prevention**
+
+- Gained: memoization state integrity, source-time grep-gate runtime enforcement, cleaner 1.0.0 freeze, defensive against subclass-induced double-filter-fire bugs
+- Reconsider: only if a real subclass use case emerges post-1.0.0 that filters + composition genuinely cannot satisfy. Requires explicit `/speckit-clarify` gate + spec amendment + probably a constitution §V annotation for the `@experimental` public/ layer specifically
+- Related: [[dec-client-renderer-public-api]] (public/ + @experimental policy — F013 base), [[d35]] / [[dec-f034-self-contained-subsystem-contract]] (canonical enumeration delegation — the invariant `final` protects at runtime), constitution §V (extension via filter — the "instead of subclass" alternative this decision points consumers toward), [[b32]] (canonical resolver defence — subclass override of a delegation method would defeat B32's principle at runtime)
+
+**Where to look next**
+
+Any new `public/` class marked `@experimental until plugin 1.0.0`. Before shipping, audit: is the class declared `final`? Does the class docblock cite the extension paths (filter names) that replace subclassing? Does the plugin's public documentation (e.g., quickstart.md) tell third-party developers "extend via filter, use composition for shape divergence"? If any answer is no, apply this pattern before merge.

@@ -216,3 +216,7 @@ jobs:
       - name: Run PHPUnit — mcp suite
         continue-on-error: true
         run: vendor/bin/phpunit --bootstrap tests/bootstrap-wp.php --testsuite mcp
+
+      - name: Run PHPUnit — F035 discovery suite
+        continue-on-error: true
+        run: vendor/bin/phpunit --bootstrap tests/bootstrap-wp.php --testsuite discovery

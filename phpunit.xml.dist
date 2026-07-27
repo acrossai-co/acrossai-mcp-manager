@@ -101,6 +101,19 @@
         <testsuite name="mcp">
             <directory>tests/phpunit/MCP</directory>
         </testsuite>
+
+        <!--
+            Discovery (Feature 035): tests for public/Discovery/ layer —
+            ConnectionMethodRegistry singleton exposing NPM + MCP clients +
+            AI connectors as unified DTOs. Requires WP because the class
+            delegates transitively into ConnectorProfileRegistry
+            (_doing_it_wrong + abilities-API touch) and NpmClientBlock
+            (home_url, get_option) — use tests/bootstrap-wp.php per A18
+            (stubbing these would exceed the ~10-symbol ceiling).
+        -->
+        <testsuite name="discovery">
+            <directory>tests/phpunit/Public/Discovery</directory>
+        </testsuite>
     </testsuites>
 
     <source>
