@@ -76,6 +76,33 @@ final class NpmClientBlock extends AbstractClientRenderer {
 	}
 
 	/**
+	 * Built-in NPM connection-method DTO — single source of truth for the
+	 * npx bridge command template and its enable-gate option name.
+	 *
+	 * Consumed by both `render_command_ui()` (this class) and
+	 * `ConnectionMethodRegistry::get_npm_methods()` (F035). Extracting the
+	 * DTO into one method keeps the two consumers in lock-step: template
+	 * drift on either side immediately breaks the F035 discovery-API
+	 * consumer contract test (SC-007 automated regression).
+	 *
+	 * @since 0.1.9 (F035)
+	 * @return array{category:string,slug:string,name:string,description:string,icon:string,meta:array{command_template:string,enabled_option:string}}
+	 */
+	public static function get_default_npm_method(): array {
+		return array(
+			'category'    => 'npm',
+			'slug'        => 'npx-acrossai-mcp-manager',
+			'name'        => __( 'NPX', 'acrossai-mcp-manager' ),
+			'description' => __( 'Run the AcrossAI MCP bridge as a local process via npx.', 'acrossai-mcp-manager' ),
+			'icon'        => '',
+			'meta'        => array(
+				'command_template' => 'npx -y @acrossai/mcp-manager --siteurl=%s --server=%s',
+				'enabled_option'   => 'acrossai_mcp_npm_login_enabled',
+			),
+		);
+	}
+
+	/**
 	 * Renders the block body. Gated on F012 acrossai_mcp_npm_login_enabled.
 	 *
 	 * @since 0.0.6
@@ -89,7 +116,8 @@ final class NpmClientBlock extends AbstractClientRenderer {
 		echo '<div class="mcp-tab-panel">';
 		$this->render_section_heading( __( 'npm / npx CLI', 'acrossai-mcp-manager' ) );
 
-		$enabled = (bool) get_option( 'acrossai_mcp_npm_login_enabled', false );
+		$default = self::get_default_npm_method();
+		$enabled = (bool) get_option( $default['meta']['enabled_option'], false );
 		if ( ! $enabled ) {
 			$this->render_feature_disabled_notice(
 				__( 'npm / npx CLI', 'acrossai-mcp-manager' ),
@@ -117,11 +145,11 @@ final class NpmClientBlock extends AbstractClientRenderer {
 	private function render_command_ui( array $server ): void {
 		$site_url    = home_url();
 		$server_slug = (string) $server['server_slug'];
-		$command     = sprintf(
-			'npx -y @acrossai/mcp-manager --siteurl=%1$s --server=%2$s',
-			$site_url,
-			$server_slug
-		);
+		// Source the command template from the canonical DTO helper (F035
+		// FR-015) so the F035 discovery-API test and this render helper
+		// cannot drift apart. Byte-identical output preserved (SC-007).
+		$template = self::get_default_npm_method()['meta']['command_template'];
+		$command  = sprintf( $template, $site_url, $server_slug );
 
 		printf(
 			'<p class="description">%s</p>',
