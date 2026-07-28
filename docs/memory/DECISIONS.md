@@ -2152,3 +2152,55 @@ If React is **genuinely inappropriate** — e.g., surface is activation-time onl
 **Where to look next**
 
 Any new feature adding an admin UI. Before shipping, verify against the `plan.md` Constitution Check §IV clause: does this feature have interactive multi-field state? If yes → pattern 1 (React + REST). If no → pattern 2 or pattern 3 with explicit justification. If the plan proposes pattern 3 (DEV5 hand-rolled form), verify the form is truly single-submit + no client-side interactivity requirement; else `/speckit-analyze` should flag as D37 violation.
+
+---
+
+### 2026-07-28 - D38 — Reusable-primitive `register()` exception to A1
+
+**Status**
+Active
+
+**Why this is durable**
+A1 says "only `includes/Main.php` calls `add_action`/`add_filter`." F037's AbstractReactMountServerTab is a reusable base for third-party companion plugins; enforcing A1 on it would require every consumer to reimplement asset enqueue + REST wiring in their own Main.php. Codifies when the A1 rule may be relaxed.
+
+**Decision / Finding**
+An abstract base class positioned as an extension surface for third-party plugins MAY call `add_action` / `add_filter` inside an idempotent public `register()` entry point. The consuming plugin's own boot code invokes `register()`. Each plugin's own boot code still owns its hook registration — A1 holds at every plugin level. The base class does NOT self-register at file-inclusion or class-load time.
+
+Requirements for a class to invoke this exception:
+1. `abstract class` positioned as third-party extension surface (documented in class-level docblock)
+2. Public static `register()` entry point — idempotent per subclass (guard against double-invocation)
+3. No self-registration on file load or class instantiation
+4. Consumer contract: guard with `class_exists()` in the consumer's own `plugins_loaded` handler
+
+**Tradeoffs / Prevention**
+- Gained: Third-party plugins get a one-liner `MyTab::register()` extension surface instead of hand-rolling enqueue + REST wiring
+- Reconsider: If a third-party author calls `register()` from a wrong hook (e.g., after `admin_enqueue_scripts` has already fired), the wiring is a no-op silently; document the correct call site (`plugins_loaded` or earlier). This is the tradeoff for the ergonomic single-entry-point pattern.
+
+Canonical example: `admin/Partials/ServerTabs/AbstractReactMountServerTab::register()` shipped in F037 Pivot C (commit `8d55d21`).
+
+Related: `DEV5` tab-hand-rolled-form exception (§IV DataForm); `DEC-CLIENT-RENDERER-PUBLIC-API` `public/` layer stability contract.
+
+---
+
+### 2026-07-28 - D39 — Per-listener isolation for observability actions
+
+**Status**
+Active
+
+**Why this is durable**
+Native WordPress `do_action()` re-raises the first thrown exception from a listener, silently skipping subsequent listeners on the same hook. Wrapping `do_action()` in a caller-side try/catch protects the DB write but NOT other listeners. When multiple audit-log consumers subscribe to the same observability action (common), a bug in one silently masks the others. The correct pattern is per-listener isolation.
+
+**Decision / Finding**
+Plugin observability actions with a fail-forward requirement MUST use a per-listener isolation helper instead of native `do_action()`. Canonical implementation: `AbstractEmbedTransport::fire_action_isolated( string $hook, ...$args )` — iterates `$wp_filter[$hook]->callbacks` in priority order and wraps each `call_user_func_array` in try/catch.
+
+Consumers pass the same args they'd pass to `do_action()`. Helper is a no-op when no listeners registered.
+
+**Tradeoffs / Prevention**
+- Gained: One broken listener MUST NOT abort subsequent listeners on the same hook OR roll back the DB write (full R3 compliance per F015/F017/F020/F030/F032 pattern)
+- Reconsider: Exception messages land in the PHP error log (SEC-007 disclosure trade-off — listener authors MUST NOT put sensitive data in exception messages)
+- Reconsider: Helper does NOT respect `accepted_args` (extra args passed to listeners expecting fewer — PHP silently discards, but subtle drift from `do_action` semantics). Future refinement: slice `$args` per callback's `accepted_args`.
+- Tech debt: F015/F017/F020/F030/F032 audit fires still use native `do_action()` inside try/catch — SC-010 "N-listener isolation" only fully satisfied post-retrofit. Track as follow-up per-feature.
+
+Canonical example: `includes/Embeds/AbstractEmbedTransport::fire_action_isolated()` shipped in F037 RT2 (commit `0c8c5f8`).
+
+Related: research.md R3 (observability-fail-forward); future `B-ERROR-LOG-DISCLOSURE` bug-pattern entry candidate (SEC-007).

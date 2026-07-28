@@ -577,3 +577,34 @@ A pure-PHP test bootstrap MAY define in-memory stubs for WP core symbols under t
 - Choose (b) when the code needs multiple WP subsystems (options, users, DB, REST). Do NOT accumulate 10+ stubs in `tests/bootstrap.php` — that's the "code drifted from pure-service" signal per the Reconsider tradeoff above.
 - `A12` — the general rule this carve-out scopes.
 - `DEC-F034-SELF-CONTAINED-SUBSYSTEM-CONTRACT` (D35) — the F034 feature that established this pattern.
+
+---
+
+### 2026-07-28 - A19 — WP-canonical meta table shape for generic per-entity settings
+
+**Status**
+Active
+
+**Why this is durable**
+When a plugin needs generic per-entity key-value settings that grow beyond a single feature, the wp_postmeta/wp_usermeta shape is a proven WordPress-native primitive: extensible, indexable, familiar to operators, and open to future features. F037 initially planned a dedicated junction table (`wp_acrossai_mcp_server_embed_transports`) then pivoted to `wp_acrossai_mcp_servers_meta` per user request — the new table now backs BOTH `_embeds_enabled` (master toggle) + `_embeds_clients` (JSON blob) + is open to any future per-server setting without further schema changes.
+
+**Decision / Finding**
+When a plugin needs generic per-entity key-value settings, use the WP-canonical meta table shape:
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `meta_id` | BIGINT UNSIGNED AUTO_INCREMENT PK | Primary key |
+| `{entity}_id` | BIGINT UNSIGNED NOT NULL DEFAULT 0 | The owning entity's PK (e.g. `server_id`) |
+| `meta_key` | VARCHAR(255) NULL | Keys are namespaced; underscore prefix for internal |
+| `meta_value` | LONGTEXT NULL | Scalar OR JSON-encoded — consumer's choice |
+
+**Indexes**: PK(`meta_id`) + KEY(`{entity}_id`) + KEY(`meta_key(191)`) — 191 × 4 bytes = 764 < 767 InnoDB limit under utf8mb4. **NO `UNIQUE({entity}_id, meta_key)`** — matches wp_postmeta convention; single-value semantic enforced in application code via `Query::update_meta()` SELECT existence check + INSERT-or-UPDATE.
+
+**Tradeoffs / Prevention**
+- Gained: One table for N present + future per-entity settings; operator inspection via `SHOW CREATE TABLE` matches familiar wp_postmeta shape; no schema drift as new features add settings; JSON blob values allow atomic multi-key updates
+- Reconsider: If a specific per-entity setting has strong relational needs (JOINs, foreign-key cascades, per-value indexes), a dedicated table is still the right call — meta pattern is for opaque key-value bags, not relational data
+- Reconsider: Storing JSON in `meta_value` loses SQL-level querying on the encoded fields — application code has to decode + filter in PHP. Fine for small blobs (<1KB); reconsider at larger scales
+
+Canonical example: `includes/Database/MCPServerMeta/{Schema,Table,Row,Query}.php` shipped in F037 Pivot B (commit `8d55d21`).
+
+Related: `DEC-TOOL-SELECTION-PRESENCE-MODEL` (alternative storage shape for boolean sets); `D28` (BerlinDB `$upgrades` reconciliation pattern).
