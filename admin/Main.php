@@ -134,6 +134,10 @@ class Main {
 		// Scoped to the Tools tab only — same guard shape as F015/F017.
 		$this->maybe_enqueue_tools_app();
 		$this->maybe_enqueue_ai_connectors_app();
+
+		// F037 Embeds — enqueue is self-registered by the tab class itself
+		// (EmbedsTab::register() wires it on admin_enqueue_scripts). Nothing
+		// to do here. See AbstractReactMountServerTab for the pattern.
 	}
 
 	/**
@@ -421,4 +425,5 @@ class Main {
 			)
 		);
 	}
+
 }

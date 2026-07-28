@@ -114,6 +114,18 @@
         <testsuite name="discovery">
             <directory>tests/phpunit/Public/Discovery</directory>
         </testsuite>
+
+        <!--
+            Embeds (Feature 037): tests for includes/Embeds/,
+            admin/Partials/ServerTabs/EmbedsTab.php, and
+            public/Renderers/EmbedBlock/EmbedBlockRenderer.php. Requires WP
+            for BerlinDB Query, WP options, shortcode API, F015 access
+            control wrapper (optional integration) — use tests/bootstrap-wp.php
+            per A18.
+        -->
+        <testsuite name="embeds">
+            <directory>tests/phpunit/Embeds</directory>
+        </testsuite>
     </testsuites>
 
     <source>

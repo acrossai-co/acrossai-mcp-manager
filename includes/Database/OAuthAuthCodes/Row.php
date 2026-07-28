@@ -33,7 +33,7 @@ class Row extends \BerlinDB\Database\Kern\Row {
 	 */
 	public function __construct( $item ) {
 		parent::__construct( $item );
-		$this->id        = (int) $this->id;
+		$this->id = (int) $this->id;
 		// F032 — B18 defensive cast. Post-migration invariant: server_id is NEVER NULL.
 		$this->server_id = (int) $this->server_id;
 		$this->user_id   = (int) $this->user_id;

@@ -139,6 +139,13 @@ class Schema extends \BerlinDB\Database\Kern\Schema {
 			'default' => 0,
 		),
 
+		// F037 — the `embeds_enabled` column was briefly added by
+		// upgrade_to_1_1_3 during initial development but retracted
+		// per user redesign 2026-07-27: all F037 state now lives in
+		// the meta table `wp_acrossai_mcp_servers_meta` under meta_key
+		// `_embeds_enabled` (WP-canonical meta pattern). Column is
+		// DROPped by upgrade_to_1_1_4 on the next admin_init.
+
 		// Audit timestamp — no explicit default; BerlinDB uses '0000-00-00 00:00:00'
 		// for datetime columns. 'created' flag handles auto-timestamping at the
 		// application layer (CURRENT_TIMESTAMP quoted by BerlinDB is invalid DDL).

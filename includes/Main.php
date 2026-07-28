@@ -221,6 +221,15 @@ final class Main {
 		// Backs the AI Connectors "Approved Users" panel + the OAuth authorize
 		// require_admin_approval gate. Co-commit invariant with Activator maybe_upgrade().
 		\AcrossAI_MCP_Manager\Includes\Database\ConnectorApprovedUsers\Table::instance();
+		// F037 — MCPServerMeta per-request boot per DEC-BERLINDB-TABLE-REQUEST-BOOT.
+		// Generic per-server key-value meta table (WP-canonical shape:
+		// meta_id, server_id, meta_key, meta_value). Backs F037's Embeds tab
+		// (`_embeds_enabled` + `_embeds_clients` meta_keys) + reusable for any
+		// future per-server key-value setting. Replaces the retired
+		// `wp_acrossai_mcp_server_embed_transports` junction table +
+		// `wp_acrossai_mcp_servers.embeds_enabled` column (both DROPped by
+		// MCPServer\Table::upgrade_to_1_1_4).
+		\AcrossAI_MCP_Manager\Includes\Database\MCPServerMeta\Table::instance();
 	}
 
 	/**
@@ -270,6 +279,8 @@ final class Main {
 		\AcrossAI_MCP_Manager\Includes\Database\OAuthTokens\Table::instance()->maybe_upgrade();
 		\AcrossAI_MCP_Manager\Includes\Database\OAuthAuthCodes\Table::instance()->maybe_upgrade();
 		\AcrossAI_MCP_Manager\Includes\Database\ConnectorApprovedUsers\Table::instance()->maybe_upgrade();
+		// F037 — reconcile MCPServerMeta schema on admin_init per D28.
+		\AcrossAI_MCP_Manager\Includes\Database\MCPServerMeta\Table::instance()->maybe_upgrade();
 
 		// F032 aggregate observability signal — fires exactly once per reconcile pass iff
 		// any of the three OAuth Tables purged legacy rows this pass. Coordinator lives
@@ -540,6 +551,15 @@ final class Main {
 		$tools_rest = \AcrossAI_MCP_Manager\Includes\REST\ToolsController::instance();
 		$this->loader->add_action( 'rest_api_init', $tools_rest, 'register_routes' );
 
+		/**
+		 * Feature 037 — Embeds tab self-registration. `EmbedsTab::register()`
+		 * wires its own `admin_enqueue_scripts` + `rest_api_init` hooks
+		 * (per `AbstractReactMountServerTab`). Same shape any third-party
+		 * companion plugin uses: extend the base + call `register()` from
+		 * the plugin's boot code. Idempotent — safe against double-calls.
+		 */
+		\AcrossAI_MCP_Manager\Admin\Partials\ServerTabs\EmbedsTab::register();
+
 		$tool_exposure_gate = \AcrossAI_MCP_Manager\Includes\MCP\ToolExposureGate::instance();
 		$this->loader->add_filter( 'mcp_adapter_pre_tool_call', $tool_exposure_gate, 'gate_tool_call_by_curation', 30, 4 );
 
@@ -725,6 +745,60 @@ final class Main {
 		 */
 		$bearer_challenge = \AcrossAI_MCP_Manager\Includes\OAuth\BearerChallengeHeader::instance();
 		$this->loader->add_filter( 'rest_post_dispatch', $bearer_challenge, 'add_bearer_challenge', 10, 3 );
+
+		/**
+		 * Feature 037 — [acrossai_mcp_embed] shortcode registration.
+		 *
+		 * Per-server gated frontend renderer for F035 connection-method DTOs.
+		 * Gate cascade in EmbedBlockRenderer::render_shortcode(): master
+		 * toggle → per-transport toggle → F015 access control (fail-open per
+		 * D19). All wiring stays here per A1 — EmbedBlockRenderer has zero
+		 * add_shortcode calls (SC-005 grep gate).
+		 */
+		$embed_renderer = \AcrossAI_MCP_Manager\Public\Renderers\EmbedBlock\EmbedBlockRenderer::instance();
+		$this->loader->add_action(
+			'init',
+			$embed_renderer,
+			'register_shortcode'
+		);
+
+		/**
+		 * Feature 037 — FR-017 server-deletion cleanup listener.
+		 *
+		 * When a server row is deleted (via Settings::handle_actions()
+		 * `action=delete`), prune the corresponding rows from
+		 * `wp_acrossai_mcp_server_embed_transports`. Fires as a listener
+		 * on the `acrossai_mcp_server_deleted` action defined in
+		 * Settings::handle_actions().
+		 *
+		 * Wired via a closure per D17 A1-transitivity — the Loader-wired
+		 * action fire happens here; the cleanup logic sits inline as a
+		 * one-line delegation to the Query class.
+		 */
+		$this->loader->add_action(
+			'acrossai_mcp_server_deleted',
+			$this,
+			'cleanup_embed_transports_on_server_delete',
+			10
+		);
+	}
+
+	/**
+	 * F037 FR-017 — prune meta rows for a deleted server. Called by the
+	 * `acrossai_mcp_server_deleted` listener wired in `define_public_hooks()`.
+	 * Post-refactor: cleans up EVERY meta row for the server (not just
+	 * F037's `_embeds_enabled` + `_embeds_clients` rows) — the meta table
+	 * is generic per-server storage; server deletion should orphan zero
+	 * meta rows.
+	 *
+	 * @param int $server_id Deleted server primary key.
+	 * @return void
+	 */
+	public function cleanup_embed_transports_on_server_delete( int $server_id ): void {
+		if ( $server_id <= 0 ) {
+			return;
+		}
+		\AcrossAI_MCP_Manager\Includes\Database\MCPServerMeta\Query::delete_by_server_id( $server_id );
 	}
 
 	/**
