@@ -491,9 +491,24 @@ abstract class AbstractReactMountServerTab extends AbstractServerTab {
 	}
 
 	/**
-	 * Look up the MCP server row by id. Returns `WP_Error(404)` when
-	 * missing. Kept `protected` so subclasses can call it directly if
-	 * their state methods need server metadata beyond the id.
+	 * Look up the target server row by id. Returns `WP_Error(404)` when
+	 * missing. `protected` and non-`final` so subclasses can override —
+	 * a third-party companion plugin whose "server" concept is not backed
+	 * by `AcrossAI_MCP_Manager\Includes\Database\MCPServer\Query` can
+	 * substitute its own lookup (e.g. `get_post()`, an external service
+	 * fetch, a custom BerlinDB module).
+	 *
+	 * The default implementation is coupled to the host plugin's
+	 * `MCPServer\Query` for convenience of built-in tabs shipped inside
+	 * `acrossai-mcp-manager` itself. Third-party subclasses SHOULD
+	 * override when their data layer differs.
+	 *
+	 * Contract for overrides:
+	 *   - Return an assoc array containing at minimum an `id` key on
+	 *     success.
+	 *   - Return `WP_Error` with `['status' => 404]` on miss.
+	 *   - Fire NO side effects (this method may be called on any REST
+	 *     request; must be idempotent + safe).
 	 *
 	 * @param int $server_id Server PK.
 	 * @return array<string, mixed>|WP_Error
@@ -512,8 +527,7 @@ abstract class AbstractReactMountServerTab extends AbstractServerTab {
 				array( 'status' => 404 )
 			);
 		}
-		$row = $rows[0];
-		return is_object( $row ) ? (array) $row : (array) $row;
+		return (array) $rows[0];
 	}
 
 	// ================================================================

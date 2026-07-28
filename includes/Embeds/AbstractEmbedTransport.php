@@ -449,4 +449,52 @@ abstract class AbstractEmbedTransport {
 		self::$enabled_cache = array();
 		self::$meta_map      = null;
 	}
+
+	/**
+	 * Fire an action with per-listener isolation — a listener that throws
+	 * MUST NOT abort subsequent listeners in the same hook. Full R3
+	 * compliance (research.md R3: "fire AFTER the DB commit, INSIDE a
+	 * try/catch **per-listener** — one broken listener MUST NOT block
+	 * others OR roll back the DB write").
+	 *
+	 * WordPress's native `do_action()` iterates listeners and re-raises
+	 * the first thrown exception, causing subsequent listeners to be
+	 * silently skipped. This helper iterates `$wp_filter[$hook]->callbacks`
+	 * manually and wraps each `call_user_func_array()` in try/catch, so
+	 * one broken audit-log listener cannot mask a second listener's
+	 * observation of the same event.
+	 *
+	 * Callers pass the same args they'd pass to `do_action()`; helper
+	 * respects listener priority ordering. If no listeners are registered
+	 * for the hook, this is a no-op (matches `do_action()`'s behavior).
+	 *
+	 * @param string $hook  Action hook name.
+	 * @param mixed  ...$args Arguments to pass to each listener.
+	 * @return void
+	 */
+	public static function fire_action_isolated( string $hook, ...$args ): void {
+		global $wp_filter;
+		if ( ! isset( $wp_filter[ $hook ] ) ) {
+			return;
+		}
+		$callbacks = $wp_filter[ $hook ]->callbacks;
+		if ( empty( $callbacks ) ) {
+			return;
+		}
+		// Priority-ordered iteration (matches do_action semantics).
+		ksort( $callbacks, SORT_NUMERIC );
+		foreach ( $callbacks as $callback_group ) {
+			foreach ( $callback_group as $callback ) {
+				if ( ! isset( $callback['function'] ) || ! is_callable( $callback['function'] ) ) {
+					continue;
+				}
+				try {
+					call_user_func_array( $callback['function'], $args );
+				} catch ( \Throwable $e ) {
+					// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Fail-forward per R3.
+					error_log( sprintf( 'F037 %s listener threw: %s', $hook, $e->getMessage() ) );
+				}
+			}
+		}
+	}
 }

@@ -322,6 +322,42 @@ final class EmbedsTabRestTest extends WP_UnitTestCase {
 		);
 	}
 
+	public function test_throwing_listener_does_not_block_later_listeners(): void {
+		wp_set_current_user( $this->admin_user_id );
+
+		$fires_after_throw = 0;
+
+		add_action(
+			'acrossai_mcp_embed_master_toggled',
+			static function (): void {
+				throw new \RuntimeException( 'Listener #1 breaks.' );
+			},
+			10
+		);
+		add_action(
+			'acrossai_mcp_embed_master_toggled',
+			static function () use ( &$fires_after_throw ): void {
+				++$fires_after_throw;
+			},
+			20 // Later priority — MUST still fire despite priority-10 throwing (R3 per-listener isolation).
+		);
+
+		$request = new WP_REST_Request( WP_REST_Server::CREATABLE, '/acrossai-mcp-manager/v1/servers/' . $this->server_id . '/embeds' );
+		$request->set_body_params(
+			array(
+				'master' => true,
+				'items'  => array(),
+			)
+		);
+		rest_do_request( $request );
+
+		$this->assertSame(
+			1,
+			$fires_after_throw,
+			'R3 per-listener isolation: listener at priority 20 MUST fire despite priority-10 listener throwing.'
+		);
+	}
+
 	// ── Missing / invalid server ────────────────────────────────────────
 
 	public function test_get_missing_server_returns_404(): void {

@@ -249,18 +249,15 @@ final class EmbedsTab extends AbstractReactMountServerTab {
 				ServerMetaQuery::delete_meta( $server_id, AbstractEmbedTransport::META_KEY_MASTER );
 			}
 
-			// FR-024 observability — R3 fail-forward per-listener try/catch.
-			try {
-				do_action(
-					'acrossai_mcp_embed_master_toggled',
-					$server_id,
-					$new_master,
-					get_current_user_id()
-				);
-			} catch ( \Throwable $e ) {
-				// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Fail-forward per R3.
-				error_log( 'F037 acrossai_mcp_embed_master_toggled listener threw: ' . $e->getMessage() );
-			}
+			// FR-024 observability — R3 per-listener isolation. A single
+			// broken listener MUST NOT abort subsequent listeners on the
+			// same hook OR roll back the DB write above.
+			AbstractEmbedTransport::fire_action_isolated(
+				'acrossai_mcp_embed_master_toggled',
+				$server_id,
+				$new_master,
+				get_current_user_id()
+			);
 		}
 
 		// ── Per-DTO sub-toggles ────────────────────────────────────
@@ -321,19 +318,15 @@ final class EmbedsTab extends AbstractReactMountServerTab {
 					continue;
 				}
 
-				try {
-					do_action(
-						'acrossai_mcp_embed_transport_toggled',
-						$server_id,
-						$transport_key,
-						$dto_slug,
-						$new_enabled,
-						get_current_user_id()
-					);
-				} catch ( \Throwable $e ) {
-					// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Fail-forward per R3.
-					error_log( 'F037 acrossai_mcp_embed_transport_toggled listener threw: ' . $e->getMessage() );
-				}
+				// FR-024 observability — R3 per-listener isolation.
+				AbstractEmbedTransport::fire_action_isolated(
+					'acrossai_mcp_embed_transport_toggled',
+					$server_id,
+					$transport_key,
+					$dto_slug,
+					$new_enabled,
+					get_current_user_id()
+				);
 			}
 		}
 
