@@ -662,14 +662,26 @@ final class UserServersBlock extends AbstractUserServersRenderer {
 			$is_first_server = false;
 		}
 
-		$description = (string) $client['description'];
-		$out        .= $this->render_steps( $description, false );
+		$steps = array(
+			__( 'Generate an Application Password (Users → Profile → Application Passwords).', 'acrossai-mcp-manager' ),
+			__( 'Copy the command above and run it in your terminal.', 'acrossai-mcp-manager' ),
+			__( 'Paste the password when prompted — it\'s stored in your OS keychain, not a config file.', 'acrossai-mcp-manager' ),
+			__( 'Leave it running, then point any MCP-capable client at the local bridge it prints.', 'acrossai-mcp-manager' ),
+		);
+
+		$out .= $this->render_steps_from_array( $steps, false );
 
 		return $out;
 	}
 
 	/**
-	 * Render AI connector body: OAuth notice + steps.
+	 * Render AI connector body: OAuth notice + generic four-step
+	 * connect flow. Steps are hardcoded (matching the v3 design brief)
+	 * because F035 AI-connector DTOs do NOT carry a step list — the
+	 * connector's `AbstractConnectorProfile::get_setup_instructions()`
+	 * returns HTML that includes admin-only OAuth `client_id` /
+	 * `client_secret` references, which are not applicable to the
+	 * frontend user browser-OAuth flow.
 	 *
 	 * @since 0.1.11
 	 *
@@ -677,19 +689,35 @@ final class UserServersBlock extends AbstractUserServersRenderer {
 	 * @return string
 	 */
 	private function render_ai_connector_body_content( array $client ): string {
+		$provider = (string) $client['name'];
+
 		$out  = '<div class="acrossai-mcp-servers__oauth-notice">';
 		$out .= '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.8"/><path d="M12 11v5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="12" cy="7.7" r="1.05" fill="currentColor"/></svg>';
 		$out .= '<span>' . esc_html(
 			sprintf(
 				/* translators: %s — connector name (e.g. "ChatGPT", "Claude", "Grok"). */
 				__( 'No local config to paste. %s authorizes over OAuth on the provider\'s side — you\'ll be redirected here to approve access, so your Application Password never leaves WordPress.', 'acrossai-mcp-manager' ),
-				(string) $client['name']
+				$provider
 			)
 		) . '</span>';
 		$out .= '</div>';
 
-		$description = (string) $client['description'];
-		$out        .= $this->render_steps( $description, false );
+		$steps = array(
+			sprintf(
+				/* translators: %s — connector provider name (e.g. "ChatGPT"). */
+				__( 'Open %s → Settings → Connectors → Add MCP server.', 'acrossai-mcp-manager' ),
+				$provider
+			),
+			__( 'Paste the server URL shown above.', 'acrossai-mcp-manager' ),
+			__( 'Submit — you\'ll be redirected here to sign in and authorize.', 'acrossai-mcp-manager' ),
+			sprintf(
+				/* translators: %s — connector provider name (e.g. "ChatGPT"). */
+				__( 'Approve the request. %s now lists this site\'s tools.', 'acrossai-mcp-manager' ),
+				$provider
+			),
+		);
+
+		$out .= $this->render_steps_from_array( $steps, false );
 
 		return $out;
 	}
@@ -731,7 +759,29 @@ final class UserServersBlock extends AbstractUserServersRenderer {
 		}
 		$parts = array_map( 'trim', $split );
 		$parts = array_values( array_filter( $parts, static fn( string $p ): bool => '' !== $p ) );
-		if ( empty( $parts ) ) {
+
+		return $this->render_steps_from_array(
+			array_map( static fn( string $p ): string => rtrim( $p, '.' ), $parts ),
+			$with_replace_pill
+		);
+	}
+
+	/**
+	 * Render a numbered steps grid from a pre-split array of step
+	 * strings. Used when the caller needs precise control over step
+	 * boundaries — e.g. AI-connector generic steps whose text
+	 * legitimately contains inline `→` navigation arrows that a
+	 * blanket ` → ` split would incorrectly break apart.
+	 *
+	 * @since 0.1.11
+	 *
+	 * @param array<int, string> $steps             Ordered step strings.
+	 * @param bool               $with_replace_pill Whether to render the amber "replace" pill.
+	 * @return string
+	 */
+	private function render_steps_from_array( array $steps, bool $with_replace_pill ): string {
+		$steps = array_values( array_filter( $steps, static fn( string $s ): bool => '' !== $s ) );
+		if ( empty( $steps ) ) {
 			return '';
 		}
 
@@ -751,10 +801,10 @@ final class UserServersBlock extends AbstractUserServersRenderer {
 		$out .= '</div>';
 		$out .= '<div class="acrossai-mcp-servers__steps-grid">';
 		$i    = 1;
-		foreach ( $parts as $step ) {
+		foreach ( $steps as $step ) {
 			$out .= '<div class="acrossai-mcp-servers__step">';
 			$out .= '<span class="acrossai-mcp-servers__step-num">' . esc_html( (string) $i ) . '</span>';
-			$out .= '<span class="acrossai-mcp-servers__step-text">' . esc_html( rtrim( $step, '.' ) ) . '</span>';
+			$out .= '<span class="acrossai-mcp-servers__step-text">' . esc_html( $step ) . '</span>';
 			$out .= '</div>';
 			++$i;
 		}
