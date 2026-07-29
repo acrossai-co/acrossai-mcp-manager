@@ -118,10 +118,19 @@ abstract class AbstractUserServersRenderer {
 		}
 
 		// Step 2 — enumerate enabled servers via canonical Query (F011).
+		// `number => 100` matches the precedent in
+		// `ClientRegistrationController.php:337,629` for "enumerate every
+		// server row" scenarios. BerlinDB's Query does NOT honor `-1` as
+		// unlimited the way WP_Query does — passing `-1` silently
+		// truncates to a single row (or zero, depending on the driver).
+		// 100 is a defensive upper bound; realistic MCP-server fleets
+		// are under 20. Consumers with pathologically large fleets can
+		// override the payload via the
+		// `acrossai_mcp_user_accessible_servers` filter.
 		$rows = MCPServerQuery::instance()->query(
 			array(
 				'is_enabled' => 1,
-				'number'     => -1,
+				'number'     => 100,
 			)
 		);
 		if ( empty( $rows ) ) {
