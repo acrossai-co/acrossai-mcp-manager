@@ -89,15 +89,16 @@ final class UserServersBlock extends AbstractUserServersRenderer {
 .acrossai-mcp-servers__transport-label{margin:0 0 0.35em 0;font-size:0.95em;}
 .acrossai-mcp-servers__dtos{list-style:none;padding:0;margin:0;display:flex;flex-wrap:wrap;gap:0.5em;}
 .acrossai-mcp-servers__dto{display:inline-flex;align-items:center;gap:0.35em;padding:0.25em 0.6em;border:1px solid currentColor;border-radius:999px;font-size:0.9em;}
+.acrossai-mcp-servers__dto--open{display:flex;flex-direction:column;align-items:stretch;flex:1 1 100%;border-radius:4px;padding:0.75em 1em;gap:0.35em;}
+.acrossai-mcp-servers__dto-head{display:flex;align-items:center;gap:0.35em;}
+.acrossai-mcp-servers__dto--open .acrossai-mcp-servers__dto-head{font-weight:600;font-size:1em;margin-bottom:0.25em;}
 .acrossai-mcp-servers__icon{display:inline-block;width:1.1em;height:1.1em;}
 .acrossai-mcp-servers__icon img{max-width:100%;height:auto;display:block;}
-.acrossai-mcp-servers__dto-details{margin-top:0.75em;border-top:1px dashed currentColor;padding-top:0.75em;font-size:0.9em;display:none;}
+.acrossai-mcp-servers__dto-details{margin-top:0.5em;border-top:1px dashed currentColor;padding-top:0.75em;font-size:0.9em;display:none;}
 .acrossai-mcp-servers__dto--open .acrossai-mcp-servers__dto-details{display:block;}
-.acrossai-mcp-servers__dto{flex-direction:column;align-items:stretch;}
-.acrossai-mcp-servers__dto-head{display:flex;align-items:center;gap:0.35em;cursor:pointer;}
 .acrossai-mcp-servers__meta-row{margin:0.35em 0;}
 .acrossai-mcp-servers__meta-label{font-weight:600;margin-right:0.35em;}
-.acrossai-mcp-servers__snippet{background:rgba(0,0,0,0.06);padding:0.75em;border-radius:4px;overflow-x:auto;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:0.85em;white-space:pre;margin:0.35em 0;}
+.acrossai-mcp-servers__snippet{background:rgba(0,0,0,0.06);padding:0.75em;border-radius:4px;overflow-x:auto;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:0.85em;white-space:pre;margin:0.5em 0;max-width:100%;}
 .acrossai-mcp-servers__instructions{margin:0.5em 0 0 0;opacity:0.85;}
 .acrossai-mcp-servers__auth-notice{margin:0.5em 0;padding:0.5em 0.75em;border-left:3px solid currentColor;font-size:0.85em;opacity:0.9;}
 </style>
