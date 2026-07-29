@@ -31,6 +31,8 @@ declare( strict_types = 1 );
 
 namespace AcrossAI_MCP_Manager\Public\Renderers\UserServers;
 
+use AcrossAI_MCP_Manager\Includes\MCPClients\AbstractMCPClient;
+
 defined( 'ABSPATH' ) || exit;
 
 final class UserServersBlock extends AbstractUserServersRenderer {
@@ -89,6 +91,15 @@ final class UserServersBlock extends AbstractUserServersRenderer {
 .acrossai-mcp-servers__dto{display:inline-flex;align-items:center;gap:0.35em;padding:0.25em 0.6em;border:1px solid currentColor;border-radius:999px;font-size:0.9em;}
 .acrossai-mcp-servers__icon{display:inline-block;width:1.1em;height:1.1em;}
 .acrossai-mcp-servers__icon img{max-width:100%;height:auto;display:block;}
+.acrossai-mcp-servers__dto-details{margin-top:0.75em;border-top:1px dashed currentColor;padding-top:0.75em;font-size:0.9em;display:none;}
+.acrossai-mcp-servers__dto--open .acrossai-mcp-servers__dto-details{display:block;}
+.acrossai-mcp-servers__dto{flex-direction:column;align-items:stretch;}
+.acrossai-mcp-servers__dto-head{display:flex;align-items:center;gap:0.35em;cursor:pointer;}
+.acrossai-mcp-servers__meta-row{margin:0.35em 0;}
+.acrossai-mcp-servers__meta-label{font-weight:600;margin-right:0.35em;}
+.acrossai-mcp-servers__snippet{background:rgba(0,0,0,0.06);padding:0.75em;border-radius:4px;overflow-x:auto;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:0.85em;white-space:pre;margin:0.35em 0;}
+.acrossai-mcp-servers__instructions{margin:0.5em 0 0 0;opacity:0.85;}
+.acrossai-mcp-servers__auth-notice{margin:0.5em 0;padding:0.5em 0.75em;border-left:3px solid currentColor;font-size:0.85em;opacity:0.9;}
 </style>
 CSS;
 
@@ -156,9 +167,11 @@ CSS;
 		// Step 1 — normalize attributes.
 		$atts = shortcode_atts(
 			array(
-				'heading'          => '',
-				'show_description' => '1',
-				'empty_message'    => __( 'You do not have access to any MCP server yet.', 'acrossai-mcp-manager' ),
+				'heading'           => '',
+				'show_description'  => '1',
+				'show_config'       => '1',
+				'show_instructions' => '1',
+				'empty_message'     => __( 'You do not have access to any MCP server yet.', 'acrossai-mcp-manager' ),
 			),
 			is_array( $atts_raw ) ? $atts_raw : array(),
 			'acrossai_mcp_servers'
@@ -223,9 +236,11 @@ CSS;
 	 * @return string
 	 */
 	private function render_server_list( array $data, array $atts ): string {
-		$out              = '<div class="acrossai-mcp-servers">';
-		$heading          = (string) $atts['heading'];
-		$show_description = '1' === (string) $atts['show_description'];
+		$out               = '<div class="acrossai-mcp-servers">';
+		$heading           = (string) $atts['heading'];
+		$show_description  = '1' === (string) $atts['show_description'];
+		$show_config       = '1' === (string) $atts['show_config'];
+		$show_instructions = '1' === (string) $atts['show_instructions'];
 
 		if ( '' !== $heading ) {
 			$out .= '<h2 class="acrossai-mcp-servers__heading">' . esc_html( $heading ) . '</h2>';
@@ -236,7 +251,7 @@ CSS;
 			if ( ! is_array( $server ) ) {
 				continue;
 			}
-			$out .= $this->render_server_item( $server, $show_description );
+			$out .= $this->render_server_item( $server, $show_description, $show_config, $show_instructions );
 		}
 		$out .= '</ul>';
 		$out .= '</div>';
@@ -249,15 +264,18 @@ CSS;
 	 *
 	 * @since 0.1.11
 	 *
-	 * @param array<string, mixed> $server           Server projection.
-	 * @param bool                 $show_description Whether to render the description paragraph.
+	 * @param array<string, mixed> $server            Server projection.
+	 * @param bool                 $show_description  Whether to render the description paragraph.
+	 * @param bool                 $show_config       Whether to render per-DTO config snippets + config file + top-level key.
+	 * @param bool                 $show_instructions Whether to render per-DTO instructions text.
 	 * @return string
 	 */
-	private function render_server_item( array $server, bool $show_description ): string {
+	private function render_server_item( array $server, bool $show_description, bool $show_config, bool $show_instructions ): string {
 		$server_id          = isset( $server['server_id'] ) ? (int) $server['server_id'] : 0;
 		$server_slug        = isset( $server['server_slug'] ) && is_string( $server['server_slug'] ) ? $server['server_slug'] : '';
 		$server_name        = isset( $server['server_name'] ) && is_string( $server['server_name'] ) ? $server['server_name'] : '';
 		$server_description = isset( $server['description'] ) && is_string( $server['description'] ) ? $server['description'] : '';
+		$server_url         = isset( $server['server_url'] ) && is_string( $server['server_url'] ) ? $server['server_url'] : '';
 		$transports         = isset( $server['transports'] ) && is_array( $server['transports'] ) ? $server['transports'] : array();
 
 		$out  = '<li class="acrossai-mcp-servers__server"';
@@ -274,7 +292,7 @@ CSS;
 			if ( ! is_array( $transport ) ) {
 				continue;
 			}
-			$out .= $this->render_transport_section( $transport );
+			$out .= $this->render_transport_section( $transport, $server_slug, $server_url, $show_config, $show_instructions );
 		}
 		$out .= '</div>';
 		$out .= '</li>';
@@ -287,10 +305,14 @@ CSS;
 	 *
 	 * @since 0.1.11
 	 *
-	 * @param array<string, mixed> $transport Transport projection.
+	 * @param array<string, mixed> $transport         Transport projection.
+	 * @param string               $server_slug       Server slug (needed for NPM `--server=%s` substitution).
+	 * @param string               $server_url        Full REST URL for the server.
+	 * @param bool                 $show_config       Whether to render per-DTO config snippets.
+	 * @param bool                 $show_instructions Whether to render per-DTO instructions text.
 	 * @return string
 	 */
-	private function render_transport_section( array $transport ): string {
+	private function render_transport_section( array $transport, string $server_slug, string $server_url, bool $show_config, bool $show_instructions ): string {
 		$key   = isset( $transport['key'] ) && is_string( $transport['key'] ) ? $transport['key'] : '';
 		$label = isset( $transport['label'] ) && is_string( $transport['label'] ) ? $transport['label'] : '';
 		$dtos  = isset( $transport['dtos'] ) && is_array( $transport['dtos'] ) ? $transport['dtos'] : array();
@@ -306,7 +328,7 @@ CSS;
 			if ( ! is_array( $dto ) ) {
 				continue;
 			}
-			$out .= $this->render_dto_item( $dto );
+			$out .= $this->render_dto_item( $dto, $key, $server_slug, $server_url, $show_config, $show_instructions );
 		}
 		$out .= '</ul>';
 		$out .= '</section>';
@@ -317,17 +339,51 @@ CSS;
 	/**
 	 * Render a single DTO `<li>`.
 	 *
+	 * When `$show_config` is TRUE and the DTO category is known
+	 * (`client`, `npm`, `ai_connector`), the render includes per-DTO
+	 * "how to connect" content composed via F034/F035 primitives —
+	 * never a bespoke re-implementation:
+	 *
+	 *  - `client`: instantiate the `AbstractMCPClient` subclass named in
+	 *    `meta.class`, call `get_config_file()`, `get_top_level_key()`,
+	 *    `get_config_snippet( $server_url, EMPTY_TOKEN_PLACEHOLDER )`,
+	 *    `get_instructions()`. Render as an inline `<pre>` block.
+	 *  - `npm`: substitute `%s` placeholders in `meta.command_template`
+	 *    with `home_url()` and `$server_slug`, render as `<pre>`.
+	 *  - `ai_connector`: informational text only (connection happens on
+	 *    the AI provider side via OAuth; no local paste-in config).
+	 *
+	 * When `$show_config` is FALSE (opt-out), only the icon + name are
+	 * rendered — matches the pre-FR-029 shape for callers that just want
+	 * a compact list.
+	 *
 	 * @since 0.1.11
 	 *
-	 * @param array<string, mixed> $dto DTO projection.
+	 * @param array<string, mixed> $dto               DTO projection.
+	 * @param string               $transport_key     `client` | `npm` | `ai_connector` | third-party.
+	 * @param string               $server_slug       Server slug (needed for NPM `--server=%s`).
+	 * @param string               $server_url        Full REST URL for the server.
+	 * @param bool                 $show_config       Whether to render per-DTO config content.
+	 * @param bool                 $show_instructions Whether to render per-DTO instructions text.
 	 * @return string
 	 */
-	private function render_dto_item( array $dto ): string {
+	private function render_dto_item(
+		array $dto,
+		string $transport_key,
+		string $server_slug,
+		string $server_url,
+		bool $show_config,
+		bool $show_instructions
+	): string {
 		$slug = isset( $dto['slug'] ) && is_string( $dto['slug'] ) ? $dto['slug'] : '';
 		$name = isset( $dto['name'] ) && is_string( $dto['name'] ) ? $dto['name'] : '';
 		$icon = isset( $dto['icon'] ) && is_string( $dto['icon'] ) ? $dto['icon'] : '';
 
-		$out = '<li class="acrossai-mcp-servers__dto" data-slug="' . esc_attr( $slug ) . '">';
+		$has_details_block = $show_config && '' !== $server_url;
+		$li_class          = 'acrossai-mcp-servers__dto' . ( $has_details_block ? ' acrossai-mcp-servers__dto--open' : '' );
+
+		$out  = '<li class="' . esc_attr( $li_class ) . '" data-slug="' . esc_attr( $slug ) . '" data-category="' . esc_attr( $transport_key ) . '">';
+		$out .= '<span class="acrossai-mcp-servers__dto-head">';
 
 		if ( '' !== $icon ) {
 			if ( self::icon_is_url( $icon ) ) {
@@ -338,7 +394,178 @@ CSS;
 		}
 
 		$out .= '<span class="acrossai-mcp-servers__name">' . esc_html( $name ) . '</span>';
+		$out .= '</span>';
+
+		if ( $has_details_block ) {
+			$out .= $this->render_dto_details( $dto, $transport_key, $server_slug, $server_url, $show_instructions );
+		}
+
 		$out .= '</li>';
+
+		return $out;
+	}
+
+	/**
+	 * Render the per-DTO "how to connect" block for the three built-in
+	 * transport categories. Delegates every string-generation call to
+	 * shipped upstream helpers (F034 `AbstractMCPClient` for `client`,
+	 * F035 DTO `meta.command_template` for `npm`, `AbstractConnectorProfile`
+	 * metadata for `ai_connector`) — never re-implements the format.
+	 *
+	 * @since 0.1.11
+	 *
+	 * @param array<string, mixed> $dto               DTO projection.
+	 * @param string               $transport_key     Category machine key.
+	 * @param string               $server_slug       Server slug for NPM substitution.
+	 * @param string               $server_url        Full REST URL for the server.
+	 * @param bool                 $show_instructions Whether to render instructions text.
+	 * @return string
+	 */
+	private function render_dto_details(
+		array $dto,
+		string $transport_key,
+		string $server_slug,
+		string $server_url,
+		bool $show_instructions
+	): string {
+		switch ( $transport_key ) {
+			case 'client':
+				return $this->render_client_config( $dto, $server_url, $show_instructions );
+			case 'npm':
+				return $this->render_npm_config( $dto, $server_slug, $show_instructions );
+			case 'ai_connector':
+				return $this->render_ai_connector_info( $dto, $show_instructions );
+			default:
+				return '';
+		}
+	}
+
+	/**
+	 * Render the "how to connect" block for a `client`-category DTO.
+	 * Composes with F034 `AbstractMCPClient` metadata + `get_config_snippet()`
+	 * — never re-implements the config-format logic.
+	 *
+	 * @since 0.1.11
+	 *
+	 * @param array<string, mixed> $dto               F035 client DTO with `meta.class` FQCN.
+	 * @param string               $server_url        Full REST URL for the server.
+	 * @param bool                 $show_instructions Whether to render instructions text.
+	 * @return string
+	 */
+	private function render_client_config( array $dto, string $server_url, bool $show_instructions ): string {
+		$meta = isset( $dto['meta'] ) && is_array( $dto['meta'] ) ? $dto['meta'] : array();
+		$fqcn = isset( $meta['class'] ) && is_string( $meta['class'] ) ? $meta['class'] : '';
+
+		if ( '' === $fqcn || ! class_exists( $fqcn ) || ! is_subclass_of( $fqcn, AbstractMCPClient::class ) ) {
+			return ''; // Malformed DTO — silent no-render, matches F038's defensive posture.
+		}
+
+		/** @var AbstractMCPClient $client */
+		$client         = new $fqcn();
+		$config_file    = $client->get_config_file();
+		$top_level_key  = $client->get_top_level_key();
+		$snippet_raw    = $client->get_config_snippet( $server_url, AbstractMCPClient::EMPTY_TOKEN_PLACEHOLDER );
+		$instructions   = $show_instructions ? $client->get_instructions() : '';
+		$snippet_string = is_array( $snippet_raw )
+			? (string) wp_json_encode( $snippet_raw, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES )
+			: (string) $snippet_raw;
+
+		$out = '<div class="acrossai-mcp-servers__dto-details">';
+
+		if ( '' !== $config_file ) {
+			$out .= '<div class="acrossai-mcp-servers__meta-row">';
+			$out .= '<span class="acrossai-mcp-servers__meta-label">' . esc_html__( 'Config file', 'acrossai-mcp-manager' ) . '</span>';
+			$out .= '<code>' . esc_html( $config_file ) . '</code>';
+			$out .= '</div>';
+		}
+
+		if ( '' !== $top_level_key ) {
+			$out .= '<div class="acrossai-mcp-servers__meta-row">';
+			$out .= '<span class="acrossai-mcp-servers__meta-label">' . esc_html__( 'Top-level key', 'acrossai-mcp-manager' ) . '</span>';
+			$out .= '<code>' . esc_html( $top_level_key ) . '</code>';
+			$out .= '</div>';
+		}
+
+		if ( '' !== $snippet_string ) {
+			$out .= '<pre class="acrossai-mcp-servers__snippet">' . esc_html( $snippet_string ) . '</pre>';
+		}
+
+		$out .= '<p class="acrossai-mcp-servers__auth-notice">';
+		$out .= esc_html__( 'Replace the placeholder token with a WordPress Application Password generated from your profile (Users → Profile → Application Passwords).', 'acrossai-mcp-manager' );
+		$out .= '</p>';
+
+		if ( '' !== $instructions ) {
+			$out .= '<p class="acrossai-mcp-servers__instructions">' . esc_html( $instructions ) . '</p>';
+		}
+
+		$out .= '</div>';
+
+		return $out;
+	}
+
+	/**
+	 * Render the "how to connect" block for an `npm`-category DTO.
+	 * Substitutes the two `%s` placeholders in `meta.command_template`
+	 * with `home_url()` (site URL, per F035 DTO contract) and
+	 * `$server_slug`.
+	 *
+	 * @since 0.1.11
+	 *
+	 * @param array<string, mixed> $dto               F035 npm DTO with `meta.command_template`.
+	 * @param string               $server_slug       Server slug for the `--server=` argument.
+	 * @param bool                 $show_instructions Whether to render instructions text.
+	 * @return string
+	 */
+	private function render_npm_config( array $dto, string $server_slug, bool $show_instructions ): string {
+		$meta     = isset( $dto['meta'] ) && is_array( $dto['meta'] ) ? $dto['meta'] : array();
+		$template = isset( $meta['command_template'] ) && is_string( $meta['command_template'] ) ? $meta['command_template'] : '';
+
+		if ( '' === $template ) {
+			return '';
+		}
+
+		$command     = sprintf( $template, home_url(), $server_slug );
+		$description = isset( $dto['description'] ) && is_string( $dto['description'] ) ? $dto['description'] : '';
+
+		$out  = '<div class="acrossai-mcp-servers__dto-details">';
+		$out .= '<pre class="acrossai-mcp-servers__snippet">' . esc_html( $command ) . '</pre>';
+		$out .= '<p class="acrossai-mcp-servers__auth-notice">';
+		$out .= esc_html__( 'This bridge uses your WordPress Application Password over HTTP Basic auth. Generate one from your profile (Users → Profile → Application Passwords) before running the command.', 'acrossai-mcp-manager' );
+		$out .= '</p>';
+
+		if ( $show_instructions && '' !== $description ) {
+			$out .= '<p class="acrossai-mcp-servers__instructions">' . esc_html( $description ) . '</p>';
+		}
+
+		$out .= '</div>';
+
+		return $out;
+	}
+
+	/**
+	 * Render the "how to connect" block for an `ai_connector`-category DTO.
+	 * AI Connectors use OAuth on the AI provider's side — no local
+	 * paste-in config exists. Render a short informational block.
+	 *
+	 * @since 0.1.11
+	 *
+	 * @param array<string, mixed> $dto               F035 ai_connector DTO.
+	 * @param bool                 $show_instructions Whether to render instructions text.
+	 * @return string
+	 */
+	private function render_ai_connector_info( array $dto, bool $show_instructions ): string {
+		$description = isset( $dto['description'] ) && is_string( $dto['description'] ) ? $dto['description'] : '';
+
+		$out  = '<div class="acrossai-mcp-servers__dto-details">';
+		$out .= '<p class="acrossai-mcp-servers__auth-notice">';
+		$out .= esc_html__( 'This connector uses OAuth on the AI provider side. Add this WordPress site as an MCP server inside the provider\'s connector settings — you will be redirected here to authorize.', 'acrossai-mcp-manager' );
+		$out .= '</p>';
+
+		if ( $show_instructions && '' !== $description ) {
+			$out .= '<p class="acrossai-mcp-servers__instructions">' . esc_html( $description ) . '</p>';
+		}
+
+		$out .= '</div>';
 
 		return $out;
 	}

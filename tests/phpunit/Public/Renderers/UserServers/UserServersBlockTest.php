@@ -319,6 +319,72 @@ final class UserServersBlockTest extends WP_UnitTestCase {
 		$this->assertStringContainsString( 'class="acrossai-mcp-servers"', $out );
 	}
 
+	// ────────────────────────────────────────────────────────────────
+	// FR-029/030/031 — per-DTO "how to connect" block
+	// ────────────────────────────────────────────────────────────────
+
+	public function test_show_config_default_renders_client_snippet_and_config_file(): void {
+		$this->create_and_enable_server( 'srv-cfg', 'Server Cfg' );
+
+		$out = do_shortcode( '[acrossai_mcp_servers]' );
+
+		// Default show_config=1 → details block present.
+		$this->assertStringContainsString( 'acrossai-mcp-servers__dto-details', $out );
+		// Claude Desktop's config_file is documented in F034 metadata.
+		$this->assertStringContainsString( 'claude_desktop_config.json', $out );
+		// The config snippet includes the top-level key `mcpServers`.
+		$this->assertStringContainsString( 'mcpServers', $out );
+		// Auth notice about Application Password.
+		$this->assertStringContainsString( 'Application Password', $out );
+	}
+
+	public function test_show_config_zero_omits_details(): void {
+		$this->create_and_enable_server( 'srv-nocfg', 'Server NoCfg' );
+
+		$out = do_shortcode( '[acrossai_mcp_servers show_config="0"]' );
+
+		// Compact list — no details block, no snippet, no Application Password notice.
+		$this->assertStringNotContainsString( 'acrossai-mcp-servers__dto-details', $out );
+		$this->assertStringNotContainsString( 'claude_desktop_config.json', $out );
+		$this->assertStringNotContainsString( 'Application Password', $out );
+	}
+
+	public function test_show_instructions_zero_omits_instructions_paragraph(): void {
+		$this->create_and_enable_server( 'srv-noinstr', 'Server NoInstr' );
+
+		$with    = do_shortcode( '[acrossai_mcp_servers]' );
+		$without = do_shortcode( '[acrossai_mcp_servers show_instructions="0"]' );
+
+		// Instructions paragraph class present in default output, absent when opted out.
+		$this->assertStringContainsString( 'acrossai-mcp-servers__instructions', $with );
+		$this->assertStringNotContainsString( 'acrossai-mcp-servers__instructions', $without );
+	}
+
+	public function test_server_url_in_snippet_matches_rest_url_shape(): void {
+		$server_id = (int) MCPServerQuery::instance()->add_item(
+			array(
+				'server_name'            => 'URL Server',
+				'server_slug'            => 'url-srv',
+				'is_enabled'             => 1,
+				'registered_from'        => 'database',
+				'server_route_namespace' => 'mcp',
+				'server_route'           => 'url-srv-route',
+				'server_version'         => 'v1.0.0',
+			)
+		);
+		ServerMetaQuery::update_meta( $server_id, '_embeds_enabled', '1' );
+		AbstractEmbedTransport::save_items_for_server(
+			$server_id,
+			array( 'mcp-client' => array( 'claude-desktop' ) )
+		);
+		AbstractEmbedTransport::flush_cache();
+
+		$out                 = do_shortcode( '[acrossai_mcp_servers]' );
+		$expected_url_suffix = 'mcp/url-srv-route';
+
+		$this->assertStringContainsString( $expected_url_suffix, $out );
+	}
+
 	public function test_html_filter_fires_exactly_once_per_render(): void {
 		$this->create_and_enable_server( 'srv-a', 'Server A' );
 

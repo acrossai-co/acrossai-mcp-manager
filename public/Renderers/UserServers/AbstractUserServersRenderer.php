@@ -95,11 +95,18 @@ abstract class AbstractUserServersRenderer {
 	 *         projections, alphabetically sorted by `server_name`
 	 *         (case-insensitive). Each entry has keys `server_id` (int),
 	 *         `server_slug` (string), `server_name` (string),
-	 *         `description` (string), and `transports` (array<int,
-	 *         array>). Each transport has keys `key` (string), `label`
-	 *         (string), `priority` (int), and `dtos` (array<int, array>).
-	 *         Each DTO has keys `slug` (string), `name` (string), `icon`
-	 *         (string), `description` (string), `meta` (array).
+	 *         `description` (string), `server_url` (string — the REST
+	 *         endpoint URL for the server, built as
+	 *         `rest_url("{namespace}/{route}")` so concrete renderers can
+	 *         pass it to `AbstractMCPClient::get_config_snippet`), and
+	 *         `transports` (array<int, array>). Each transport has keys
+	 *         `key` (string), `label` (string), `priority` (int), and
+	 *         `dtos` (array<int, array>). Each DTO has keys `slug`
+	 *         (string), `name` (string), `icon` (string), `description`
+	 *         (string), `meta` (array — for `client` category includes
+	 *         `class` FQCN pointing at the `AbstractMCPClient` subclass;
+	 *         for `npm` includes `command_template`; for `ai_connector`
+	 *         includes `class` FQCN + `icon_url`).
 	 */
 	public function get_accessible_servers( ?int $user_id = null ): array {
 		// Step 1 — resolve user id + anonymous short-circuit.
@@ -190,11 +197,25 @@ abstract class AbstractUserServersRenderer {
 				continue; // No enabled DTOs across any transport → drop the server.
 			}
 
+			// Server REST endpoint URL — computed the same way F013's
+			// MCPClientsBlock builds it (namespace + route, joined via
+			// `rest_url()`). Provided in the projection so concrete
+			// renderers can pass it to `AbstractMCPClient::get_config_snippet`
+			// without re-deriving from the row.
+			$route_namespace = isset( $row->server_route_namespace ) && '' !== (string) $row->server_route_namespace
+				? (string) $row->server_route_namespace
+				: 'mcp';
+			$route           = isset( $row->server_route ) && '' !== (string) $row->server_route
+				? (string) $row->server_route
+				: (string) $row->server_slug;
+			$server_url      = rest_url( trailingslashit( $route_namespace ) . $route );
+
 			$data[] = array(
 				'server_id'   => $server_id,
 				'server_slug' => (string) $row->server_slug,
 				'server_name' => (string) $row->server_name,
 				'description' => isset( $row->description ) ? (string) $row->description : '',
+				'server_url'  => $server_url,
 				'transports'  => $server_transports,
 			);
 		}
