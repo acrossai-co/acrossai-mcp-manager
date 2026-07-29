@@ -36,9 +36,12 @@
 		}
 	} );
 
+	// Server pill is scoped to the current client-panel — clicking a
+	// server pill in one client's panel does NOT change the server
+	// selection state of other client-panels.
 	function handleServerSelect( btn ) {
-		var widget = btn.closest( '.acrossai-mcp-servers' );
-		if ( ! widget ) {
+		var panel = btn.closest( '[data-amcp-client]' );
+		if ( ! panel ) {
 			return;
 		}
 		var target = btn.getAttribute( 'data-amcp-server-select' );
@@ -46,32 +49,35 @@
 			return;
 		}
 
-		// Toggle aria-selected on sidebar buttons.
-		var buttons = widget.querySelectorAll( '[data-amcp-server-select]' );
-		for ( var i = 0; i < buttons.length; i++ ) {
-			buttons[ i ].setAttribute(
+		// Toggle aria-selected on server pills within this client panel.
+		var pills = panel.querySelectorAll( '[data-amcp-server-select]' );
+		for ( var i = 0; i < pills.length; i++ ) {
+			pills[ i ].setAttribute(
 				'aria-selected',
-				buttons[ i ].getAttribute( 'data-amcp-server-select' ) === target
+				pills[ i ].getAttribute( 'data-amcp-server-select' ) === target
 					? 'true'
 					: 'false'
 			);
 		}
 
-		// Show only the matching server panel.
-		var panels = widget.querySelectorAll( '[data-amcp-server]' );
-		for ( var j = 0; j < panels.length; j++ ) {
-			panels[ j ].setAttribute(
+		// Show only the matching server-scoped URL row + code block
+		// inside this client panel.
+		var scoped = panel.querySelectorAll( '[data-amcp-server]' );
+		for ( var j = 0; j < scoped.length; j++ ) {
+			scoped[ j ].setAttribute(
 				'data-active',
-				panels[ j ].getAttribute( 'data-amcp-server' ) === target
+				scoped[ j ].getAttribute( 'data-amcp-server' ) === target
 					? 'true'
 					: 'false'
 			);
 		}
 	}
 
+	// Client select toggles which client-panel is visible across the
+	// whole widget.
 	function handleClientSelect( btn ) {
-		var panel = btn.closest( '[data-amcp-server]' );
-		if ( ! panel ) {
+		var widget = btn.closest( '.acrossai-mcp-servers' );
+		if ( ! widget ) {
 			return;
 		}
 		var target = btn.getAttribute( 'data-amcp-client-select' );
@@ -79,23 +85,23 @@
 			return;
 		}
 
-		// Toggle aria-selected on client pills within this server panel.
-		var pills = panel.querySelectorAll( '[data-amcp-client-select]' );
-		for ( var i = 0; i < pills.length; i++ ) {
-			pills[ i ].setAttribute(
+		// Toggle aria-selected on sidebar client-nav buttons.
+		var buttons = widget.querySelectorAll( '[data-amcp-client-select]' );
+		for ( var i = 0; i < buttons.length; i++ ) {
+			buttons[ i ].setAttribute(
 				'aria-selected',
-				pills[ i ].getAttribute( 'data-amcp-client-select' ) === target
+				buttons[ i ].getAttribute( 'data-amcp-client-select' ) === target
 					? 'true'
 					: 'false'
 			);
 		}
 
-		// Show only the matching client-detail card.
-		var details = panel.querySelectorAll( '[data-amcp-client]' );
-		for ( var j = 0; j < details.length; j++ ) {
-			details[ j ].setAttribute(
+		// Show only the matching client-panel.
+		var panels = widget.querySelectorAll( '[data-amcp-client]' );
+		for ( var j = 0; j < panels.length; j++ ) {
+			panels[ j ].setAttribute(
 				'data-active',
-				details[ j ].getAttribute( 'data-amcp-client' ) === target
+				panels[ j ].getAttribute( 'data-amcp-client' ) === target
 					? 'true'
 					: 'false'
 			);

@@ -241,21 +241,18 @@ body {
 }
 
 /* =========================================================================
- * [acrossai_mcp_servers] shortcode — v2 sidebar+detail layout
+ * [acrossai_mcp_servers] shortcode — v3 client-first sidebar layout
  * -------------------------------------------------------------------------
  * Reference source: acrossai-mcp-manager.zip / MCP Servers Widget v2.dc.html
  *
- * Two-column widget: left sidebar switches between servers; right panel
- * shows the selected server + selected client's config, code snippet, and
- * step-by-step instructions.
+ * Two-column widget: LEFT is a client picker (transport groups
+ * collapsible via native <details>). RIGHT is the selected client's
+ * detail panel — head + "Which server" pill row + per-server URL/code
+ * blocks + client-general grid/notice/steps.
  *
  * Interactivity in src/js/frontend.js — delegated click handlers for
- * data-amcp-server-select and data-amcp-client-select toggle a data-active
- * attribute on the matching detail card / pill (no re-render, pure CSS
- * visibility swap for zero-flash transitions).
- *
- * Class-name contract is PUBLIC API for the shortcode output. Any breaking
- * change requires updating UserServersBlock::render_widget() in sync.
+ * data-amcp-client-select (sidebar) and data-amcp-server-select (server
+ * pills, scoped to the current client-panel).
  * =========================================================================
  */
 
@@ -370,35 +367,99 @@ body {
 
 .acrossai-mcp-servers__layout {
 	display: grid;
-	grid-template-columns: 262px minmax(0, 1fr);
+	grid-template-columns: 264px minmax(0, 1fr);
 	gap: 14px;
 	align-items: start;
 }
 
-// ── Sidebar (server switcher) ─────────────────────────────────────────
+// ── Sidebar (collapsible transport groups → client-nav buttons) ───────
 
 .acrossai-mcp-servers__sidebar {
 	background: var(--amcp-card-bg);
 	border: 1px solid var(--amcp-card-border);
 	border-radius: var(--amcp-card-radius);
-	padding: 8px;
+	padding: 7px;
 	display: flex;
 	flex-direction: column;
-	gap: 4px;
+	gap: 3px;
 	position: sticky;
 	top: 20px;
 }
 
-.acrossai-mcp-servers__section-label {
-	font-size: 10.5px;
-	font-weight: 600;
-	letter-spacing: 0.7px;
-	text-transform: uppercase;
-	color: var(--amcp-text-faint);
-	padding: 6px 10px 4px;
+.acrossai-mcp-servers__transport-menu {
+	display: flex;
+	flex-direction: column;
 }
 
-.acrossai-mcp-servers__server-nav {
+.acrossai-mcp-servers__transport-menu-head {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 11px;
+	border-radius: 9px;
+	cursor: pointer;
+	list-style: none;
+	user-select: none;
+	transition: background 0.15s ease;
+
+	&::-webkit-details-marker { display: none; }
+
+	details[open] > & {
+		background: var(--amcp-slate-bg);
+	}
+}
+
+.acrossai-mcp-servers__transport-menu-caret {
+	flex: none;
+	width: 16px;
+	text-align: center;
+	font-size: 8.5px;
+	color: var(--amcp-text-faint);
+	transition: transform 0.18s ease, color 0.18s ease;
+
+	details[open] > summary & {
+		transform: rotate(90deg);
+		color: var(--amcp-accent);
+	}
+}
+
+.acrossai-mcp-servers__transport-menu-name {
+	flex: 1;
+	min-width: 0;
+	font-size: 13.5px;
+	font-weight: 600;
+	color: var(--amcp-text-body);
+
+	details[open] > summary & { color: var(--amcp-text-primary); }
+}
+
+.acrossai-mcp-servers__transport-menu-count {
+	flex: none;
+	min-width: 22px;
+	text-align: center;
+	padding: 2px 7px;
+	border-radius: 999px;
+	background: var(--amcp-cli-bg);
+	border: 1px solid var(--amcp-cli-line);
+	font-size: 11px;
+	font-weight: 600;
+	color: var(--amcp-text-faint);
+
+	details[open] > summary & {
+		background: var(--amcp-accent-soft);
+		border-color: var(--amcp-accent-line);
+		color: var(--amcp-accent-strong);
+	}
+}
+
+.acrossai-mcp-servers__transport-menu-body {
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+	padding: 3px 0 7px 0;
+}
+
+.acrossai-mcp-servers__client-nav {
 	appearance: none;
 	background: transparent;
 	border: 0;
@@ -406,20 +467,25 @@ body {
 	font: inherit;
 	color: inherit;
 	display: flex;
-	align-items: flex-start;
-	gap: 10px;
-	padding: 10px 11px;
-	border-radius: 9px;
+	align-items: center;
+	gap: 9px;
+	padding: 7px 11px 7px 27px;
+	border-radius: 8px;
 	cursor: pointer;
 	box-shadow: inset 2px 0 0 0 transparent;
+	color: var(--amcp-cli-color);
+	font-size: 13px;
+	font-weight: 500;
 	transition: background 0.15s ease, box-shadow 0.15s ease, color 0.15s ease;
 	width: 100%;
 	min-width: 0;
+	white-space: nowrap;
 
 	&[aria-selected="true"] {
 		background: var(--amcp-accent-soft);
 		box-shadow: inset 2px 0 0 0 var(--amcp-accent);
 		color: var(--amcp-accent-strong);
+		font-weight: 600;
 	}
 
 	&:hover:not([aria-selected="true"]) {
@@ -432,94 +498,167 @@ body {
 	}
 }
 
-.acrossai-mcp-servers__server-nav-dot {
+.acrossai-mcp-servers__client-nav-icon {
 	flex: none;
-	width: 7px;
-	height: 7px;
-	border-radius: 50%;
-	background: #cbd5e1;
-	margin-top: 5px;
-
-	[aria-selected="true"] & { background: var(--amcp-accent); }
-}
-
-.acrossai-mcp-servers__server-nav-body {
-	display: flex;
-	flex-direction: column;
-	gap: 3px;
-	min-width: 0;
-	flex: 1;
-}
-
-.acrossai-mcp-servers__server-nav-name {
+	width: 17px;
+	text-align: center;
 	font-size: 13.5px;
-	font-weight: 500;
-	color: var(--amcp-text-body);
-	line-height: 1.3;
+	line-height: 1;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
 
-	[aria-selected="true"] & { font-weight: 600; color: var(--amcp-accent-strong); }
+	img { width: 15px; height: 15px; display: block; }
 }
 
-.acrossai-mcp-servers__server-nav-summary {
-	font-size: 11.5px;
-	color: var(--amcp-text-faint);
-	line-height: 1.45;
-	text-wrap: pretty;
+.acrossai-mcp-servers__client-nav-name {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
 }
 
-// ── Main panel ────────────────────────────────────────────────────────
+// ── Main panel + client-panels (only one visible at a time) ───────────
 
 .acrossai-mcp-servers__main {
 	display: flex;
 	flex-direction: column;
-	gap: 14px;
 	min-width: 0;
 }
 
-.acrossai-mcp-servers__server-panel {
+.acrossai-mcp-servers__client-panel {
 	display: none;
+	background: var(--amcp-card-bg);
+	border: 1px solid var(--amcp-card-border);
+	border-radius: var(--amcp-card-radius);
+	overflow: hidden;
 	flex-direction: column;
-	gap: 14px;
 	min-width: 0;
 
 	&[data-active="true"] { display: flex; }
 }
 
-// ── Server context card ───────────────────────────────────────────────
+// ── Client detail head ────────────────────────────────────────────────
 
-.acrossai-mcp-servers__server-context {
-	background: var(--amcp-card-bg);
-	border: 1px solid var(--amcp-card-border);
-	border-radius: var(--amcp-card-radius);
+.acrossai-mcp-servers__client-head {
+	padding: 13px 16px;
+	border-bottom: 1px solid var(--amcp-slate-line);
+	background: var(--amcp-slate-bg);
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 10px;
+}
+
+.acrossai-mcp-servers__client-head-icon {
+	flex: none;
+	font-size: 19px;
+	line-height: 1;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 22px;
+	height: 22px;
+
+	img { width: 22px; height: 22px; display: block; }
+}
+
+.acrossai-mcp-servers__client-head-heading {
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+	min-width: 0;
+	flex: 1;
+}
+
+.acrossai-mcp-servers__client-head-name {
+	font-family: var(--amcp-font-display);
+	font-weight: 600;
+	font-size: 15.5px;
+	color: var(--amcp-text-primary);
+	letter-spacing: -0.1px;
+}
+
+.acrossai-mcp-servers__client-head-transport {
+	font-size: 11.5px;
+	color: var(--amcp-text-faint);
+}
+
+.acrossai-mcp-servers__client-badge {
+	flex: none;
+	padding: 4px 10px;
+	border-radius: 999px;
+	font-size: 11.5px;
+	font-weight: 500;
+	white-space: nowrap;
+
+	&--config { background: var(--amcp-accent-soft); border: 1px solid var(--amcp-accent-line); color: var(--amcp-accent-strong); }
+	&--cli    { background: var(--amcp-cli-bg);     border: 1px solid var(--amcp-cli-line);     color: var(--amcp-cli-color); }
+	&--oauth  { background: var(--amcp-oauth-bg);   border: 1px solid var(--amcp-oauth-line);   color: #5b21b6; }
+}
+
+.acrossai-mcp-servers__client-body {
 	padding: 14px 16px;
 	display: flex;
 	flex-direction: column;
-	gap: 11px;
+	gap: 12px;
 }
 
-.acrossai-mcp-servers__server-heading {
+// ── Section label reused across body sections ─────────────────────────
+
+.acrossai-mcp-servers__section-label {
+	font-size: 10.5px;
+	font-weight: 600;
+	letter-spacing: 0.7px;
+	text-transform: uppercase;
+	color: var(--amcp-text-faint);
+}
+
+// ── Which-server picker + URL rows ────────────────────────────────────
+
+.acrossai-mcp-servers__server-picker {
 	display: flex;
 	flex-direction: column;
-	gap: 3px;
+	gap: 7px;
 }
 
-.acrossai-mcp-servers__server-name {
-	font-family: var(--amcp-font-display);
-	font-weight: 600;
-	font-size: 17px;
-	color: var(--amcp-text-primary);
-	letter-spacing: -0.2px;
+.acrossai-mcp-servers__server-pills {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
 }
 
-.acrossai-mcp-servers__server-desc {
+.acrossai-mcp-servers__server-pill {
+	appearance: none;
+	font: inherit;
+	padding: 6px 12px;
+	border-radius: 8px;
+	cursor: pointer;
+	background: var(--amcp-card-bg);
+	border: 1px solid var(--amcp-card-border);
+	color: var(--amcp-cli-color);
 	font-size: 12.5px;
-	line-height: 1.55;
-	color: var(--amcp-text-muted);
-	text-wrap: pretty;
+	font-weight: 500;
+	transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+	white-space: nowrap;
+
+	&[aria-selected="true"] {
+		background: var(--amcp-accent);
+		border-color: var(--amcp-accent);
+		color: #fff;
+		font-weight: 700;
+	}
+
+	&:hover:not([aria-selected="true"]) {
+		background: var(--amcp-accent-soft);
+		border-color: var(--amcp-accent-line);
+	}
+
+	&:focus-visible { outline: 2px solid var(--amcp-accent); outline-offset: 2px; }
 }
 
 .acrossai-mcp-servers__url-row {
-	display: flex;
+	display: none;
 	flex-wrap: wrap;
 	align-items: center;
 	gap: 9px;
@@ -527,15 +666,17 @@ body {
 	background: var(--amcp-slate-bg);
 	border: 1px solid var(--amcp-card-border);
 	border-radius: 8px;
+
+	&[data-active="true"] { display: flex; }
 }
 
 .acrossai-mcp-servers__url-label {
+	flex: none;
 	font-size: 10px;
 	font-weight: 600;
 	letter-spacing: 0.6px;
 	text-transform: uppercase;
 	color: var(--amcp-text-faint);
-	flex: none;
 }
 
 .acrossai-mcp-servers__url {
@@ -564,7 +705,6 @@ body {
 	display: inline-flex;
 	align-items: center;
 	gap: 4px;
-	transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease;
 
 	&:hover { background: var(--amcp-accent-soft); }
 	&:focus-visible { outline: 2px solid var(--amcp-accent); outline-offset: 2px; }
@@ -590,145 +730,7 @@ body {
 	}
 }
 
-// ── Client pills ──────────────────────────────────────────────────────
-
-.acrossai-mcp-servers__client-pills-block {
-	display: flex;
-	flex-direction: column;
-	gap: 10px;
-}
-
-.acrossai-mcp-servers__transport-group {
-	display: flex;
-	flex-direction: column;
-	gap: 6px;
-}
-
-.acrossai-mcp-servers__transport-label {
-	font-size: 10.5px;
-	font-weight: 600;
-	letter-spacing: 0.7px;
-	text-transform: uppercase;
-	color: var(--amcp-text-muted);
-}
-
-.acrossai-mcp-servers__client-pills {
-	display: flex;
-	flex-wrap: wrap;
-	gap: 7px;
-}
-
-.acrossai-mcp-servers__client-pill {
-	appearance: none;
-	font: inherit;
-	display: inline-flex;
-	align-items: center;
-	gap: 8px;
-	padding: 7px 13px 7px 11px;
-	border-radius: 999px;
-	cursor: pointer;
-	background: var(--amcp-slate-bg);
-	border: 1px solid var(--amcp-card-border);
-	color: var(--amcp-cli-color);
-	font-size: 12.5px;
-	font-weight: 500;
-	transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
-	white-space: nowrap;
-
-	&[aria-selected="true"] {
-		background: var(--amcp-accent);
-		border-color: var(--amcp-accent);
-		color: #fff;
-		font-weight: 600;
-	}
-
-	&:hover:not([aria-selected="true"]) {
-		background: var(--amcp-accent-soft);
-		border-color: var(--amcp-accent-line);
-	}
-
-	&:focus-visible { outline: 2px solid var(--amcp-accent); outline-offset: 2px; }
-}
-
-.acrossai-mcp-servers__client-pill-icon {
-	flex: none;
-	font-size: 14px;
-	line-height: 1;
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	width: 14px;
-	height: 14px;
-
-	img { width: 14px; height: 14px; display: block; }
-}
-
-// ── Selected client detail card ───────────────────────────────────────
-
-.acrossai-mcp-servers__client-detail {
-	display: none;
-	background: var(--amcp-card-bg);
-	border: 1px solid var(--amcp-card-border);
-	border-radius: var(--amcp-card-radius);
-	overflow: hidden;
-	flex-direction: column;
-
-	&[data-active="true"] { display: flex; }
-}
-
-.acrossai-mcp-servers__client-detail-head {
-	padding: 13px 16px;
-	border-bottom: 1px solid var(--amcp-slate-line);
-	background: var(--amcp-slate-bg);
-	display: flex;
-	flex-wrap: wrap;
-	align-items: center;
-	gap: 10px;
-}
-
-.acrossai-mcp-servers__client-detail-icon {
-	flex: none;
-	font-size: 19px;
-	line-height: 1;
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	width: 20px;
-	height: 20px;
-
-	img { width: 20px; height: 20px; display: block; }
-}
-
-.acrossai-mcp-servers__client-detail-name {
-	flex: 1;
-	min-width: 0;
-	font-family: var(--amcp-font-display);
-	font-weight: 600;
-	font-size: 15.5px;
-	color: var(--amcp-text-primary);
-}
-
-.acrossai-mcp-servers__client-badge {
-	flex: none;
-	padding: 4px 10px;
-	border-radius: 999px;
-	font-size: 11.5px;
-	font-weight: 500;
-	white-space: nowrap;
-
-	&--config { background: var(--amcp-accent-soft); border: 1px solid var(--amcp-accent-line); color: var(--amcp-accent-strong); }
-	&--cli    { background: var(--amcp-cli-bg);     border: 1px solid var(--amcp-cli-line);     color: var(--amcp-cli-color); }
-	&--oauth  { background: var(--amcp-oauth-bg);   border: 1px solid var(--amcp-oauth-line);   color: #5b21b6; }
-}
-
-.acrossai-mcp-servers__client-detail-body {
-	padding: 14px 16px;
-	display: flex;
-	flex-direction: column;
-	gap: 12px;
-}
-
-// ── Meta grid (Config file + Top-level key) ───────────────────────────
+// ── Config file + top-level key grid ──────────────────────────────────
 
 .acrossai-mcp-servers__grid {
 	display: grid;
@@ -772,12 +774,15 @@ body {
 	.acrossai-mcp-servers__field--highlight & { color: var(--amcp-accent-strong); }
 }
 
-// ── Code block ────────────────────────────────────────────────────────
+// ── Code block (per-server, only active visible) ──────────────────────
 
 .acrossai-mcp-servers__code {
+	display: none;
 	border: 1px solid var(--amcp-code-bar-bg);
 	border-radius: 9px;
 	overflow: hidden;
+
+	&[data-active="true"] { display: block; }
 }
 
 .acrossai-mcp-servers__code-bar {
@@ -957,15 +962,13 @@ body {
 	.acrossai-mcp-servers__sidebar {
 		position: static;
 	}
-	.acrossai-mcp-servers__server-nav {
-		padding: 10px;
-	}
 }
 
 @media (prefers-reduced-motion: reduce) {
-	.acrossai-mcp-servers__server-nav,
-	.acrossai-mcp-servers__client-pill,
-	.acrossai-mcp-servers__copy {
+	.acrossai-mcp-servers__client-nav,
+	.acrossai-mcp-servers__server-pill,
+	.acrossai-mcp-servers__transport-menu-caret,
+	.acrossai-mcp-servers__transport-menu-head {
 		transition: none;
 	}
 }
