@@ -1,19 +1,14 @@
 <?php
 /**
- * F038 UserServersBlock rendering tests — post-design-brief refresh.
+ * F038 UserServersBlock rendering tests — v2 design brief markup.
  *
- * Covers the production HTML shape defined in `shortcode-output.html`
- * (design deliverable from `acrossai-mcp-manager.zip`). CSS + JS assets
- * live in `src/scss/frontend.scss` + `src/js/frontend.js`; the widget
- * enqueues built handles at render time — no inline `<style>` block to
- * assert on.
- *
- * Original T015 + T021 coverage preserved; five obsolete tests replaced:
- *   - test_style_emitted_exactly_once   (no inline style block anymore)
- *   - test_style_reset_between_requests (same)
- *   - test_default_render_shape         (new markup — details/summary)
- *   - test_heading_attribute_renders_h2 (still valid, but new class name)
- *   - test_show_instructions_zero_omits_instructions_paragraph (attribute removed)
+ * Covers the production HTML shape defined in `MCP Servers Widget v2.dc.html`
+ * (design deliverable from `acrossai-mcp-manager.zip`). Two-column sidebar
+ * layout: click a server nav button → the matching server panel becomes
+ * `data-active="true"`; click a client pill → the matching client-detail card
+ * becomes `data-active="true"`. Selection state managed by
+ * `src/js/frontend.js` at runtime; PHP renders every server/client at once
+ * with the first of each marked active.
  *
  * @package AcrossAI_MCP_Manager\Tests\Public\Renderers\UserServers
  */
@@ -40,7 +35,6 @@ final class UserServersBlockTest extends WP_UnitTestCase {
 		$this->user_id = self::factory()->user->create( array( 'role' => 'subscriber' ) );
 		wp_set_current_user( $this->user_id );
 
-		// Register the shortcode (init doesn't fire in unit-test env).
 		UserServersBlock::instance()->register_shortcode();
 	}
 
@@ -95,7 +89,7 @@ final class UserServersBlockTest extends WP_UnitTestCase {
 	}
 
 	// ────────────────────────────────────────────────────────────────
-	// Empty-state
+	// Empty state
 	// ────────────────────────────────────────────────────────────────
 
 	public function test_empty_state_renders_wrapper_and_default_message(): void {
@@ -114,101 +108,150 @@ final class UserServersBlockTest extends WP_UnitTestCase {
 	}
 
 	// ────────────────────────────────────────────────────────────────
-	// Default render shape — new design-brief markup
+	// v2 shell — header + layout + sidebar + main
 	// ────────────────────────────────────────────────────────────────
 
-	public function test_default_render_shape(): void {
+	public function test_header_renders_title_summary_and_password_button(): void {
 		$this->create_and_enable_server( 'srv-a', 'Server A' );
 
 		$out = do_shortcode( '[acrossai_mcp_servers]' );
 
-		// Outer wrapper.
-		$this->assertStringContainsString( '<div class="acrossai-mcp-servers">', $out );
-		// Header title.
-		$this->assertStringContainsString( '<h2 class="acrossai-mcp-servers__title">', $out );
-		// Server count pill.
-		$this->assertStringContainsString( 'acrossai-mcp-servers__count', $out );
-		$this->assertStringContainsString( '1 server available', $out );
-		// Global Application Password notice.
-		$this->assertStringContainsString( 'acrossai-mcp-servers__notice', $out );
-		$this->assertStringContainsString( 'You need a WordPress Application Password', $out );
-		// Server details card.
-		$this->assertStringContainsString( '<details class="acrossai-mcp-servers__server"', $out );
-		$this->assertStringContainsString( 'data-server-slug="srv-a"', $out );
-		$this->assertStringContainsString( 'Server A', $out );
-		// First card is open.
-		$this->assertMatchesRegularExpression( '#<details class="acrossai-mcp-servers__server"[^>]*\bopen\b#', $out );
-		// Server URL row with Copy button.
-		$this->assertStringContainsString( 'acrossai-mcp-servers__urlrow', $out );
+		$this->assertStringContainsString( 'acrossai-mcp-servers__header', $out );
+		$this->assertStringContainsString( '<h2 class="acrossai-mcp-servers__title">Your MCP Servers</h2>', $out );
+		$this->assertStringContainsString( 'acrossai-mcp-servers__summary', $out );
+		$this->assertStringContainsString( '1 servers · 1 clients', $out );
+		$this->assertStringContainsString( 'acrossai-mcp-servers__password-btn', $out );
+		$this->assertStringContainsString( 'Get an Application Password', $out );
+	}
+
+	public function test_heading_attribute_overrides_title(): void {
+		$this->create_and_enable_server( 'srv-a', 'Server A' );
+
+		$out = do_shortcode( '[acrossai_mcp_servers heading="My tools"]' );
+
+		$this->assertStringContainsString( '<h2 class="acrossai-mcp-servers__title">My tools</h2>', $out );
+	}
+
+	public function test_layout_grid_renders_sidebar_and_main(): void {
+		$this->create_and_enable_server( 'srv-a', 'Server A' );
+
+		$out = do_shortcode( '[acrossai_mcp_servers]' );
+
+		$this->assertStringContainsString( 'acrossai-mcp-servers__layout', $out );
+		$this->assertStringContainsString( 'acrossai-mcp-servers__sidebar', $out );
+		$this->assertStringContainsString( 'acrossai-mcp-servers__main', $out );
+	}
+
+	// ────────────────────────────────────────────────────────────────
+	// Sidebar server nav
+	// ────────────────────────────────────────────────────────────────
+
+	public function test_sidebar_renders_one_nav_button_per_server_first_selected(): void {
+		$this->create_and_enable_server( 'srv-alpha', 'Alpha' );
+		$this->create_and_enable_server( 'srv-beta', 'Beta' );
+
+		$out = do_shortcode( '[acrossai_mcp_servers]' );
+
+		$this->assertSame(
+			2,
+			substr_count( $out, 'data-amcp-server-select=' ),
+			'One sidebar button per server.'
+		);
+		$this->assertSame(
+			1,
+			substr_count( $out, 'aria-selected="true" data-amcp-server-select' ),
+			'Exactly one sidebar button aria-selected="true" — the first server.'
+		);
+		$this->assertStringContainsString( 'acrossai-mcp-servers__server-nav-name', $out );
+		$this->assertStringContainsString( '<span class="acrossai-mcp-servers__server-nav-name">Alpha</span>', $out );
+		$this->assertStringContainsString( '<span class="acrossai-mcp-servers__server-nav-name">Beta</span>', $out );
+	}
+
+	public function test_sidebar_summary_shows_client_count_and_preview(): void {
+		$this->create_and_enable_server( 'srv-a', 'Server A', 'claude-desktop' );
+
+		$out = do_shortcode( '[acrossai_mcp_servers]' );
+
+		$this->assertStringContainsString( 'acrossai-mcp-servers__server-nav-summary', $out );
+		$this->assertStringContainsString( '1 client · Claude Desktop', $out );
+	}
+
+	// ────────────────────────────────────────────────────────────────
+	// Server panel — context card + client pills + client detail cards
+	// ────────────────────────────────────────────────────────────────
+
+	public function test_server_panel_renders_context_url_pills(): void {
+		$this->create_and_enable_server( 'srv-a', 'Server A' );
+
+		$out = do_shortcode( '[acrossai_mcp_servers]' );
+
+		// Panel wrapper.
+		$this->assertStringContainsString( 'acrossai-mcp-servers__server-panel', $out );
+		$this->assertMatchesRegularExpression( '#data-active="true"[^>]*data-amcp-server=#', $out );
+		// Server context card.
+		$this->assertStringContainsString( 'acrossai-mcp-servers__server-context', $out );
+		$this->assertStringContainsString( '<span class="acrossai-mcp-servers__server-name">Server A</span>', $out );
+		$this->assertStringContainsString( 'acrossai-mcp-servers__server-desc', $out );
+		// URL row.
+		$this->assertStringContainsString( 'acrossai-mcp-servers__url-row', $out );
+		$this->assertStringContainsString( '<span class="acrossai-mcp-servers__url-label">URL</span>', $out );
 		$this->assertStringContainsString( 'data-amcp-copy="#amcp-url-', $out );
-		// Client card.
-		$this->assertStringContainsString( '<details class="acrossai-mcp-servers__client"', $out );
-		$this->assertStringContainsString( 'data-slug="claude-desktop"', $out );
-		$this->assertStringContainsString( 'data-category="client"', $out );
+		// Client pills.
+		$this->assertStringContainsString( 'acrossai-mcp-servers__client-pills', $out );
+		$this->assertStringContainsString( 'data-amcp-client-select="claude-desktop"', $out );
+		$this->assertStringContainsString( 'aria-selected="true" data-amcp-client-select', $out );
 	}
 
-	public function test_multi_server_count_pill(): void {
-		$this->create_and_enable_server( 'srv-a', 'Alpha' );
-		$this->create_and_enable_server( 'srv-b', 'Beta' );
-		$this->create_and_enable_server( 'srv-c', 'Cetera' );
+	public function test_client_detail_card_renders_head_grid_and_code(): void {
+		$this->create_and_enable_server( 'srv-a', 'Server A' );
 
 		$out = do_shortcode( '[acrossai_mcp_servers]' );
 
-		$this->assertStringContainsString( '3 servers available', $out );
-	}
-
-	public function test_heading_and_intro_attributes(): void {
-		$this->create_and_enable_server( 'srv-a', 'Server A' );
-
-		$out = do_shortcode( '[acrossai_mcp_servers heading="My servers" intro="Custom lede"]' );
-
-		$this->assertStringContainsString( '<h2 class="acrossai-mcp-servers__title">My servers</h2>', $out );
-		$this->assertStringContainsString( 'Custom lede', $out );
-	}
-
-	public function test_show_description_false_omits_desc(): void {
-		$this->create_and_enable_server( 'srv-a', 'Server A' );
-
-		$with_desc = do_shortcode( '[acrossai_mcp_servers]' );
-		$without   = do_shortcode( '[acrossai_mcp_servers show_description="0"]' );
-
-		$this->assertStringContainsString( 'acrossai-mcp-servers__server-desc', $with_desc );
-		$this->assertStringNotContainsString( 'acrossai-mcp-servers__server-desc', $without );
-	}
-
-	// ────────────────────────────────────────────────────────────────
-	// Per-DTO details block (FR-029/030/031)
-	// ────────────────────────────────────────────────────────────────
-
-	public function test_client_body_renders_config_file_top_level_key_and_snippet(): void {
-		$this->create_and_enable_server( 'srv-cfg', 'Server Cfg' );
-
-		$out = do_shortcode( '[acrossai_mcp_servers]' );
-
-		// Two-field grid + code block + Copy button.
+		$this->assertStringContainsString( 'acrossai-mcp-servers__client-detail', $out );
+		$this->assertMatchesRegularExpression( '#data-active="true"[^>]*data-amcp-client=#', $out );
+		// Head + name + badge.
+		$this->assertStringContainsString( 'acrossai-mcp-servers__client-detail-head', $out );
+		$this->assertStringContainsString( 'acrossai-mcp-servers__client-detail-name', $out );
+		$this->assertStringContainsString( 'acrossai-mcp-servers__client-badge--config', $out );
+		$this->assertStringContainsString( 'Local config', $out );
+		// Two-field grid.
 		$this->assertStringContainsString( 'acrossai-mcp-servers__grid', $out );
+		$this->assertStringContainsString( 'acrossai-mcp-servers__field-label', $out );
+		$this->assertStringContainsString( 'acrossai-mcp-servers__field-value', $out );
 		$this->assertStringContainsString( 'Config file', $out );
 		$this->assertStringContainsString( 'Top-level key', $out );
-		// Claude Desktop's config file is documented in F034 metadata.
+		// F034 metadata surfaces.
 		$this->assertStringContainsString( 'claude_desktop_config.json', $out );
-		// The config snippet includes the top-level key `mcpServers`.
 		$this->assertStringContainsString( 'mcpServers', $out );
-		// Code block with lang bar + Copy button.
+		// Code block with lang bar + line count + Copy.
 		$this->assertStringContainsString( 'acrossai-mcp-servers__code-bar', $out );
 		$this->assertStringContainsString( 'acrossai-mcp-servers__lang', $out );
+		$this->assertStringContainsString( 'acrossai-mcp-servers__line-count', $out );
 		$this->assertStringContainsString( 'data-amcp-copy="#amcp-code-', $out );
 	}
 
-	public function test_client_body_renders_numbered_steps_from_instructions(): void {
+	public function test_steps_grid_renders_numbered_from_instructions(): void {
 		$this->create_and_enable_server( 'srv-steps', 'Server Steps' );
 
 		$out = do_shortcode( '[acrossai_mcp_servers]' );
 
-		// Ordered list rendered from get_instructions() split on ` → `.
-		$this->assertStringContainsString( 'acrossai-mcp-servers__steps', $out );
-		$this->assertMatchesRegularExpression( '#<ol class="acrossai-mcp-servers__steps">\s*<li>#', $out );
-		// Every F034 client's instructions contain "Generate a password" as step 1.
+		$this->assertStringContainsString( 'acrossai-mcp-servers__steps-block', $out );
+		$this->assertStringContainsString( 'acrossai-mcp-servers__steps-grid', $out );
+		$this->assertStringContainsString( 'acrossai-mcp-servers__step-num', $out );
+		$this->assertStringContainsString( 'acrossai-mcp-servers__step-text', $out );
 		$this->assertStringContainsString( 'Generate a password', $out );
+		// Replace pill rendered next to STEPS label for client-config transport.
+		$this->assertStringContainsString( 'acrossai-mcp-servers__replace-pill', $out );
+	}
+
+	public function test_show_description_false_omits_server_desc(): void {
+		$this->create_and_enable_server( 'srv-a', 'Server A' );
+
+		$with    = do_shortcode( '[acrossai_mcp_servers]' );
+		$without = do_shortcode( '[acrossai_mcp_servers show_description="0"]' );
+
+		$this->assertStringContainsString( 'acrossai-mcp-servers__server-desc', $with );
+		$this->assertStringNotContainsString( 'acrossai-mcp-servers__server-desc', $without );
 	}
 
 	public function test_server_url_uses_rest_url_shape(): void {
@@ -233,6 +276,16 @@ final class UserServersBlockTest extends WP_UnitTestCase {
 		$out = do_shortcode( '[acrossai_mcp_servers]' );
 
 		$this->assertStringContainsString( 'mcp/url-srv-route', $out );
+	}
+
+	public function test_multi_server_summary(): void {
+		$this->create_and_enable_server( 'srv-a', 'Alpha' );
+		$this->create_and_enable_server( 'srv-b', 'Beta' );
+		$this->create_and_enable_server( 'srv-c', 'Cetera' );
+
+		$out = do_shortcode( '[acrossai_mcp_servers]' );
+
+		$this->assertStringContainsString( '3 servers · 3 clients', $out );
 	}
 
 	// ────────────────────────────────────────────────────────────────
@@ -269,23 +322,8 @@ final class UserServersBlockTest extends WP_UnitTestCase {
 
 		$out = do_shortcode( '[acrossai_mcp_servers]' );
 
-		$this->assertStringContainsString(
-			'<img class="acrossai-mcp-servers__icon" src="https://cdn.example.com/icon.png"',
-			$out
-		);
-	}
-
-	public function test_icon_non_url_becomes_text(): void {
-		$this->create_and_enable_server( 'srv-a', 'Server A' );
-
-		$out = do_shortcode( '[acrossai_mcp_servers]' );
-
-		// Claude Desktop's icon is 🍰 (emoji) — should render as text span.
-		$this->assertMatchesRegularExpression(
-			'#<span class="acrossai-mcp-servers__icon" aria-hidden="true">[^<]+</span>#u',
-			$out
-		);
-		$this->assertStringNotContainsString( '<img class="acrossai-mcp-servers__icon"', $out );
+		// Pill icon uses <img>.
+		$this->assertStringContainsString( '<img src="https://cdn.example.com/icon.png"', $out );
 	}
 
 	// ────────────────────────────────────────────────────────────────
@@ -319,7 +357,7 @@ final class UserServersBlockTest extends WP_UnitTestCase {
 	}
 
 	// ────────────────────────────────────────────────────────────────
-	// Singleton contract (S6 + A2 + D36)
+	// Singleton contract (D36 + S6 + A2)
 	// ────────────────────────────────────────────────────────────────
 
 	public function test_singleton_private_ctor(): void {
@@ -371,7 +409,6 @@ final class UserServersBlockTest extends WP_UnitTestCase {
 
 		$this->assertStringStartsWith( '<div class="my-brand-wrapper">', $out );
 		$this->assertStringEndsWith( '</div>', $out );
-		$this->assertStringContainsString( 'class="acrossai-mcp-servers"', $out );
 	}
 
 	public function test_html_filter_fires_exactly_once_per_render(): void {
@@ -413,10 +450,6 @@ final class UserServersBlockTest extends WP_UnitTestCase {
 		$this->assertFalse( wp_script_is( 'acrossai-mcp-user-servers', 'enqueued' ) );
 	}
 }
-
-// ────────────────────────────────────────────────────────────────
-// Fake transport fixture — DTO with URL icon
-// ────────────────────────────────────────────────────────────────
 
 final class FakeTransportUrlIcon extends AbstractEmbedTransport {
 

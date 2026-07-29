@@ -1,21 +1,108 @@
 /**
  * [acrossai_mcp_servers] shortcode — public interactions.
  *
- * Reference source: acrossai-mcp-manager.zip / shortcode-output.html
+ * Reference source: acrossai-mcp-manager.zip / MCP Servers Widget v2.dc.html
  *
  * Deliberately vanilla JS (no React, no WP packages). The design brief for
- * this shortcode is theme-agnostic and dependency-free — expand/collapse is
- * native <details>, and the only scripted behavior is copy-to-clipboard.
+ * this shortcode is theme-agnostic and dependency-free — two behaviors:
  *
- * One delegated click listener handles every [data-amcp-copy] button on the
- * page (including any markup injected later), copies the referenced element's
- * textContent, flashes a two-second "Copied!" acknowledgement, then reverts.
- * Falls back to a hidden-textarea + document.execCommand('copy') on browsers
- * that lack the async Clipboard API (older mobile Safari, non-HTTPS contexts).
+ *   1. Sidebar server switcher + client pill switcher.
+ *      One delegated click listener toggles a data-active attribute on the
+ *      matching detail card and aria-selected on the nav element. No DOM
+ *      re-render — pure CSS visibility swap for zero-flash transitions.
+ *
+ *   2. Copy-to-clipboard.
+ *      One delegated listener on [data-amcp-copy] copies the referenced
+ *      element's textContent, flashes a two-second "Copied!"
+ *      acknowledgement, then reverts. Falls back to a hidden-textarea +
+ *      document.execCommand('copy') on browsers that lack the async
+ *      Clipboard API (older mobile Safari, non-HTTPS contexts).
  */
 ( function () {
 	'use strict';
 
+	// ── Selection state — sidebar servers + client pills ─────────
+	document.addEventListener( 'click', function ( event ) {
+		var serverBtn = event.target.closest( '[data-amcp-server-select]' );
+		if ( serverBtn ) {
+			handleServerSelect( serverBtn );
+			return;
+		}
+
+		var clientBtn = event.target.closest( '[data-amcp-client-select]' );
+		if ( clientBtn ) {
+			handleClientSelect( clientBtn );
+			return;
+		}
+	} );
+
+	function handleServerSelect( btn ) {
+		var widget = btn.closest( '.acrossai-mcp-servers' );
+		if ( ! widget ) {
+			return;
+		}
+		var target = btn.getAttribute( 'data-amcp-server-select' );
+		if ( ! target ) {
+			return;
+		}
+
+		// Toggle aria-selected on sidebar buttons.
+		var buttons = widget.querySelectorAll( '[data-amcp-server-select]' );
+		for ( var i = 0; i < buttons.length; i++ ) {
+			buttons[ i ].setAttribute(
+				'aria-selected',
+				buttons[ i ].getAttribute( 'data-amcp-server-select' ) === target
+					? 'true'
+					: 'false'
+			);
+		}
+
+		// Show only the matching server panel.
+		var panels = widget.querySelectorAll( '[data-amcp-server]' );
+		for ( var j = 0; j < panels.length; j++ ) {
+			panels[ j ].setAttribute(
+				'data-active',
+				panels[ j ].getAttribute( 'data-amcp-server' ) === target
+					? 'true'
+					: 'false'
+			);
+		}
+	}
+
+	function handleClientSelect( btn ) {
+		var panel = btn.closest( '[data-amcp-server]' );
+		if ( ! panel ) {
+			return;
+		}
+		var target = btn.getAttribute( 'data-amcp-client-select' );
+		if ( ! target ) {
+			return;
+		}
+
+		// Toggle aria-selected on client pills within this server panel.
+		var pills = panel.querySelectorAll( '[data-amcp-client-select]' );
+		for ( var i = 0; i < pills.length; i++ ) {
+			pills[ i ].setAttribute(
+				'aria-selected',
+				pills[ i ].getAttribute( 'data-amcp-client-select' ) === target
+					? 'true'
+					: 'false'
+			);
+		}
+
+		// Show only the matching client-detail card.
+		var details = panel.querySelectorAll( '[data-amcp-client]' );
+		for ( var j = 0; j < details.length; j++ ) {
+			details[ j ].setAttribute(
+				'data-active',
+				details[ j ].getAttribute( 'data-amcp-client' ) === target
+					? 'true'
+					: 'false'
+			);
+		}
+	}
+
+	// ── Copy-to-clipboard ────────────────────────────────────────
 	document.addEventListener( 'click', function ( event ) {
 		var btn = event.target.closest( '[data-amcp-copy]' );
 		if ( ! btn ) {
