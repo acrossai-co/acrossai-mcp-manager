@@ -489,21 +489,27 @@ final class UserServersBlock extends AbstractUserServersRenderer {
 			}
 			$out .= '</div>';
 
-			// URL rows — one per server, only active visible.
-			$is_first_server = true;
-			foreach ( $servers as $srv ) {
-				$server_id  = (int) ( $srv['server_id'] ?? 0 );
-				$server_url = (string) ( $srv['server_url'] ?? '' );
-				if ( '' === $server_url ) {
-					continue;
+			// URL rows — one per server, only active visible. Skipped
+			// for the NPM transport because the server URL is already
+			// embedded inside the printed `--siteurl=...` bash command
+			// below (rendering it separately would just be redundant
+			// noise + a second copy target confusing the user).
+			if ( 'npm' !== $transport_key ) {
+				$is_first_server = true;
+				foreach ( $servers as $srv ) {
+					$server_id  = (int) ( $srv['server_id'] ?? 0 );
+					$server_url = (string) ( $srv['server_url'] ?? '' );
+					if ( '' === $server_url ) {
+						continue;
+					}
+					$url_id          = 'amcp-url-' . $server_id . '-' . sanitize_html_class( $slug );
+					$out            .= '<div class="acrossai-mcp-servers__url-row" data-amcp-server="' . esc_attr( (string) $server_id ) . '" data-active="' . ( $is_first_server ? 'true' : 'false' ) . '">';
+					$out            .= '<span class="acrossai-mcp-servers__url-label">' . esc_html__( 'URL', 'acrossai-mcp-manager' ) . '</span>';
+					$out            .= '<code class="acrossai-mcp-servers__url" id="' . esc_attr( $url_id ) . '">' . esc_html( $server_url ) . '</code>';
+					$out            .= '<button type="button" class="acrossai-mcp-servers__copy" data-amcp-copy="#' . esc_attr( $url_id ) . '">' . esc_html__( 'Copy', 'acrossai-mcp-manager' ) . '</button>';
+					$out            .= '</div>';
+					$is_first_server = false;
 				}
-				$url_id          = 'amcp-url-' . $server_id . '-' . sanitize_html_class( $slug );
-				$out            .= '<div class="acrossai-mcp-servers__url-row" data-amcp-server="' . esc_attr( (string) $server_id ) . '" data-active="' . ( $is_first_server ? 'true' : 'false' ) . '">';
-				$out            .= '<span class="acrossai-mcp-servers__url-label">' . esc_html__( 'URL', 'acrossai-mcp-manager' ) . '</span>';
-				$out            .= '<code class="acrossai-mcp-servers__url" id="' . esc_attr( $url_id ) . '">' . esc_html( $server_url ) . '</code>';
-				$out            .= '<button type="button" class="acrossai-mcp-servers__copy" data-amcp-copy="#' . esc_attr( $url_id ) . '">' . esc_html__( 'Copy', 'acrossai-mcp-manager' ) . '</button>';
-				$out            .= '</div>';
-				$is_first_server = false;
 			}
 			$out .= '</div>'; // .__server-picker.
 		}
