@@ -239,3 +239,103 @@ body {
 		font-size: 20px;
 	}
 }
+
+/* =========================================================================
+ * [acrossai_mcp_servers] shortcode — public MCP servers directory
+ * -------------------------------------------------------------------------
+ * Reference source: acrossai-mcp-manager.zip / shortcode-output.html
+ * Scoped under .acrossai-mcp-servers__* — does not collide with the
+ * .acrossai-mcp-frontend__* classes above (FrontendAuth branded cards).
+ *
+ * Theme-agnostic: colors derive from currentColor via color-mix() so the
+ * widget adapts to light/dark/brutalist themes. Overridable via
+ * --amcp-accent from the site's own CSS.
+ * =========================================================================
+ */
+.acrossai-mcp-servers{--amcp-accent:currentColor;--amcp-line:color-mix(in srgb,currentColor 14%,transparent);--amcp-line-strong:color-mix(in srgb,currentColor 26%,transparent);--amcp-surface:color-mix(in srgb,currentColor 3%,transparent);--amcp-surface-2:color-mix(in srgb,currentColor 6%,transparent);--amcp-muted:color-mix(in srgb,currentColor 62%,transparent);--amcp-faint:color-mix(in srgb,currentColor 45%,transparent);--amcp-warn:#b45309;--amcp-warn-bg:color-mix(in srgb,#f59e0b 12%,transparent);--amcp-warn-line:color-mix(in srgb,#f59e0b 42%,transparent);--amcp-ok:#15803d;font-size:16px;line-height:1.5;display:flex;flex-direction:column;gap:16px;max-width:100%}
+.acrossai-mcp-servers *,.acrossai-mcp-servers *::before,.acrossai-mcp-servers *::after{box-sizing:border-box}
+
+/* header */
+.acrossai-mcp-servers__head{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:14px}
+.acrossai-mcp-servers__title{margin:0;font-size:1.5em;line-height:1.2;font-weight:700;letter-spacing:-.01em}
+.acrossai-mcp-servers__intro{margin:6px 0 0;font-size:.9em;color:var(--amcp-muted);text-wrap:pretty;max-width:60ch}
+.acrossai-mcp-servers__count{flex:none;display:inline-flex;align-items:center;gap:8px;padding:6px 12px;border:1px solid var(--amcp-line);border-radius:999px;font-size:.8em;white-space:nowrap}
+.acrossai-mcp-servers__dot{width:7px;height:7px;border-radius:50%;background:#22c55e;flex:none}
+
+/* notices */
+.acrossai-mcp-servers__notice{display:flex;align-items:flex-start;gap:12px;padding:14px 16px;border:1px solid var(--amcp-warn-line);background:var(--amcp-warn-bg);border-radius:10px}
+.acrossai-mcp-servers__notice-title{display:block;font-weight:600;font-size:.9em;margin-bottom:3px}
+.acrossai-mcp-servers__notice-body{display:block;font-size:.85em;line-height:1.6;text-wrap:pretty}
+.acrossai-mcp-servers__notice svg{flex:none;margin-top:2px}
+
+/* server card */
+.acrossai-mcp-servers__server{border:1px solid var(--amcp-line-strong);border-radius:12px;overflow:hidden}
+.acrossai-mcp-servers__server-summary{display:flex;align-items:center;gap:12px;padding:16px 18px;cursor:pointer;list-style:none}
+.acrossai-mcp-servers__server-summary::-webkit-details-marker{display:none}
+.acrossai-mcp-servers__server[open] .acrossai-mcp-servers__server-summary{background:var(--amcp-surface);border-bottom:1px solid var(--amcp-line)}
+.acrossai-mcp-servers__caret{flex:none;width:20px;height:20px;display:flex;align-items:center;justify-content:center;border-radius:5px;background:var(--amcp-surface-2);font-size:.6em;transition:transform .18s ease}
+details[open]>summary .acrossai-mcp-servers__caret{transform:rotate(90deg)}
+.acrossai-mcp-servers__server-meta{flex:1;min-width:0}
+.acrossai-mcp-servers__server-name{display:block;font-weight:600;font-size:1.05em;letter-spacing:-.01em}
+.acrossai-mcp-servers__server-desc{display:block;font-size:.82em;color:var(--amcp-muted);margin-top:2px;text-wrap:pretty}
+.acrossai-mcp-servers__pill{flex:none;padding:4px 10px;border:1px solid var(--amcp-line);border-radius:999px;font-size:.75em;color:var(--amcp-muted);white-space:nowrap}
+.acrossai-mcp-servers__server-body{padding:16px 18px 18px;display:flex;flex-direction:column;gap:14px}
+
+/* labels + url row */
+.acrossai-mcp-servers__label{display:block;font-size:.7em;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--amcp-faint);margin-bottom:6px}
+.acrossai-mcp-servers__urlrow{display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--amcp-line);background:var(--amcp-surface);border-radius:8px}
+.acrossai-mcp-servers__url{flex:1;min-width:0;overflow-x:auto;white-space:nowrap;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.8em}
+
+/* client row */
+.acrossai-mcp-servers__clients{display:flex;flex-direction:column;gap:8px}
+.acrossai-mcp-servers__client{border:1px solid var(--amcp-line);border-radius:10px;overflow:hidden}
+.acrossai-mcp-servers__client[open]{background:var(--amcp-surface)}
+.acrossai-mcp-servers__client-summary{display:flex;align-items:center;gap:11px;padding:11px 13px;cursor:pointer;list-style:none}
+.acrossai-mcp-servers__client-summary::-webkit-details-marker{display:none}
+.acrossai-mcp-servers__icon{flex:none;font-size:1.15em;line-height:1}
+.acrossai-mcp-servers__client-name{flex:1;min-width:0;font-weight:600;font-size:.92em}
+.acrossai-mcp-servers__tag{flex:none;padding:3px 9px;border:1px solid var(--amcp-line-strong);border-radius:999px;font-size:.72em;color:var(--amcp-muted);white-space:nowrap}
+.acrossai-mcp-servers__client-body{padding:0 13px 14px;display:flex;flex-direction:column;gap:12px}
+
+/* meta grid */
+.acrossai-mcp-servers__grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:9px}
+.acrossai-mcp-servers__field{padding:9px 11px;border:1px solid var(--amcp-line);border-radius:8px;min-width:0}
+.acrossai-mcp-servers__field code{display:block;overflow-x:auto;white-space:nowrap;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.8em}
+.acrossai-mcp-servers__field .acrossai-mcp-servers__label{margin-bottom:4px}
+
+/* code block */
+.acrossai-mcp-servers__code{border:1px solid #1e293b;border-radius:9px;overflow:hidden}
+.acrossai-mcp-servers__code-bar{display:flex;align-items:center;gap:10px;padding:7px 11px;background:#1e293b}
+.acrossai-mcp-servers__lang{flex:1;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.72em;letter-spacing:.06em;text-transform:uppercase;color:#94a3b8}
+.acrossai-mcp-servers__pre{margin:0;padding:13px 15px;background:#0f172a;color:#e2e8f0;overflow-x:auto;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.8em;line-height:1.65;-webkit-overflow-scrolling:touch}
+.acrossai-mcp-servers__pre code{font:inherit;color:inherit;background:none;padding:0}
+
+/* copy buttons — always visible, never hover-only */
+.acrossai-mcp-servers__copy{flex:none;display:inline-flex;align-items:center;gap:6px;font:inherit;font-size:.78em;font-weight:600;padding:6px 12px;min-height:32px;border:1px solid var(--amcp-line-strong);background:transparent;color:inherit;border-radius:7px;cursor:pointer}
+.acrossai-mcp-servers__copy:hover{background:var(--amcp-surface-2)}
+.acrossai-mcp-servers__copy:focus-visible{outline:2px solid var(--amcp-accent);outline-offset:2px}
+.acrossai-mcp-servers__copy--ondark{border-color:rgba(226,232,240,.28);color:#e2e8f0}
+.acrossai-mcp-servers__copy--ondark:hover{background:rgba(255,255,255,.1)}
+.acrossai-mcp-servers__copy.is-copied{border-color:#22c55e;color:var(--amcp-ok)}
+.acrossai-mcp-servers__copy--ondark.is-copied{color:#86efac;background:rgba(34,197,94,.16)}
+
+/* steps */
+.acrossai-mcp-servers__steps{list-style:none;margin:0;padding:0;counter-reset:amcp;display:flex;flex-direction:column;gap:7px}
+.acrossai-mcp-servers__steps li{counter-increment:amcp;display:flex;align-items:flex-start;gap:10px;font-size:.86em;line-height:1.6;text-wrap:pretty}
+.acrossai-mcp-servers__steps li::before{content:counter(amcp);flex:none;width:19px;height:19px;margin-top:1px;border:1px solid var(--amcp-line-strong);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.72em;font-weight:600;font-variant-numeric:tabular-nums}
+.acrossai-mcp-servers code.acrossai-mcp-servers__kbd{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.88em;padding:1px 5px;border-radius:4px;background:var(--amcp-surface-2)}
+
+/* empty state */
+.acrossai-mcp-servers__empty{border:1px dashed var(--amcp-line-strong);border-radius:12px;padding:36px 24px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:10px}
+.acrossai-mcp-servers__empty-title{font-weight:600;font-size:1.05em}
+.acrossai-mcp-servers__empty-body{font-size:.86em;color:var(--amcp-muted);max-width:44ch;text-wrap:pretty}
+
+/* mobile */
+@media (max-width:600px){
+	.acrossai-mcp-servers__server-summary,.acrossai-mcp-servers__server-body{padding-left:13px;padding-right:13px}
+	.acrossai-mcp-servers__urlrow{align-items:stretch}
+	.acrossai-mcp-servers__copy{min-height:38px}
+}
+@media (prefers-reduced-motion:reduce){
+	.acrossai-mcp-servers__caret{transition:none}
+}

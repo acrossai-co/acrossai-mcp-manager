@@ -1,10 +1,19 @@
 <?php
 /**
- * F038 T015 + T021 — UserServersBlock rendering tests.
+ * F038 UserServersBlock rendering tests — post-design-brief refresh.
  *
- * Covers the 12 test cases enumerated in
- * contracts/UserServersBlock.contract.md §Test contract, plus the T021
- * US3 HTML-filter wrapping test (SEC-002 documentation).
+ * Covers the production HTML shape defined in `shortcode-output.html`
+ * (design deliverable from `acrossai-mcp-manager.zip`). CSS + JS assets
+ * live in `src/scss/frontend.scss` + `src/js/frontend.js`; the widget
+ * enqueues built handles at render time — no inline `<style>` block to
+ * assert on.
+ *
+ * Original T015 + T021 coverage preserved; five obsolete tests replaced:
+ *   - test_style_emitted_exactly_once   (no inline style block anymore)
+ *   - test_style_reset_between_requests (same)
+ *   - test_default_render_shape         (new markup — details/summary)
+ *   - test_heading_attribute_renders_h2 (still valid, but new class name)
+ *   - test_show_instructions_zero_omits_instructions_paragraph (attribute removed)
  *
  * @package AcrossAI_MCP_Manager\Tests\Public\Renderers\UserServers
  */
@@ -27,7 +36,6 @@ final class UserServersBlockTest extends WP_UnitTestCase {
 	protected function setUp(): void {
 		parent::setUp();
 		AbstractEmbedTransport::flush_cache();
-		UserServersBlock::reset_style_emitted_for_tests();
 
 		$this->user_id = self::factory()->user->create( array( 'role' => 'subscriber' ) );
 		wp_set_current_user( $this->user_id );
@@ -42,9 +50,9 @@ final class UserServersBlockTest extends WP_UnitTestCase {
 		$wpdb->query( "TRUNCATE TABLE {$wpdb->prefix}acrossai_mcp_servers" );
 
 		AbstractEmbedTransport::flush_cache();
-		UserServersBlock::reset_style_emitted_for_tests();
 		remove_all_filters( 'acrossai_mcp_servers_shortcode_html' );
 		remove_all_filters( 'acrossai_mcp_user_accessible_servers' );
+		remove_all_filters( 'acrossai_mcp_embed_transports' );
 		remove_shortcode( 'acrossai_mcp_servers' );
 
 		wp_set_current_user( 0 );
@@ -93,22 +101,20 @@ final class UserServersBlockTest extends WP_UnitTestCase {
 	public function test_empty_state_renders_wrapper_and_default_message(): void {
 		$out = do_shortcode( '[acrossai_mcp_servers]' );
 
-		$this->assertStringContainsString( 'class="acrossai-mcp-servers acrossai-mcp-servers--empty"', $out );
-		$this->assertStringContainsString(
-			'You do not have access to any MCP server yet.',
-			$out
-		);
+		$this->assertStringContainsString( 'acrossai-mcp-servers--empty-shell', $out );
+		$this->assertStringContainsString( 'acrossai-mcp-servers__empty', $out );
+		$this->assertStringContainsString( 'don&#039;t have access', $out );
 	}
 
 	public function test_custom_empty_message_attribute(): void {
 		$out = do_shortcode( '[acrossai_mcp_servers empty_message="Nothing here"]' );
 
 		$this->assertStringContainsString( 'Nothing here', $out );
-		$this->assertStringNotContainsString( 'You do not have access', $out );
+		$this->assertStringNotContainsString( 'don&#039;t have access', $out );
 	}
 
 	// ────────────────────────────────────────────────────────────────
-	// Default render shape
+	// Default render shape — new design-brief markup
 	// ────────────────────────────────────────────────────────────────
 
 	public function test_default_render_shape(): void {
@@ -116,21 +122,48 @@ final class UserServersBlockTest extends WP_UnitTestCase {
 
 		$out = do_shortcode( '[acrossai_mcp_servers]' );
 
+		// Outer wrapper.
 		$this->assertStringContainsString( '<div class="acrossai-mcp-servers">', $out );
-		$this->assertStringContainsString( '<ul class="acrossai-mcp-servers__list">', $out );
-		$this->assertStringContainsString( 'class="acrossai-mcp-servers__server"', $out );
+		// Header title.
+		$this->assertStringContainsString( '<h2 class="acrossai-mcp-servers__title">', $out );
+		// Server count pill.
+		$this->assertStringContainsString( 'acrossai-mcp-servers__count', $out );
+		$this->assertStringContainsString( '1 server available', $out );
+		// Global Application Password notice.
+		$this->assertStringContainsString( 'acrossai-mcp-servers__notice', $out );
+		$this->assertStringContainsString( 'You need a WordPress Application Password', $out );
+		// Server details card.
+		$this->assertStringContainsString( '<details class="acrossai-mcp-servers__server"', $out );
 		$this->assertStringContainsString( 'data-server-slug="srv-a"', $out );
 		$this->assertStringContainsString( 'Server A', $out );
-		$this->assertStringContainsString( 'data-key="client"', $out );
+		// First card is open.
+		$this->assertMatchesRegularExpression( '#<details class="acrossai-mcp-servers__server"[^>]*\bopen\b#', $out );
+		// Server URL row with Copy button.
+		$this->assertStringContainsString( 'acrossai-mcp-servers__urlrow', $out );
+		$this->assertStringContainsString( 'data-amcp-copy="#amcp-url-', $out );
+		// Client card.
+		$this->assertStringContainsString( '<details class="acrossai-mcp-servers__client"', $out );
 		$this->assertStringContainsString( 'data-slug="claude-desktop"', $out );
+		$this->assertStringContainsString( 'data-category="client"', $out );
 	}
 
-	public function test_heading_attribute_renders_h2(): void {
+	public function test_multi_server_count_pill(): void {
+		$this->create_and_enable_server( 'srv-a', 'Alpha' );
+		$this->create_and_enable_server( 'srv-b', 'Beta' );
+		$this->create_and_enable_server( 'srv-c', 'Cetera' );
+
+		$out = do_shortcode( '[acrossai_mcp_servers]' );
+
+		$this->assertStringContainsString( '3 servers available', $out );
+	}
+
+	public function test_heading_and_intro_attributes(): void {
 		$this->create_and_enable_server( 'srv-a', 'Server A' );
 
-		$out = do_shortcode( '[acrossai_mcp_servers heading="My servers"]' );
+		$out = do_shortcode( '[acrossai_mcp_servers heading="My servers" intro="Custom lede"]' );
 
-		$this->assertStringContainsString( '<h2 class="acrossai-mcp-servers__heading">My servers</h2>', $out );
+		$this->assertStringContainsString( '<h2 class="acrossai-mcp-servers__title">My servers</h2>', $out );
+		$this->assertStringContainsString( 'Custom lede', $out );
 	}
 
 	public function test_show_description_false_omits_desc(): void {
@@ -139,37 +172,67 @@ final class UserServersBlockTest extends WP_UnitTestCase {
 		$with_desc = do_shortcode( '[acrossai_mcp_servers]' );
 		$without   = do_shortcode( '[acrossai_mcp_servers show_description="0"]' );
 
-		$this->assertStringContainsString( 'class="acrossai-mcp-servers__server-desc"', $with_desc );
-		$this->assertStringNotContainsString( 'class="acrossai-mcp-servers__server-desc"', $without );
+		$this->assertStringContainsString( 'acrossai-mcp-servers__server-desc', $with_desc );
+		$this->assertStringNotContainsString( 'acrossai-mcp-servers__server-desc', $without );
 	}
 
 	// ────────────────────────────────────────────────────────────────
-	// Style emission
+	// Per-DTO details block (FR-029/030/031)
 	// ────────────────────────────────────────────────────────────────
 
-	public function test_style_emitted_exactly_once(): void {
-		$this->create_and_enable_server( 'srv-a', 'Server A' );
+	public function test_client_body_renders_config_file_top_level_key_and_snippet(): void {
+		$this->create_and_enable_server( 'srv-cfg', 'Server Cfg' );
 
-		$out1 = do_shortcode( '[acrossai_mcp_servers]' );
-		$out2 = do_shortcode( '[acrossai_mcp_servers]' );
+		$out = do_shortcode( '[acrossai_mcp_servers]' );
 
-		$combined = $out1 . $out2;
-		$this->assertSame(
-			1,
-			substr_count( $combined, '<style type="text/css">' ),
-			'<style> block must be emitted exactly once per request.'
+		// Two-field grid + code block + Copy button.
+		$this->assertStringContainsString( 'acrossai-mcp-servers__grid', $out );
+		$this->assertStringContainsString( 'Config file', $out );
+		$this->assertStringContainsString( 'Top-level key', $out );
+		// Claude Desktop's config file is documented in F034 metadata.
+		$this->assertStringContainsString( 'claude_desktop_config.json', $out );
+		// The config snippet includes the top-level key `mcpServers`.
+		$this->assertStringContainsString( 'mcpServers', $out );
+		// Code block with lang bar + Copy button.
+		$this->assertStringContainsString( 'acrossai-mcp-servers__code-bar', $out );
+		$this->assertStringContainsString( 'acrossai-mcp-servers__lang', $out );
+		$this->assertStringContainsString( 'data-amcp-copy="#amcp-code-', $out );
+	}
+
+	public function test_client_body_renders_numbered_steps_from_instructions(): void {
+		$this->create_and_enable_server( 'srv-steps', 'Server Steps' );
+
+		$out = do_shortcode( '[acrossai_mcp_servers]' );
+
+		// Ordered list rendered from get_instructions() split on ` → `.
+		$this->assertStringContainsString( 'acrossai-mcp-servers__steps', $out );
+		$this->assertMatchesRegularExpression( '#<ol class="acrossai-mcp-servers__steps">\s*<li>#', $out );
+		// Every F034 client's instructions contain "Generate a password" as step 1.
+		$this->assertStringContainsString( 'Generate a password', $out );
+	}
+
+	public function test_server_url_uses_rest_url_shape(): void {
+		$server_id = (int) MCPServerQuery::instance()->add_item(
+			array(
+				'server_name'            => 'URL Server',
+				'server_slug'            => 'url-srv',
+				'is_enabled'             => 1,
+				'registered_from'        => 'database',
+				'server_route_namespace' => 'mcp',
+				'server_route'           => 'url-srv-route',
+				'server_version'         => 'v1.0.0',
+			)
 		);
-	}
+		ServerMetaQuery::update_meta( $server_id, '_embeds_enabled', '1' );
+		AbstractEmbedTransport::save_items_for_server(
+			$server_id,
+			array( 'mcp-client' => array( 'claude-desktop' ) )
+		);
+		AbstractEmbedTransport::flush_cache();
 
-	public function test_style_reset_between_requests(): void {
-		$this->create_and_enable_server( 'srv-a', 'Server A' );
+		$out = do_shortcode( '[acrossai_mcp_servers]' );
 
-		$out1 = do_shortcode( '[acrossai_mcp_servers]' );
-		$this->assertStringContainsString( '<style type="text/css">', $out1 );
-
-		UserServersBlock::reset_style_emitted_for_tests(); // Simulate new request.
-		$out2 = do_shortcode( '[acrossai_mcp_servers]' );
-		$this->assertStringContainsString( '<style type="text/css">', $out2 );
+		$this->assertStringContainsString( 'mcp/url-srv-route', $out );
 	}
 
 	// ────────────────────────────────────────────────────────────────
@@ -177,7 +240,6 @@ final class UserServersBlockTest extends WP_UnitTestCase {
 	// ────────────────────────────────────────────────────────────────
 
 	public function test_icon_url_becomes_img(): void {
-		// Build a custom transport that yields a URL icon so we can test.
 		add_filter(
 			'acrossai_mcp_embed_transports',
 			static function ( array $classes ): array {
@@ -220,18 +282,17 @@ final class UserServersBlockTest extends WP_UnitTestCase {
 
 		// Claude Desktop's icon is 🍰 (emoji) — should render as text span.
 		$this->assertMatchesRegularExpression(
-			'#<span class="acrossai-mcp-servers__icon" aria-hidden="true">\s*[^<]+\s*</span>#',
+			'#<span class="acrossai-mcp-servers__icon" aria-hidden="true">[^<]+</span>#u',
 			$out
 		);
 		$this->assertStringNotContainsString( '<img class="acrossai-mcp-servers__icon"', $out );
 	}
 
 	// ────────────────────────────────────────────────────────────────
-	// Escape at boundary
+	// Escape at boundary — XSS regression
 	// ────────────────────────────────────────────────────────────────
 
 	public function test_escape_at_boundary_server_name(): void {
-		// Directly create a server with a hostile name via the Query.
 		$server_id = (int) MCPServerQuery::instance()->add_item(
 			array(
 				'server_name'            => 'Foo <script>alert(1)</script>',
@@ -258,7 +319,7 @@ final class UserServersBlockTest extends WP_UnitTestCase {
 	}
 
 	// ────────────────────────────────────────────────────────────────
-	// Singleton contract (S6 + A2)
+	// Singleton contract (S6 + A2 + D36)
 	// ────────────────────────────────────────────────────────────────
 
 	public function test_singleton_private_ctor(): void {
@@ -277,13 +338,7 @@ final class UserServersBlockTest extends WP_UnitTestCase {
 	}
 
 	// ────────────────────────────────────────────────────────────────
-	// T021 — US3 HTML-filter wrapping (SEC-002 documentation)
-	//
-	// NOTE (SEC-002): F038 returns the `acrossai_mcp_servers_shortcode_html`
-	// filter result verbatim without re-escaping. Listener plugins are
-	// trusted at the filter boundary — this test documents the seam is
-	// functional AND documents the trust boundary. See
-	// UserServersBlock.contract.md §Trust boundary disclosure.
+	// HTML filter contract (US3 / SEC-002)
 	// ────────────────────────────────────────────────────────────────
 
 	public function test_html_filter_round_trip_prepends_comment(): void {
@@ -319,72 +374,6 @@ final class UserServersBlockTest extends WP_UnitTestCase {
 		$this->assertStringContainsString( 'class="acrossai-mcp-servers"', $out );
 	}
 
-	// ────────────────────────────────────────────────────────────────
-	// FR-029/030/031 — per-DTO "how to connect" block
-	// ────────────────────────────────────────────────────────────────
-
-	public function test_show_config_default_renders_client_snippet_and_config_file(): void {
-		$this->create_and_enable_server( 'srv-cfg', 'Server Cfg' );
-
-		$out = do_shortcode( '[acrossai_mcp_servers]' );
-
-		// Default show_config=1 → details block present.
-		$this->assertStringContainsString( 'acrossai-mcp-servers__dto-details', $out );
-		// Claude Desktop's config_file is documented in F034 metadata.
-		$this->assertStringContainsString( 'claude_desktop_config.json', $out );
-		// The config snippet includes the top-level key `mcpServers`.
-		$this->assertStringContainsString( 'mcpServers', $out );
-		// Auth notice about Application Password.
-		$this->assertStringContainsString( 'Application Password', $out );
-	}
-
-	public function test_show_config_zero_omits_details(): void {
-		$this->create_and_enable_server( 'srv-nocfg', 'Server NoCfg' );
-
-		$out = do_shortcode( '[acrossai_mcp_servers show_config="0"]' );
-
-		// Compact list — no details block, no snippet, no Application Password notice.
-		$this->assertStringNotContainsString( 'acrossai-mcp-servers__dto-details', $out );
-		$this->assertStringNotContainsString( 'claude_desktop_config.json', $out );
-		$this->assertStringNotContainsString( 'Application Password', $out );
-	}
-
-	public function test_show_instructions_zero_omits_instructions_paragraph(): void {
-		$this->create_and_enable_server( 'srv-noinstr', 'Server NoInstr' );
-
-		$with    = do_shortcode( '[acrossai_mcp_servers]' );
-		$without = do_shortcode( '[acrossai_mcp_servers show_instructions="0"]' );
-
-		// Instructions paragraph class present in default output, absent when opted out.
-		$this->assertStringContainsString( 'acrossai-mcp-servers__instructions', $with );
-		$this->assertStringNotContainsString( 'acrossai-mcp-servers__instructions', $without );
-	}
-
-	public function test_server_url_in_snippet_matches_rest_url_shape(): void {
-		$server_id = (int) MCPServerQuery::instance()->add_item(
-			array(
-				'server_name'            => 'URL Server',
-				'server_slug'            => 'url-srv',
-				'is_enabled'             => 1,
-				'registered_from'        => 'database',
-				'server_route_namespace' => 'mcp',
-				'server_route'           => 'url-srv-route',
-				'server_version'         => 'v1.0.0',
-			)
-		);
-		ServerMetaQuery::update_meta( $server_id, '_embeds_enabled', '1' );
-		AbstractEmbedTransport::save_items_for_server(
-			$server_id,
-			array( 'mcp-client' => array( 'claude-desktop' ) )
-		);
-		AbstractEmbedTransport::flush_cache();
-
-		$out                 = do_shortcode( '[acrossai_mcp_servers]' );
-		$expected_url_suffix = 'mcp/url-srv-route';
-
-		$this->assertStringContainsString( $expected_url_suffix, $out );
-	}
-
 	public function test_html_filter_fires_exactly_once_per_render(): void {
 		$this->create_and_enable_server( 'srv-a', 'Server A' );
 
@@ -399,6 +388,29 @@ final class UserServersBlockTest extends WP_UnitTestCase {
 
 		do_shortcode( '[acrossai_mcp_servers]' );
 		$this->assertSame( 1, $fires );
+	}
+
+	// ────────────────────────────────────────────────────────────────
+	// Assets — enqueue-time behavior
+	// ────────────────────────────────────────────────────────────────
+
+	public function test_assets_enqueued_on_render(): void {
+		$this->create_and_enable_server( 'srv-a', 'Server A' );
+
+		do_shortcode( '[acrossai_mcp_servers]' );
+
+		$this->assertTrue( wp_style_is( 'acrossai-mcp-user-servers', 'enqueued' ) );
+		$this->assertTrue( wp_script_is( 'acrossai-mcp-user-servers', 'enqueued' ) );
+	}
+
+	public function test_assets_not_enqueued_for_anonymous(): void {
+		wp_set_current_user( 0 );
+		$this->create_and_enable_server( 'srv-a', 'Server A' );
+
+		do_shortcode( '[acrossai_mcp_servers]' );
+
+		$this->assertFalse( wp_style_is( 'acrossai-mcp-user-servers', 'enqueued' ) );
+		$this->assertFalse( wp_script_is( 'acrossai-mcp-user-servers', 'enqueued' ) );
 	}
 }
 
