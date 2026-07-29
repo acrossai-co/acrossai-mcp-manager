@@ -196,8 +196,12 @@ final class UserServersBlockTest extends WP_UnitTestCase {
 		$this->assertStringContainsString( 'acrossai-mcp-servers__url-row', $out );
 		$this->assertStringContainsString( '<span class="acrossai-mcp-servers__url-label">URL</span>', $out );
 		$this->assertStringContainsString( 'data-amcp-copy="#amcp-url-', $out );
-		// Client pills.
-		$this->assertStringContainsString( 'acrossai-mcp-servers__client-pills', $out );
+		// Client pills grouped by transport category.
+		$this->assertStringContainsString( 'acrossai-mcp-servers__client-pills-block', $out );
+		$this->assertStringContainsString( 'acrossai-mcp-servers__transport-group', $out );
+		$this->assertStringContainsString( 'acrossai-mcp-servers__transport-label', $out );
+		$this->assertStringContainsString( 'data-transport-key="client"', $out );
+		$this->assertStringContainsString( 'MCP Clients (1)', $out );
 		$this->assertStringContainsString( 'data-amcp-client-select="claude-desktop"', $out );
 		$this->assertStringContainsString( 'aria-selected="true" data-amcp-client-select', $out );
 	}

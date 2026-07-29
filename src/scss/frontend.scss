@@ -595,7 +595,21 @@ body {
 .acrossai-mcp-servers__client-pills-block {
 	display: flex;
 	flex-direction: column;
-	gap: 7px;
+	gap: 10px;
+}
+
+.acrossai-mcp-servers__transport-group {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
+.acrossai-mcp-servers__transport-label {
+	font-size: 10.5px;
+	font-weight: 600;
+	letter-spacing: 0.7px;
+	text-transform: uppercase;
+	color: var(--amcp-text-muted);
 }
 
 .acrossai-mcp-servers__client-pills {

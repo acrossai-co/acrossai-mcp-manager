@@ -368,20 +368,36 @@ final class UserServersBlock extends AbstractUserServersRenderer {
 		$server_url  = isset( $server['server_url'] ) && is_string( $server['server_url'] ) ? $server['server_url'] : '';
 		$transports  = isset( $server['transports'] ) && is_array( $server['transports'] ) ? $server['transports'] : array();
 
-		// Flatten DTOs into (transport_key, dto) pairs for the client pill + detail rendering.
-		$clients = array();
+		// Group DTOs per transport so the pills render as separate labeled
+		// sections (MCP Clients / NPM / AI Connectors) per the v2 design
+		// screenshot. The client-detail cards below stay flat — only one
+		// is visible at a time regardless of the selected pill's section.
+		$groups     = array();
+		$flat_dtos  = array();
+		$total_dtos = 0;
 		foreach ( $transports as $t ) {
 			if ( ! is_array( $t ) || ! isset( $t['dtos'] ) || ! is_array( $t['dtos'] ) ) {
 				continue;
 			}
-			$key = isset( $t['key'] ) && is_string( $t['key'] ) ? $t['key'] : '';
+			$key        = isset( $t['key'] ) && is_string( $t['key'] ) ? $t['key'] : '';
+			$label      = isset( $t['label'] ) && is_string( $t['label'] ) ? $t['label'] : '';
+			$group_dtos = array();
 			foreach ( $t['dtos'] as $d ) {
 				if ( is_array( $d ) ) {
-					$clients[] = array(
+					$group_dtos[] = $d;
+					$flat_dtos[]  = array(
 						'key' => $key,
 						'dto' => $d,
 					);
+					++$total_dtos;
 				}
+			}
+			if ( ! empty( $group_dtos ) ) {
+				$groups[] = array(
+					'key'   => $key,
+					'label' => $label,
+					'dtos'  => $group_dtos,
+				);
 			}
 		}
 
@@ -409,31 +425,53 @@ final class UserServersBlock extends AbstractUserServersRenderer {
 			$out .= '</div>';
 		}
 
-		if ( ! empty( $clients ) ) {
+		if ( ! empty( $groups ) ) {
 			$out .= '<div class="acrossai-mcp-servers__client-pills-block">';
 			$out .= '<span class="acrossai-mcp-servers__section-label">' . esc_html(
 				sprintf(
-					/* translators: %d — number of supported client tools for this server. */
-					_n( 'Supported clients (%d)', 'Supported clients (%d)', count( $clients ), 'acrossai-mcp-manager' ),
-					count( $clients )
+					/* translators: %d — total number of supported client tools across all transport categories for this server. */
+					_n( 'Supported clients (%d)', 'Supported clients (%d)', $total_dtos, 'acrossai-mcp-manager' ),
+					$total_dtos
 				)
 			) . '</span>';
-			$out       .= '<div class="acrossai-mcp-servers__client-pills">';
-			$is_first_c = true;
-			foreach ( $clients as $c ) {
-				$out       .= $this->render_client_pill( $c['dto'], $is_first_c );
-				$is_first_c = false;
+
+			$is_first_pill = true;
+			foreach ( $groups as $group ) {
+				$group_count = count( $group['dtos'] );
+				$out        .= '<div class="acrossai-mcp-servers__transport-group" data-transport-key="' . esc_attr( $group['key'] ) . '">';
+				if ( '' !== $group['label'] ) {
+					$out .= '<span class="acrossai-mcp-servers__transport-label">';
+					$out .= esc_html(
+						sprintf(
+							/* translators: 1: transport section label (e.g. "MCP Clients"), 2: number of clients in that transport section. */
+							_x( '%1$s (%2$d)', 'shortcode transport section header', 'acrossai-mcp-manager' ),
+							$group['label'],
+							$group_count
+						)
+					);
+					$out .= '</span>';
+				}
+				$out .= '<div class="acrossai-mcp-servers__client-pills">';
+				foreach ( $group['dtos'] as $d ) {
+					$out          .= $this->render_client_pill( $d, $is_first_pill );
+					$is_first_pill = false;
+				}
+				$out .= '</div></div>';
 			}
-			$out .= '</div></div>';
+
+			$out .= '</div>';
 		}
 
 		$out .= '</div>'; // .__server-context
 
-		// Selected client detail (one card per client; first initially active).
-		$is_first_d = true;
-		foreach ( $clients as $c ) {
-			$out       .= $this->render_client_detail( $c['dto'], $c['key'], $server_id, $server_slug, $server_url, $is_first_d );
-			$is_first_d = false;
+		// Client-detail cards. Flat order — the JS selection swap works
+		// across all groups because the pill's data-amcp-client-select
+		// slug is unique per DTO regardless of the transport section it
+		// lives in.
+		$is_first_detail = true;
+		foreach ( $flat_dtos as $c ) {
+			$out            .= $this->render_client_detail( $c['dto'], $c['key'], $server_id, $server_slug, $server_url, $is_first_detail );
+			$is_first_detail = false;
 		}
 
 		$out .= '</div>'; // .__server-panel
