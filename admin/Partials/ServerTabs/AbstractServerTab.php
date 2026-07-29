@@ -95,14 +95,273 @@ abstract class AbstractServerTab {
 		$this->render_body( $server );
 	}
 
+	// ============================================================
+	// Declarative body — the "extend + fields, get a rendered tab
+	// for free" surface (D35 self-contained-subsystem pattern).
+	// ============================================================
+
 	/**
-	 * Renders the tab's body. Subclasses implement this.
+	 * Renders the tab's body. Concrete default = declarative dispatch to the
+	 * `get_*` overrides below. Non-`final` on purpose: subclasses whose body
+	 * doesn't fit the standard scaffold (form-heavy tabs like NpmTab /
+	 * DangerZoneTab / Overview) can still override this method directly and
+	 * emit whatever HTML they need. React-mount tabs (Embeds / Abilities /
+	 * Tools / AI Connectors) should prefer the declarative getters below.
+	 *
+	 * Standard scaffold order:
+	 *
+	 *   <div class="mcp-tab-panel">
+	 *     <h2>{@see get_heading()}</h2>
+	 *     <p class="description">{@see get_description()}</p>
+	 *     [optional] {@see render_disabled_server_notice()} when
+	 *                 {@see requires_enabled_server()} && ! $server['is_enabled']
+	 *     {@see render_content($server)}           ← default renders React mount
+	 *     {@see render_noscript_fallback($server)} ← default renders nothing
+	 *   </div>
 	 *
 	 * @since 0.0.6
 	 * @param array $server Server row data.
 	 * @return void
 	 */
-	abstract protected function render_body( array $server ): void;
+	protected function render_body( array $server ): void {
+		echo '<div class="mcp-tab-panel">';
+		$this->render_heading();
+		$this->render_description();
+		if ( $this->requires_enabled_server() && empty( $server['is_enabled'] ) ) {
+			$this->render_disabled_server_notice();
+		}
+		$this->render_content( $server );
+		$this->render_noscript_fallback( $server );
+		echo '</div>';
+	}
+
+	/**
+	 * Tab-body heading (rendered as `<h2>`). Defaults to `label()` so a
+	 * subclass that only declares slug/label gets a sensible heading for free.
+	 * Override when the tab title in the nav should differ from the body
+	 * heading (e.g. label "Embeds" vs heading "Frontend Embeds").
+	 *
+	 * @since 0.1.11
+	 * @return string Translated heading; empty string suppresses the `<h2>`.
+	 */
+	public function get_heading(): string {
+		return $this->label();
+	}
+
+	/**
+	 * Optional one-liner description shown under the heading. Empty string
+	 * suppresses the `<p class="description">`.
+	 *
+	 * @since 0.1.11
+	 * @return string
+	 */
+	public function get_description(): string {
+		return '';
+	}
+
+	/**
+	 * DOM id of the React mount div. Empty string = no mount emitted (the
+	 * default; only React-mount tabs override).
+	 *
+	 * @since 0.1.11
+	 * @return string
+	 */
+	public function get_react_root_id(): string {
+		return '';
+	}
+
+	/**
+	 * Data attributes to emit on the React mount `<div>`. Keys are the
+	 * attribute *suffix* — e.g. returning `['server-id' => 42]` emits
+	 * `data-server-id="42"`. Default: empty array (no data attrs; React
+	 * reads state from `wp_localize_script` bootstrap payload instead).
+	 *
+	 * @since 0.1.11
+	 * @param array $server Server row data.
+	 * @return array<string, string|int>
+	 */
+	public function get_react_root_data( array $server ): array {
+		unset( $server ); // Subclasses override to derive from $server.
+		return array();
+	}
+
+	/**
+	 * Text shown inside the React mount before the app hydrates. Empty
+	 * string = no placeholder (mount `<div>` renders empty until React
+	 * takes over).
+	 *
+	 * @since 0.1.11
+	 * @return string
+	 */
+	public function get_loading_placeholder(): string {
+		return '';
+	}
+
+	/**
+	 * When true and `! $server['is_enabled']`, the base emits a "server
+	 * disabled" warning notice above the content. Default false — enable
+	 * only for tabs whose contents depend on the server being on.
+	 *
+	 * @since 0.1.11
+	 * @return bool
+	 */
+	public function requires_enabled_server(): bool {
+		return false;
+	}
+
+	/**
+	 * Emits the standard `<h2>` heading. Override
+	 * {@see get_heading()} to change the text.
+	 *
+	 * @since 0.1.11
+	 * @return void
+	 */
+	protected function render_heading(): void {
+		$heading = $this->get_heading();
+		if ( '' === $heading ) {
+			return;
+		}
+		printf( '<h2>%s</h2>', esc_html( $heading ) );
+	}
+
+	/**
+	 * Emits the standard `<p class="description">`. Override
+	 * {@see get_description()} to change the text.
+	 *
+	 * @since 0.1.11
+	 * @return void
+	 */
+	protected function render_description(): void {
+		$description = $this->get_description();
+		if ( '' === $description ) {
+			return;
+		}
+		printf( '<p class="description">%s</p>', esc_html( $description ) );
+	}
+
+	/**
+	 * Default content — the React mount div, driven by
+	 * {@see get_react_root_id()}, {@see get_react_root_data()}, and
+	 * {@see get_loading_placeholder()}. Emits nothing when
+	 * `get_react_root_id()` returns empty (the default). Non-React tabs can
+	 * override this method directly to emit form / table / custom markup
+	 * without touching `render_body()`.
+	 *
+	 * @since 0.1.11
+	 * @param array $server Server row data.
+	 * @return void
+	 */
+	protected function render_content( array $server ): void {
+		$root_id = $this->get_react_root_id();
+		if ( '' === $root_id ) {
+			return;
+		}
+
+		$attrs = '';
+		foreach ( $this->get_react_root_data( $server ) as $key => $value ) {
+			$attrs .= sprintf(
+				' data-%s="%s"',
+				esc_attr( (string) $key ),
+				esc_attr( (string) $value )
+			);
+		}
+
+		$placeholder = $this->get_loading_placeholder();
+		$inner       = '' === $placeholder
+			? ''
+			: '<p class="description">' . esc_html( $placeholder ) . '</p>';
+
+		printf(
+			'<div id="%s"%s>%s</div>',
+			esc_attr( $root_id ),
+			$attrs, // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Assembled from pre-escaped fragments above.
+			$inner  // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Assembled from pre-escaped fragments above.
+		);
+	}
+
+	/**
+	 * Optional `<noscript>` notice text — the warning at the top of the
+	 * no-JS fallback block explaining that JavaScript is required. Empty
+	 * string suppresses the notice. Return non-empty (and/or non-empty
+	 * summary rows) to have the base emit a `<noscript>` block for you.
+	 *
+	 * @since 0.1.11
+	 * @return string
+	 */
+	public function get_noscript_notice(): string {
+		return '';
+	}
+
+	/**
+	 * Optional read-only key/value rows for the no-JS fallback table. Each
+	 * row is `[ 'label' => 'X', 'value' => 'Y' ]`. Return `[]` to skip the
+	 * table entirely (just the notice above will render).
+	 *
+	 * @since 0.1.11
+	 * @param array $server Server row data.
+	 * @return array<int, array{label: string, value: string}>
+	 */
+	public function get_noscript_summary_rows( array $server ): array {
+		unset( $server );
+		return array();
+	}
+
+	/**
+	 * No-JS fallback renderer — assembles a `<noscript>` block from the
+	 * declarative getters above. Emits nothing when both getters return
+	 * empty (the default; only React-mount tabs whose state should be
+	 * inspectable without JS bother declaring these).
+	 *
+	 * Subclasses whose no-JS fallback doesn't fit the "notice + summary
+	 * table" shape can still override this method directly.
+	 *
+	 * @since 0.1.11
+	 * @param array $server Server row data.
+	 * @return void
+	 */
+	protected function render_noscript_fallback( array $server ): void {
+		$notice = $this->get_noscript_notice();
+		$rows   = $this->get_noscript_summary_rows( $server );
+		if ( '' === $notice && empty( $rows ) ) {
+			return;
+		}
+
+		echo '<noscript>';
+		if ( '' !== $notice ) {
+			printf(
+				'<div class="notice notice-warning inline"><p>%s</p></div>',
+				esc_html( $notice )
+			);
+		}
+		if ( ! empty( $rows ) ) {
+			echo '<table class="widefat striped"><tbody>';
+			foreach ( $rows as $row ) {
+				printf(
+					'<tr><th>%1$s</th><td>%2$s</td></tr>',
+					esc_html( (string) ( $row['label'] ?? '' ) ),
+					esc_html( (string) ( $row['value'] ?? '' ) )
+				);
+			}
+			echo '</tbody></table>';
+		}
+		echo '</noscript>';
+	}
+
+	/**
+	 * Standard "Server is disabled" warning notice — rendered by the base
+	 * when {@see requires_enabled_server()} is true and the server row is
+	 * flagged disabled. Override to customize copy.
+	 *
+	 * @since 0.1.11
+	 * @return void
+	 */
+	protected function render_disabled_server_notice(): void {
+		printf(
+			'<div class="notice notice-warning inline"><p><strong>%1$s</strong> %2$s</p></div>',
+			esc_html__( 'Server is disabled.', 'acrossai-mcp-manager' ),
+			esc_html__( 'Enable the server on the Overview tab. You can still edit this tab — your changes take effect the moment the server is enabled.', 'acrossai-mcp-manager' )
+		);
+	}
 
 	/**
 	 * Emits the opening <form> tag for a per-server admin form.

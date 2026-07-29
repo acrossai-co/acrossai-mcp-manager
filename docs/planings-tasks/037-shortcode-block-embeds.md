@@ -6,6 +6,19 @@
 
 ---
 
+## ⚠️ POST-IMPLEMENTATION PIVOT NOTE (2026-07-27)
+
+**This brief was written pre-pivot.** The initial implementation followed the brief's DEV5 hand-rolled form + inline vanilla JS approach, but ran into a real-time sub-toggle sync bug that required JS anyway. That triggered a mid-flight `/speckit-clarify` Q4 that pivoted F037 to **full React + REST** per D37 codification. What SHIPPED:
+
+- **Admin UI**: React app at `src/js/embeds.js` mounted on `<div id="acrossai-mcp-embeds-root">` — uses `@wordpress/components` (`ToggleControl`, `Button`, `Notice`, `Spinner`), `@wordpress/element`, `@wordpress/api-fetch` (nonce middleware only per B25), `@wordpress/i18n`
+- **Save path**: REST controller `\AcrossAI_MCP_Manager\Includes\REST\EmbedsController` registering `GET+POST /acrossai-mcp-manager/v1/servers/{server_id}/embeds` — matches F017 Abilities + F020 Tools URL pattern verbatim
+- **Auth**: `permission_callback` verifies `manage_options`; WP core `wp_rest` nonce via `X-WP-Nonce` header (SEC-037-001 server-scoping obsoleted — REST URL's `{server_id}` path parameter IS the tenant scope, structurally preventing cross-server bypass)
+- **DEV5 no longer applies** — F037 dropped from consumer count; back to 3 (Update Server, Danger Zone, Access Control override — all single-submit surfaces per narrowed DEV5)
+
+**Sections below that reference the DEV5 hand-rolled form approach + server-scoped nonce action + `handle_save_embeds()` are historical.** For the authoritative shipped design, consult `specs/036-shortcode-block-embeds/{spec,plan,security-constraints,tasks}.md` + `docs/memory/DECISIONS.md` D37. This note is preserved because the brief's structural decisions (BerlinDB junction table, `AbstractEmbedTransport` D35 pattern, 3-gate cascade in the shortcode, observability actions, GC helper, F035 delegation) all shipped as designed — only the admin-UI shape pivoted.
+
+---
+
 ## Intro
 
 Add a new per-server admin tab under `?page=acrossai_mcp_manager&action=edit&server=<id>` that lets site administrators control which connection methods surface via **shortcodes and blocks** on the WordPress frontend. First iteration ships shortcodes; block-editor blocks are a Phase-2 extension of the same subsystem (same storage, same enable-gates, different renderer). Tab default state: **globally disabled per server** — a fresh install ships zero shortcode output for every server.

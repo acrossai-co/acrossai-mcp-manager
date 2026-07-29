@@ -118,6 +118,10 @@ final class Registry {
 			new ToolsTab(),
 			new AbilitiesTab(),
 			new AccessControlTab(),
+			// Feature 037 — Embeds tab (priority 90). Per-server master
+			// toggle + per-transport sub-toggles for the [acrossai_mcp_embed]
+			// shortcode + block frontend output.
+			EmbedsTab::instance(),
 			new McpTrackerTab(),
 			new UpdateServerTab(),
 			new DangerZoneTab(),

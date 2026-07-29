@@ -47,9 +47,18 @@ class Table extends \BerlinDB\Database\Kern\Table {
 	 * ADD the `override_abilities_permission` column. Follows the D28
 	 * BerlinDB schema-drift-reconciliation contract byte-for-byte.
 	 *
+	 * `1.1.3` (F037): forces the paired `upgrade_to_1_1_3()` callback to
+	 * ADD the `embeds_enabled` column (master gate for the per-server
+	 * frontend embed shortcode + block output). Same D28 3-part contract.
+	 *
+	 * `1.1.4` (F037 redesign 2026-07-27): DROPs the `embeds_enabled`
+	 * column + DROPs the `wp_acrossai_mcp_server_embed_transports`
+	 * junction table. All F037 state migrated to the new
+	 * `wp_acrossai_mcp_servers_meta` WP-canonical meta table.
+	 *
 	 * @var string
 	 */
-	protected $version = '1.1.2';
+	protected $version = '1.1.4';
 
 	/**
 	 * BerlinDB per-version upgrade callbacks. Runs when `db_version` in
@@ -60,6 +69,8 @@ class Table extends \BerlinDB\Database\Kern\Table {
 	protected $upgrades = array(
 		'1.1.1' => 'upgrade_to_1_1_1',
 		'1.1.2' => 'upgrade_to_1_1_2',
+		'1.1.3' => 'upgrade_to_1_1_3',
+		'1.1.4' => 'upgrade_to_1_1_4',
 	);
 
 	/**
@@ -211,6 +222,96 @@ class Table extends \BerlinDB\Database\Kern\Table {
 
 		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.DirectDatabaseQuery.SchemaChange -- DDL with plugin-owned table name + hardcoded column definition; idempotent via existence check above. $wpdb->prepare() does not support DDL identifiers.
 		$wpdb->query( "ALTER TABLE `{$table}` ADD COLUMN `override_abilities_permission` tinyint(1) NOT NULL DEFAULT 0" );
+
+		return true;
+	}
+
+	/**
+	 * F037 upgrade — bump to 1.1.3.
+	 *
+	 * Adds the `embeds_enabled tinyint(1) unsigned NOT NULL DEFAULT 0`
+	 * column to `wp_acrossai_mcp_servers`. Default 0 preserves prior
+	 * behaviour on every existing row (fresh install ships with zero
+	 * shortcode output for every server per FR-002).
+	 *
+	 * Idempotent via `INFORMATION_SCHEMA.COLUMNS` existence check. Mirrors
+	 * `upgrade_to_1_1_2()` shape verbatim per D28 3-part contract.
+	 *
+	 * @return bool
+	 */
+	protected function upgrade_to_1_1_3(): bool {
+		global $wpdb;
+
+		$table = $wpdb->prefix . 'acrossai_mcp_servers';
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Schema-drift read; INFORMATION_SCHEMA has no caching layer.
+		$existing = $wpdb->get_col(
+			$wpdb->prepare(
+				"SELECT COLUMN_NAME
+				 FROM INFORMATION_SCHEMA.COLUMNS
+				 WHERE TABLE_SCHEMA = %s
+				   AND TABLE_NAME = %s
+				   AND COLUMN_NAME = 'embeds_enabled'",
+				DB_NAME,
+				$table
+			)
+		);
+
+		if ( ! empty( $existing ) ) {
+			return true;
+		}
+
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.DirectDatabaseQuery.SchemaChange -- DDL with plugin-owned table name + hardcoded column definition; idempotent via existence check above. $wpdb->prepare() does not support DDL identifiers.
+		$wpdb->query( "ALTER TABLE `{$table}` ADD COLUMN `embeds_enabled` tinyint(1) unsigned NOT NULL DEFAULT 0" );
+
+		return true;
+	}
+
+	/**
+	 * F037 redesign upgrade — bump to 1.1.4.
+	 *
+	 * DROPs the `embeds_enabled` column added by upgrade_to_1_1_3 +
+	 * DROPs the retired `wp_acrossai_mcp_server_embed_transports`
+	 * junction table. All F037 state migrated to the new
+	 * `wp_acrossai_mcp_servers_meta` meta table under `_embeds_enabled`
+	 * + `_embed_dto:*` meta_keys. Safe to lose the old rows: this is
+	 * F037 dev-branch data (feature not shipped to `main` yet); admin
+	 * re-selects post-upgrade.
+	 *
+	 * Idempotent via `INFORMATION_SCHEMA` existence checks.
+	 *
+	 * @return bool
+	 */
+	protected function upgrade_to_1_1_4(): bool {
+		global $wpdb;
+
+		$table = $wpdb->prefix . 'acrossai_mcp_servers';
+
+		// Step 1 — DROP embeds_enabled column (idempotent).
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
+		$col_exists = $wpdb->get_col(
+			$wpdb->prepare(
+				"SELECT COLUMN_NAME
+				 FROM INFORMATION_SCHEMA.COLUMNS
+				 WHERE TABLE_SCHEMA = %s
+				   AND TABLE_NAME = %s
+				   AND COLUMN_NAME = 'embeds_enabled'",
+				DB_NAME,
+				$table
+			)
+		);
+		if ( ! empty( $col_exists ) ) {
+			// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.DirectDatabaseQuery.SchemaChange
+			$wpdb->query( "ALTER TABLE `{$table}` DROP COLUMN `embeds_enabled`" );
+		}
+
+		// Step 2 — DROP the retired junction table (idempotent).
+		$junction = $wpdb->prefix . 'acrossai_mcp_server_embed_transports';
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.DirectDatabaseQuery.SchemaChange
+		$wpdb->query( "DROP TABLE IF EXISTS `{$junction}`" );
+		// Also clear the stale db_version option so a reinstall doesn't
+		// think the table still needs upgrading.
+		delete_option( 'acrossai_mcp_server_embed_transports_db_version' );
 
 		return true;
 	}

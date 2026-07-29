@@ -130,6 +130,16 @@ class Settings {
 
 			if ( $server_id > 0 ) {
 				Query::instance()->delete_item( $server_id );
+				/**
+				 * Fires after a server row is deleted from the primary table.
+				 * Subscribers (F037 embed-transport cleanup, future modules)
+				 * hook this to prune per-server rows in their own tables.
+				 *
+				 * @since Feature 037
+				 *
+				 * @param int $server_id Deleted server primary key.
+				 */
+				do_action( 'acrossai_mcp_server_deleted', $server_id );
 			}
 			$this->redirect_to_list( 'server_deleted' );
 		}
@@ -163,6 +173,13 @@ class Settings {
 			check_admin_referer( 'acrossai_mcp_manager_permission_override_' . $server_id, 'acrossai_mcp_manager_permission_override_nonce' );
 			$this->handle_save_permission_override( $server_id );
 		}
+
+		// F037 — save handler owned by the tab class itself (EmbedsTab
+		// extends AbstractReactMountServerTab, which registers a REST
+		// controller on rest_api_init). No admin-post path — React app
+		// under `src/js/embeds.js` saves via
+		// `POST /acrossai-mcp-manager/v1/servers/{server_id}/embeds`
+		// using the WP core `wp_rest` nonce.
 
 		// F015 note (post-Q4): access-control saves for the vendor wpb-ac
 		// React panel are owned by vendor REST endpoints (PUT/DELETE
@@ -475,6 +492,16 @@ class Settings {
 		);
 		exit;
 	}
+
+	// F037 handle_save_embeds() lives on the tab class now — EmbedsTab
+	// extends AbstractReactMountServerTab, which auto-registers a REST
+	// controller (POST /acrossai-mcp-manager/v1/servers/{server_id}/embeds)
+	// and delegates to EmbedsTab::set_state_for_server(). React app under
+	// src/js/embeds.js consumes the REST endpoint via apiFetch. Nonce
+	// is WP core `wp_rest` (validated by the base class's
+	// rest_permission_callback); the SEC-037-001 server-scoping concern
+	// is subsumed by the REST route's `{server_id}` URL parameter + the
+	// same admin cap gate.
 
 	// ─────────────────────────────────────────────────────────────────────────
 	// Page render — wired as the menu callback by Menu::register_menu().

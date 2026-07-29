@@ -1,5 +1,18 @@
 {
 	"mcpServers": {
+		"wordpress-7-0-default-mcp-server": {
+			"command": "npx",
+			"args": [
+				"-y",
+				"@automattic/mcp-wordpress-remote@latest"
+			],
+			"env": {
+				"NODE_TLS_REJECT_UNAUTHORIZED": "0",
+				"WP_API_URL": "https://wordpress-7-0.local/wp-json/mcp/mcp-adapter-default-server",
+				"WP_API_USERNAME": "admin",
+				"WP_API_PASSWORD": "w4qx 90tV PY9q a4LM oDFl ZGZW"
+			}
+		},
 		"deepwiki": {
 			"command": "npx",
 			"args": [

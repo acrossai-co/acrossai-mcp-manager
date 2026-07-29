@@ -2102,3 +2102,105 @@ Third-party plugins needing a different discovery-API shape use **composition** 
 **Where to look next**
 
 Any new `public/` class marked `@experimental until plugin 1.0.0`. Before shipping, audit: is the class declared `final`? Does the class docblock cite the extension paths (filter names) that replace subclassing? Does the plugin's public documentation (e.g., quickstart.md) tell third-party developers "extend via filter, use composition for shape divergence"? If any answer is no, apply this pattern before merge.
+
+---
+
+### 2026-07-27 — D37 — Admin UIs are React-first; hand-rolled forms + vanilla JS forbidden as a React substitute (F037)
+
+**Status**
+
+Active
+
+**Why this is durable**
+
+The plugin has three sanctioned patterns for admin UI state management, each with a specific fit:
+
+1. **React + REST** — for interactive multi-field surfaces (canonical: F017 Abilities, F020 Tools, F037 Embeds — all under `/acrossai-mcp-manager/v1/servers/{server_id}/{resource}` URL shape)
+2. **Vanilla WP admin PHP + core JS + wp-ajax** — RARE fallback for surfaces where React is genuinely inappropriate (activation notices, WP-CLI dashboards, embedded jQuery UI widgets from third-party plugins)
+3. **DEV5 hand-rolled admin forms** — read-only or single-submit surfaces only (F013 Update Server, F013 Danger Zone, F030 Access Control override toggle)
+
+The **failure mode this decision prevents**: attempting to use pattern 3 (DEV5 hand-rolled form) for a pattern-1 use case (interactive multi-field), then bolting on vanilla JS to fix the interactivity gap. F037 shipped this exact anti-pattern in its initial implementation and had to pivot mid-flight — the hand-rolled form couldn't sync sub-toggle disabled state in real-time without JS, and the vanilla JS bolt-on was inconsistent with the F017/F020 React pattern that already existed for sibling per-server admin surfaces. Once the pivot happened, the correct pattern was ~250 lines of React (mirroring F017) instead of ~400 lines of PHP form + inline JS + custom nonce plumbing + custom save handler in `Settings::handle_actions()`. **The vanilla-JS-in-hand-rolled-form pattern loses on every axis vs React + REST** for interactive multi-field surfaces: more code, more security surface (custom nonce vs WP core `wp_rest`), less testable, no shared UX primitives, harder for future maintainers reading a sibling F017 tab.
+
+**Decision / Finding**
+
+Any new admin UI with **interactive multi-field state** MUST use pattern 1 (React + REST). Concretely:
+
+- **REST controller** under `includes/REST/` following F017/F020 shape: singleton, `private __construct()` (S6), `register_routes()` on `rest_api_init` (wired via Loader per A1), explicit `permission_callback` (S2), route path `/acrossai-mcp-manager/v1/servers/{server_id}/{resource}`.
+- **React app** under `src/js/{feature}.js` following F017 abilities.js shape: uses ONLY sanctioned `@wordpress/*` packages per DEC-WP-DATAVIEWS-OVER-REACT (element, api-fetch, i18n, components, dataviews when data-grid, hooks); `apiFetch.createNonceMiddleware` only per B25 (NEVER `createRootURLMiddleware`); reads initial state from `window.acrossaiMcp{Feature}` bootstrap set via `wp_localize_script` for zero-round-trip first render.
+- **Enqueue** via a `admin/Main.php::maybe_enqueue_{feature}_app()` method mirroring `maybe_enqueue_abilities_app()` verbatim: `?action=edit` + `?tab={slug}` guard, asset manifest read (silent bail on missing), script + optional CSS enqueue, `wp_localize_script` bootstrap.
+- **SCSS** at `src/scss/{feature}.scss` imported by the React entry; mini-css-extract emits `build/js/{feature}.css`.
+- **Tab body** renders `<div id="acrossai-mcp-{feature}-root"></div>` + `<noscript>` fallback showing read-only current state.
+
+If React is **genuinely inappropriate** — e.g., surface is activation-time only (no admin JS enqueued), a jQuery UI widget from a vendor plugin, or a WP-CLI dashboard widget that ships with WP core patterns — fall back to pattern 2 (vanilla WP admin PHP + core JS + wp-ajax). Never invent hand-rolled forms + inline vanilla JS as a substitute for React interactivity — this pattern doesn't scale, breaks visual consistency with F017/F020/F037 sibling tabs, and forces divergent nonce + save patterns.
+
+**DEV5 (hand-rolled admin form exception)** is NARROWED going forward: applies to read-only rendering + single-submit surfaces with no client-side interactivity requirement. Interactive multi-field surfaces fall OUT of DEV5 into D37 scope. F037 was DEV5's 4th consumer pre-pivot; retracted post-pivot; DEV5 consumer count returns to 3 (Update Server, Danger Zone, Access Control override — all single-submit forms with no cross-field JS interactivity). D13 escalation candidate for DEV5 is withdrawn.
+
+**Enforcement**: `plan.md` Constitution Check §IV MUST cite this decision when adding any new admin UI. If a plan claims DEV5 exemption for an interactive multi-field surface, `/speckit-analyze` MUST flag as a D37 violation. If a plan proposes wp-ajax (pattern 2), it MUST justify in its Constitution Check §IV why React (pattern 1) is inappropriate.
+
+**Reference impls**:
+
+- `includes/REST/AbilitiesController.php` + `src/js/abilities.js` (F017 — the canonical dataviews-grid case)
+- `includes/REST/ToolsController.php` + `src/js/tools.js` (F020 — the canonical shuttle-picker case)
+- `includes/REST/EmbedsController.php` + `src/js/embeds.js` (F037 — the canonical simple-toggles case)
+
+**Tradeoffs / Prevention**
+
+- Gained: consistent WP-idiomatic admin UX across every interactive tab; WP core `wp_rest` nonce (obsoletes custom server-scoped nonce plumbing); testable REST layer; shared React component vocabulary (`ToggleControl`, `Button`, `Notice`, `Spinner`); path to Phase-2 block-editor blocks (Gutenberg uses the same package family)
+- Reconsider: only if `@wordpress/components` shape changes materially post-1.0.0 (unlikely for stable primitives like `ToggleControl`) OR if a future WP-core convention obsoletes the pattern (e.g., a block-editor-first admin UI paradigm)
+- Related: [[dec-wp-dataviews-over-react]] (parent decision — package allow-list; D37 strengthens it by adding the anti-pattern prohibition), [[dev5]] (narrowed scope), [[b25]] (apiFetch middleware discipline that D37 rules require), [[a1]] (Loader-wired REST + enqueue registration), [[s2]] (REST permission_callback mandate — D37 pattern satisfies by construction), [[dec-client-renderer-public-api]] (public/ layer @experimental policy — orthogonal but same F013 vintage)
+
+**Where to look next**
+
+Any new feature adding an admin UI. Before shipping, verify against the `plan.md` Constitution Check §IV clause: does this feature have interactive multi-field state? If yes → pattern 1 (React + REST). If no → pattern 2 or pattern 3 with explicit justification. If the plan proposes pattern 3 (DEV5 hand-rolled form), verify the form is truly single-submit + no client-side interactivity requirement; else `/speckit-analyze` should flag as D37 violation.
+
+---
+
+### 2026-07-28 - D38 — Reusable-primitive `register()` exception to A1
+
+**Status**
+Active
+
+**Why this is durable**
+A1 says "only `includes/Main.php` calls `add_action`/`add_filter`." F037's AbstractReactMountServerTab is a reusable base for third-party companion plugins; enforcing A1 on it would require every consumer to reimplement asset enqueue + REST wiring in their own Main.php. Codifies when the A1 rule may be relaxed.
+
+**Decision / Finding**
+An abstract base class positioned as an extension surface for third-party plugins MAY call `add_action` / `add_filter` inside an idempotent public `register()` entry point. The consuming plugin's own boot code invokes `register()`. Each plugin's own boot code still owns its hook registration — A1 holds at every plugin level. The base class does NOT self-register at file-inclusion or class-load time.
+
+Requirements for a class to invoke this exception:
+1. `abstract class` positioned as third-party extension surface (documented in class-level docblock)
+2. Public static `register()` entry point — idempotent per subclass (guard against double-invocation)
+3. No self-registration on file load or class instantiation
+4. Consumer contract: guard with `class_exists()` in the consumer's own `plugins_loaded` handler
+
+**Tradeoffs / Prevention**
+- Gained: Third-party plugins get a one-liner `MyTab::register()` extension surface instead of hand-rolling enqueue + REST wiring
+- Reconsider: If a third-party author calls `register()` from a wrong hook (e.g., after `admin_enqueue_scripts` has already fired), the wiring is a no-op silently; document the correct call site (`plugins_loaded` or earlier). This is the tradeoff for the ergonomic single-entry-point pattern.
+
+Canonical example: `admin/Partials/ServerTabs/AbstractReactMountServerTab::register()` shipped in F037 Pivot C (commit `8d55d21`).
+
+Related: `DEV5` tab-hand-rolled-form exception (§IV DataForm); `DEC-CLIENT-RENDERER-PUBLIC-API` `public/` layer stability contract.
+
+---
+
+### 2026-07-28 - D39 — Per-listener isolation for observability actions
+
+**Status**
+Active
+
+**Why this is durable**
+Native WordPress `do_action()` re-raises the first thrown exception from a listener, silently skipping subsequent listeners on the same hook. Wrapping `do_action()` in a caller-side try/catch protects the DB write but NOT other listeners. When multiple audit-log consumers subscribe to the same observability action (common), a bug in one silently masks the others. The correct pattern is per-listener isolation.
+
+**Decision / Finding**
+Plugin observability actions with a fail-forward requirement MUST use a per-listener isolation helper instead of native `do_action()`. Canonical implementation: `AbstractEmbedTransport::fire_action_isolated( string $hook, ...$args )` — iterates `$wp_filter[$hook]->callbacks` in priority order and wraps each `call_user_func_array` in try/catch.
+
+Consumers pass the same args they'd pass to `do_action()`. Helper is a no-op when no listeners registered.
+
+**Tradeoffs / Prevention**
+- Gained: One broken listener MUST NOT abort subsequent listeners on the same hook OR roll back the DB write (full R3 compliance per F015/F017/F020/F030/F032 pattern)
+- Reconsider: Exception messages land in the PHP error log (SEC-007 disclosure trade-off — listener authors MUST NOT put sensitive data in exception messages)
+- Reconsider: Helper does NOT respect `accepted_args` (extra args passed to listeners expecting fewer — PHP silently discards, but subtle drift from `do_action` semantics). Future refinement: slice `$args` per callback's `accepted_args`.
+- Tech debt: F015/F017/F020/F030/F032 audit fires still use native `do_action()` inside try/catch — SC-010 "N-listener isolation" only fully satisfied post-retrofit. Track as follow-up per-feature.
+
+Canonical example: `includes/Embeds/AbstractEmbedTransport::fire_action_isolated()` shipped in F037 RT2 (commit `0c8c5f8`).
+
+Related: research.md R3 (observability-fail-forward); future `B-ERROR-LOG-DISCLOSURE` bug-pattern entry candidate (SEC-007).
