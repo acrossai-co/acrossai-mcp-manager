@@ -224,3 +224,7 @@ jobs:
       - name: Run PHPUnit — F037 embeds suite
         continue-on-error: true
         run: vendor/bin/phpunit --bootstrap tests/bootstrap-wp.php --testsuite embeds
+
+      - name: Run PHPUnit — F038 user-servers suite
+        continue-on-error: true
+        run: vendor/bin/phpunit --bootstrap tests/bootstrap-wp.php --testsuite user-servers

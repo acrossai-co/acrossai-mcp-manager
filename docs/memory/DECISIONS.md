@@ -2204,3 +2204,33 @@ Consumers pass the same args they'd pass to `do_action()`. Helper is a no-op whe
 Canonical example: `includes/Embeds/AbstractEmbedTransport::fire_action_isolated()` shipped in F037 RT2 (commit `0c8c5f8`).
 
 Related: research.md R3 (observability-fail-forward); future `B-ERROR-LOG-DISCLOSURE` bug-pattern entry candidate (SEC-007).
+
+
+---
+
+### 2026-07-29 - D40 — User-scoped enumeration primitives compose existing gates — never re-implement them
+
+**Status**
+Active
+
+**Why this is durable**
+F038 introduces the first "list what the current user can reach" primitive on the frontend surface. Two competing implementation shapes appeared during planning: (a) compose the shipped F015 + F037 gate cascade end-to-end (`user_has_server_access` + `is_enabled_for_server`), or (b) inline the underlying meta reads for "performance". The inline approach creates two enumeration paths per subsystem that WILL drift — the exact class of bug F035 fixed for MCP clients (D35, B32). F038 codified the composition-only rule and enforces it via three grep-gates (FR-023, FR-024, FR-025) at review time.
+
+**Decision / Finding**
+When a subsystem exposes a "list what the current user can reach" primitive, it MUST compose the shipping gate stack — never re-read the underlying meta rows or re-check the wpb-access-control provider list itself. This preserves:
+
+- The **fail-open contract** (Q2 / D19) — F015 wrapper returns `true` when the vendor package is absent; F038 inherits transitively.
+- The **R2 per-request memoization** — F037's `is_enabled_for_server` caches per `(server_id, transport_key, dto_slug)` triple; direct meta reads bypass it.
+- The **admin-bypass hierarchy** — F015 v2 vendor manager applies admin bypass internally; direct table reads miss it.
+
+F038 also codified a second sub-rule: the abstract data-only base MAY live under `public/Renderers/` (paralleling `AbstractClientRenderer`) despite D36's `final class` guidance for `@experimental public` classes. Rationale: the base IS the extension surface for companion plugins; `final abstract` is a language contradiction. D36's target (delegation-invariant defeat) does NOT apply because F038 IS the gate-application layer, not a gate-enforcer other features must hit.
+
+**Tradeoffs / Prevention**
+- Gained: Single canonical enumeration path per subsystem — grep-gate-enforceable at review time, immune to the B32 drift class.
+- Gained: Companion plugins (BuddyBoss add-on, WooCommerce My Account, WPUM, MemberPress) inherit fail-open + memoization + admin-bypass without knowing they exist.
+- Reconsider: A companion-plugin author who subclasses the base can override `get_accessible_servers()` and skip the gate cascade for their context. That is the base's design (extension surface); documented as consumer responsibility.
+- Reconsider (SEC-001): Consumers passing an arbitrary `$target_user_id` (BuddyPress-style profile widgets) are responsible for their own caller-authority gate. F038 evaluates the F015 gate FOR the target user, not against the calling viewer's authority. Documented in class docblock + contract file.
+
+Canonical example: `public/Renderers/UserServers/AbstractUserServersRenderer::get_accessible_servers()` shipped in F038.
+
+Related: D35 (self-contained subsystem contract), D36 (final class for public @experimental — precedent-based deviation documented here), DEC-ACCESS-CONTROL-V2-ADOPTION (F015 wrapper contract), DEC-CLIENT-RENDERER-PUBLIC-API (public/ layer stability), B32 (canonical resolver rule).

@@ -1596,3 +1596,26 @@ Any diff that adds a filter callback which wraps another callback in a closure. 
 - B35 — F030 filter-priority footrace (same file, adjacent concern).
 - D29 — F030 six-layer bypass decision (this bug lived inside the six-layer implementation).
 - B32 — Filter defaults MUST use canonical resolver (similar "silent" security-adjacent pattern in the same subsystem).
+
+
+---
+
+### 2026-07-29 - B41 — Cross-user enumeration via target-user-id parameter
+
+**Pattern**
+Any public primitive that accepts a target user_id parameter and returns per-user access-control state (or per-user data derived from AC rules) MUST document caller-authority responsibility in the class-level docblock. Consumers passing an arbitrary `$target_user_id` MUST independently verify the current viewer's authority to see that user's information.
+
+**Failure Mode**
+The primitive evaluates its own gates FOR the target user, NOT against the calling viewer's authority. If a consumer plugin (BuddyPress profile widget, WooCommerce endpoint, WPUM member page) passes any user_id from a URL/session without gating the CALLER first, any logged-in visitor can enumerate what other users can access — leaking access-control policy meta-information without needing admin capabilities.
+
+**Prevention**
+- Docblock section on the primitive's class MUST warn about caller-authority. Suggested title: "Caller-authority responsibility (SEC-001)". Naming conventions cited alongside "SEC-001" or "cross-user enumeration" so IDE grep + code-review find it.
+- Grep gate for future features: `grep -rEn 'function.*\?int \$(?:target_)?user_id.*array' public/` — every hit MUST have a matching docblock section warning about caller-authority.
+- Contract file MUST include a "Caller-authority responsibility" subsection AND a matching test asserting the docblock text is present in the source (defensive against maintenance PRs that trim the docblock).
+
+**Reference impl**
+`public/Renderers/UserServers/AbstractUserServersRenderer.php` (F038) — SEC-001 subsection in the class-level docblock, `contracts/AbstractUserServersRenderer.contract.md` §Caller-authority responsibility.
+
+**Related**
+- `D40 / DEC-USER-SCOPED-ENUMERATION-COMPOSES-GATES` (F038 architectural companion — same feature, this is the prevention side)
+- SEC-001 from `docs/security-reviews/2026-07-29-037-user-accessible-mcp-servers-shortcode-plan.md`

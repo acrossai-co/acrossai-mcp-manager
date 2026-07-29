@@ -763,6 +763,26 @@ final class Main {
 		);
 
 		/**
+		 * Feature 038 — [acrossai_mcp_servers] shortcode.
+		 *
+		 * User-scoped index widget: lists every MCP server the current
+		 * logged-in user can access (F015 gate) whose F037 Embeds tab
+		 * has the master toggle ON and at least one enabled connection
+		 * method — surfacing per server every enabled NPM / MCP Client
+		 * / AI Connector DTO from F035. Data-only base class
+		 * `AbstractUserServersRenderer` is the extension surface for
+		 * companion plugins (BuddyBoss add-on, WooCommerce My Account,
+		 * WPUM, MemberPress); this wiring only registers the
+		 * first-party concrete `UserServersBlock` shortcode.
+		 */
+		$user_servers_block = \AcrossAI_MCP_Manager\Public\Renderers\UserServers\UserServersBlock::instance();
+		$this->loader->add_action(
+			'init',
+			$user_servers_block,
+			'register_shortcode'
+		);
+
+		/**
 		 * Feature 037 — FR-017 server-deletion cleanup listener.
 		 *
 		 * When a server row is deleted (via Settings::handle_actions()

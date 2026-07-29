@@ -184,3 +184,44 @@ This is a changelog entry, not a durable lesson. It records what happened, not w
 **Chosen approach**: application-level (distinct action) over schema-level (`bypass_reason` column) — smaller diff, no D28 upgrade needed, matches the plugin's existing observability pattern.
 
 **Where to look**: `B38 / B-ADMIN-SELF-APPROVAL-AUDIT-TRAIL-AMBIGUITY`, `specs/032-oauth-per-server-scoping/spec.md` FR-051 + SC-023, `specs/032-oauth-per-server-scoping/contracts/php-hooks.md`, `docs/security-reviews/2026-07-22-032-oauth-per-server-scoping-staged.md`.
+
+---
+
+## 2026-07-29 — F038 User-accessible MCP servers shortcode + reusable base class
+
+**Frame**: F038 ships `[acrossai_mcp_servers]` — a frontend shortcode that lists every MCP server the current logged-in user can access (F015 gate) whose F037 Embeds tab has the master toggle ON and at least one enabled connection method. Ships alongside a data-only abstract base class `\AcrossAI_MCP_Manager\Public\Renderers\UserServers\AbstractUserServersRenderer` under `public/Renderers/UserServers/` — the extension surface for the planned BuddyBoss add-on, WooCommerce My Account extension, WPUM, MemberPress, etc.
+
+**Novelty**: Pure composition on top of F011 MCPServerQuery + F015 access-control wrapper + F035 ConnectionMethodRegistry + F037 AbstractEmbedTransport. **Zero** new DB tables, REST endpoints, admin surfaces, or JS. Two new filters (`acrossai_mcp_user_accessible_servers`, `acrossai_mcp_servers_shortcode_html`). One new shortcode. Total production surface: 2 PHP files (~460 LOC combined) + one insertion in `Main.php`. `AbstractUserServersRenderer` is `abstract` under `public/Renderers/` — first case of a subclass extension surface at that path (precedent `AbstractClientRenderer` established the shape).
+
+**Governance patterns established**:
+
+- **D40 / DEC-USER-SCOPED-ENUMERATION-COMPOSES-GATES** — durable rule for future "list what current user can reach" primitives. Compose the shipping gate stack (`user_has_server_access` + `is_enabled_for_server`) — never inline the underlying meta reads. Preserves fail-open + memoization + admin-bypass. Enforced via three grep-gates at review time.
+- **D36 precedent-based deviation logged** — `AbstractUserServersRenderer` is `abstract` under `public/` despite D36's `final class` guidance for `@experimental public`. Reasoning: the base IS the extension surface; `final abstract` is a language contradiction; D36's target (delegation-invariant defeat) does NOT apply because F038 IS the gate-application layer, not a gate-enforcer other features must hit. Documented in `plan.md` §Complexity Tracking.
+- **SEC-001 caller-authority responsibility** — companion plugins passing an arbitrary `$target_user_id` MUST independently verify the current viewer's authority. Documented in class docblock + `AbstractUserServersRenderer.contract.md`. Prevents cross-user access-control-policy enumeration if a companion plugin ships without a caller-side guard.
+
+**Quality gates (all green pre-merge)**:
+
+- PHPCS strict: 0 errors / 0 warnings on `public/Renderers/UserServers/` + `tests/phpunit/Public/Renderers/UserServers/` + touched lines in `Main.php`.
+- PHPStan level 8: 0 errors on all F038 files.
+- npm validate-packages: green.
+- All 5 grep-gates from spec DoD: pass (no re-firing `acrossai_mcp_embed_transports` / `acrossai_mcp_client_classes`; no direct `_embeds_enabled` / `_embeds_clients` meta reads; no `public/` → `includes/` back-import; exactly one `add_shortcode()` in the subsystem).
+
+**Security reviews**:
+
+- `/speckit-security-review-plan` — LOW (0 CRITICAL / 0 HIGH / 0 MODERATE / 1 LOW SEC-001 / 4 INFO SEC-002/003/004/005). All findings applied as contract + code documentation.
+- `/speckit-security-review-tasks` — LOW (1 LOW SEC-T-001 remediation applied to T007+T008 tasks; 2 INFO advisories).
+- `/speckit-architecture-guard-violation-detection` — 0 violations across A–E.
+
+**Test suite**: new `user-servers` PHPUnit suite registered in `phpunit.xml.dist` + CI job in `.github/workflows/phpunit.yml`. Three test files — `AbstractUserServersRendererTest.php` (14 tests including T020 US3 payload-filter round-trip), `UserServersBlockTest.php` (16 tests including T021 US3 HTML-filter wrapping + XSS at-boundary regression), `ThirdPartyExtensibilityTest.php` (3 tests including SC-005 fake-fourth-transport proof).
+
+**Where to look**:
+
+- Brief: `docs/planings-tasks/038-user-accessible-mcp-servers-shortcode.md`
+- Spec-kit spec dir: `specs/037-user-accessible-mcp-servers-shortcode/` (naming offset per F037-established convention)
+- Production: `public/Renderers/UserServers/{AbstractUserServersRenderer,UserServersBlock}.php`
+- Tests: `tests/phpunit/Public/Renderers/UserServers/*Test.php`
+- Wiring: `includes/Main.php::define_public_hooks()` (single-line insertion alongside F037 EmbedBlockRenderer wiring)
+- Memory: `D40 / DEC-USER-SCOPED-ENUMERATION-COMPOSES-GATES` in `docs/memory/DECISIONS.md`
+- Security reviews: `docs/security-reviews/2026-07-29-037-user-accessible-mcp-servers-shortcode-{plan,tasks}.md`
+
+**Follow-up (not blocking)**: `/speckit-security-review-branch` + `/speckit-architecture-guard-architecture-review` post-implement scans; `/speckit-analyze` cross-artifact consistency check; then `/speckit-git-commit` → PR against `main`.
