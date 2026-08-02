@@ -1,5 +1,13 @@
 # Decisions
 
+## Bulk Supersession Notice — Feature 040 (2026-07-31)
+
+**All OAuth 2.1 / DCR / connector-profile / OAuth-BerlinDB decisions below are SUPERSEDED by Feature 040** (`docs/planings-tasks/040-migrate-ai-connectors-to-companion.md`). The OAuth stack, connector-profile registry, and 4 BerlinDB OAuth-table modules moved wholesale to the `acrossai-ai-connectors` companion plugin (v0.5.0+). Every decision entry that references `AuthorizationController`, `TokenController`, `ClientRegistrationController`, `ConnectorAdminController`, `DiscoveryController`, `OAuthRouter`, `PKCE`, `TokenValidator`, `Cleanup`, `BearerChallengeHeader`, `UserLifecycle`, `AbstractConnectorProfile`, `ConnectorProfileRegistry`, `ConnectorSettings`, `AIConnectorsTab`, or the four tables (`wp_acrossai_mcp_oauth_clients`, `_tokens`, `_auth_codes`, `wp_acrossai_mcp_connector_approved_users`) is now companion territory — the entry body remains preserved as historical record per PATTERN-MEMORY-SUPERSESSION-VS-ANNOTATION, but new work on those subsystems happens in the companion repository.
+
+Specifically superseded (non-exhaustive): D27 (client_secret_post softening), D31 (F032 OAuth server_id first-class), DEC-BERLINDB-OAUTH-*, DEC-DCR-*, DEC-CONNECTOR-PROFILE-*, DEC-F021-*, DEC-F024-*, DEC-F027-*, DEC-F029-*, DEC-F030-*, DEC-F032-*, DEC-F034-*, DEC-OAUTH-BUILTIN-TAB-NOT-FILTER, and any DEC-* entry tagged `oauth` / `dcr` / `connector-profile`.
+
+Decisions that are NOT superseded and remain active: everything about MCP servers, MCP adapter integration, the tab framework itself (`AbstractServerTab`, `Registry`'s filter API), `mcp_servers` table, access control, abilities, tools, embeds, npm/clients tabs, and the F035 discovery API (its `get_ai_connectors()` method was modified per FR-019 but the rest of F035 is intact).
+
 ## Entry Lifecycle
 
 Each decision follows this lifecycle:
@@ -2234,3 +2242,28 @@ F038 also codified a second sub-rule: the abstract data-only base MAY live under
 Canonical example: `public/Renderers/UserServers/AbstractUserServersRenderer::get_accessible_servers()` shipped in F038.
 
 Related: D35 (self-contained subsystem contract), D36 (final class for public @experimental — precedent-based deviation documented here), DEC-ACCESS-CONTROL-V2-ADOPTION (F015 wrapper contract), DEC-CLIENT-RENDERER-PUBLIC-API (public/ layer stability), B32 (canonical resolver rule).
+
+
+---
+
+
+### 2026-08-02 — D41 / DEC-SERVER-TAB-REGISTRY-DEDUP-LAST-WINS — Registry dedup semantic inverted first-wins → last-wins
+
+**Status**
+Active
+
+**Why this is durable**
+Establishes the "built-in placeholder → filter-contributor override" pattern for any subsystem-becomes-add-on migration in this plugin. Any future extraction (Abilities → separate plugin, Tools → separate plugin, etc.) can now ship a placeholder built-in tab in `Registry::all_tabs()` and let the extracted plugin's filter callback replace it via `acrossai_mcp_manager_server_tabs`. Coexistence is a framework property, not per-consumer hack.
+
+**Decision**
+`admin/Partials/ServerTabs/Registry.php::normalize_entries()` now indexes the accumulator by slug so later assignments overwrite earlier ones (`$normalized[$slug] = ...` + `return array_values($normalized)`). The pre-F040 `_doing_it_wrong( 'duplicate slug ... first registration wins' )` warning is deleted. This matches WordPress-native filter override semantics (higher priority = runs later = wins) and aligns with F034 `ClientsRegistry::get_all_registered_clients()` which already uses last-wins.
+
+**Tradeoffs / Prevention**
+- Gained: symmetric with WP-native filter model; symmetric with F034; enables the placeholder → override pattern without special-cased consumer logic. First application: `AIConnectorsPromoTab` (built-in) → companion's `AIConnectorsTab` (filter) — same slug `ai-connectors`, same priority 35; companion's filter runs later and replaces the built-in when active.
+- Made harder: third-party plugins can now legitimately override built-in tabs via filter priority. This is intended, not accidental. New RegistryTest case `test_filter_last_registration_replaces_earlier_same_slug` pins the semantic against regression.
+- Reconsider: if the built-in list ever needs an "un-overrideable core tab" (e.g., a Danger Zone that MUST always render), promote that specific tab's entry with an `_immutable => true` marker and re-add a skip-on-seen branch scoped to that flag.
+
+**Related**
+- F034 `ClientsRegistry` (same pattern, older — established the precedent this decision generalizes).
+- F040 `AIConnectorsPromoTab` (first consumer of the placeholder → override pattern, 2026-08-01).
+- `DEC-CONNECTOR-PROFILE-*` (superseded by F040 — the OAuth registry patterns this replaces).

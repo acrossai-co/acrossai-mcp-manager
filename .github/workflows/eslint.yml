@@ -12,8 +12,11 @@ on:
     # don't touch the filtered paths — blocking every unrelated PR (F022 hit
     # this exact trap 2026-07-13).
     #
-    # The syntax-only smoke test on `src/js/ai-connectors.js` costs ~30s per
-    # PR. Trivial. See B27 memory entry for the general pattern.
+    # The syntax-only smoke test costs ~30s per PR. Trivial. See B27 memory
+    # entry for the general pattern. Post-F040: `src/js/ai-connectors.js`
+    # moved to the acrossai-ai-connectors companion plugin, so this workflow
+    # smoke-tests `src/js/backend.js` instead (a small, stable file that
+    # exercises the same parse-error surface).
 
 permissions: {}
 
@@ -56,17 +59,20 @@ jobs:
       - name: Install top-level eslint 8 (bypass wp-scripts legacy-config)
         run: npm install eslint@^8 --no-save --legacy-peer-deps
 
-      # Scope: F021-added file only. Pre-existing `src/js/*.js` files carry
-      # inline `// eslint-disable-next-line react-hooks/exhaustive-deps` style
-      # comments referencing rules from plugins we don't load in this smoke
-      # test, which trip "Definition for rule ... was not found". Expanding
-      # scope to the whole `src/js/` tree needs a proper flat config + the
-      # relevant plugin loads — captured in the follow-up list.
+      # Scope: `src/js/backend.js` (small, stable, no React). Pre-F040 this
+      # smoke test targeted `src/js/ai-connectors.js` which moved to the
+      # acrossai-ai-connectors companion plugin. The larger React entries
+      # (abilities.js / access-control.js / tools.js / embeds.js) carry
+      # inline `// eslint-disable-next-line react-hooks/exhaustive-deps`
+      # style comments referencing rules from plugins we don't load in this
+      # smoke test, which trip "Definition for rule ... was not found".
+      # Expanding scope to the whole `src/js/` tree needs a proper flat
+      # config + the relevant plugin loads — captured in the follow-up list.
       # `--no-inline-config` is defense-in-depth for the same class of issue.
-      - name: Run ESLint (syntax-only smoke test on F021 additions)
+      - name: Run ESLint (syntax-only smoke test)
         run: |
           ./node_modules/.bin/eslint \
             --no-eslintrc \
             --no-inline-config \
             --parser-options=ecmaVersion:latest,sourceType:module \
-            src/js/ai-connectors.js
+            src/js/backend.js

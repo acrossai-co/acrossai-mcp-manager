@@ -31,7 +31,6 @@ declare( strict_types = 1 );
 
 namespace AcrossAI_MCP_Manager\Public\Discovery;
 
-use AcrossAI_MCP_Manager\Includes\Connectors\ConnectorProfileRegistry;
 use AcrossAI_MCP_Manager\Includes\MCPClients\AbstractMCPClient;
 use AcrossAI_MCP_Manager\Public\Renderers\NpmClientBlock;
 
@@ -212,7 +211,15 @@ final class ConnectionMethodRegistry {
 	 * @return array<int, array<string, mixed>>
 	 */
 	public function get_ai_connectors(): array {
-		$profiles = ConnectorProfileRegistry::instance()->get_profiles();
+		// F040 — ConnectorProfileRegistry moved to acrossai-ai-connectors
+		// companion plugin. When the companion is absent (free-tier install),
+		// return an empty array so the discovery API's `ai_connector` category
+		// simply omits entries — no fatal, no warning.
+		$registry_class = '\AcrossAI_AI_Connectors\Includes\Connectors\ConnectorProfileRegistry';
+		if ( ! class_exists( $registry_class, false ) ) {
+			return array();
+		}
+		$profiles = $registry_class::instance()->get_profiles();
 		$dtos     = array();
 
 		foreach ( $profiles as $profile ) {

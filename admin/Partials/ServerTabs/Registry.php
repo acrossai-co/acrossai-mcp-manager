@@ -17,6 +17,14 @@
  * source of behaviour; third-party contributions are wrapped in
  * `FilteredServerTab` and adopt the same dispatch pipeline.
  *
+ * F040 follow-up — duplicate slugs across contributions are resolved
+ * last-wins: a filter callback registered later (or at a higher WordPress
+ * filter priority) replaces any earlier entry with the same slug, including
+ * built-in placeholder tabs. This matches WP-native filter-override
+ * semantics and enables the "built-in placeholder → companion overrides
+ * when active" pattern used by AIConnectorsPromoTab (F040 promo card falls
+ * back when the acrossai-ai-connectors add-on is not installed).
+ *
  * Normalization + dedup mirrors vendor `\AcrossAI_Main_Menu\Tabs::get_tabs()`
  * (extracted from `TabbedPageRenderer::resolve_tabs()` in 0.0.13 into a
  * standalone abstract in 0.0.14 —
@@ -100,7 +108,13 @@ final class Registry {
 	 * Callers who want the effective (filter-applied) list MUST use
 	 * `for_server()` or `visible_tabs()`.
 	 *
-	 * Post-Feature 016 the tab count is 10.
+	 * Post-Feature 040 the built-in tab count is 10. The `AIConnectorsPromoTab`
+	 * entry at priority 35 is a PLACEHOLDER — when the acrossai-ai-connectors
+	 * companion plugin is active, it registers its real `AIConnectorsTab` via
+	 * the `acrossai_mcp_manager_server_tabs` filter (also priority 35), and
+	 * Registry's last-wins dedup (F040 follow-up) replaces the placeholder
+	 * with the real tab automatically. When the companion is missing/inactive,
+	 * the placeholder renders a promo card pointing at the add-on.
 	 *
 	 * @since 0.0.6
 	 * @return AbstractServerTab[]
@@ -110,10 +124,8 @@ final class Registry {
 			new OverviewTab(),
 			new NpmTab(),
 			new ClientsTab(),
-			// Feature 021 — built-in AI Connectors tab (priority 35). NOT via
-			// the F019 filter — DEC-OAUTH-BUILTIN-TAB-NOT-FILTER. Third parties
-			// use `acrossai_mcp_manager_server_tabs`; this tab is base-plugin.
-			new AIConnectorsTab(),
+			// F040 placeholder — companion overrides via last-wins dedup when active.
+			new AIConnectorsPromoTab(),
 			new WpCliTab(),
 			new ToolsTab(),
 			new AbilitiesTab(),
@@ -259,10 +271,12 @@ final class Registry {
 	 *
 	 * @since 0.0.7
 	 * @param array<int, mixed> $raw Filter output.
-	 * @return array<int, array<string, mixed>> Normalized entries in stable input order.
+	 * @return array<int, array<string, mixed>> Normalized entries — later
+	 *         registrations replace earlier ones with the same slug (last-wins,
+	 *         F040 follow-up). Insertion order of the FINAL winner is preserved
+	 *         so priority-tiebreak sorts remain stable.
 	 */
 	private function normalize_entries( array $raw ): array {
-		$seen       = array();
 		$normalized = array();
 		$index      = 0;
 
@@ -293,14 +307,6 @@ final class Registry {
 				continue;
 			}
 
-			if ( isset( $seen[ $slug ] ) ) {
-				if ( ! $is_builtin ) {
-					$this->doing_it_wrong( sprintf( 'duplicate slug "%s" — first registration wins', $slug ) );
-				}
-				continue;
-			}
-			$seen[ $slug ] = true;
-
 			$capability = isset( $entry['capability'] ) ? sanitize_key( (string) $entry['capability'] ) : 'manage_options';
 			if ( '' === $capability ) {
 				$capability = 'manage_options';
@@ -311,7 +317,11 @@ final class Registry {
 				$visible_callback = null;
 			}
 
-			$normalized[] = array(
+			// F040: keyed by slug so later registrations REPLACE earlier ones
+			// with the same slug (last-wins). This enables built-in placeholder
+			// tabs to be overridden by companion-plugin filter contributions
+			// without special-cased coexistence logic. See class-level docblock.
+			$normalized[ $slug ] = array(
 				'slug'             => $slug,
 				'label'            => $label,
 				'priority'         => isset( $entry['priority'] ) ? (int) $entry['priority'] : 100,
@@ -323,7 +333,9 @@ final class Registry {
 			);
 		}
 
-		return $normalized;
+		// Convert back to a numeric array — downstream sort + iteration
+		// expects zero-indexed sequential entries, not slug-keyed.
+		return array_values( $normalized );
 	}
 
 	/**
