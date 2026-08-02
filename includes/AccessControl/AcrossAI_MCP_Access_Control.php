@@ -194,38 +194,6 @@ final class AcrossAI_MCP_Access_Control {
 	}
 
 	/**
-	 * Display an admin notice when the wpb-access-control library is absent.
-	 *
-	 * Hooked to admin_notices. Only shown to users with manage_options and only
-	 * when the library class is not loaded. Fail-open per sibling DEC-PERM-CB.
-	 *
-	 * @since 0.0.7
-	 * @return void
-	 */
-	public function maybe_show_library_notice(): void {
-		if ( $this->is_available() ) {
-			return;
-		}
-
-		if ( ! current_user_can( 'manage_options' ) ) {
-			return;
-		}
-
-		wp_admin_notice(
-			sprintf(
-				/* translators: %s: library class name */
-				esc_html__( 'AcrossAI MCP Manager: The wpb-access-control library (%s) is not loaded. Per-server MCP access-control rules are inactive and all tool calls will pass (fail-open). Install or activate the library to enforce saved rules.', 'acrossai-mcp-manager' ),
-				'<code>WPBoilerplate\\AccessControl\\AccessControlManager</code>'
-			),
-			array(
-				'type'           => 'warning',
-				'dismissible'    => true,
-				'paragraph_wrap' => false,
-			)
-		);
-	}
-
-	/**
 	 * F032 (F015 amendment) — shared connection-time AC check.
 	 *
 	 * Used by the OAuth authorize gate, CLI device-grant consent gate, and
