@@ -8,6 +8,8 @@
 
 namespace AcrossAI_MCP_Manager\Admin\Partials;
 
+use AcrossAI_MCP_Manager\Includes\Utilities\CacheHeaders;
+
 defined( 'ABSPATH' ) || exit;
 
 /**
@@ -116,6 +118,11 @@ class Notices {
 	 * Idempotent: setting the meta to 1 when already 1 is a no-op success.
 	 */
 	public function handle_adapter_notice_dismissal(): void {
+		// Per-user, state-mutating AJAX response — must not be cached by any
+		// intermediary. Belt-and-suspenders even though wp_send_json_* is
+		// typically not cached. See DEC-OAUTH-DONOTCACHEPAGE-PATTERN.
+		CacheHeaders::send_no_store();
+
 		check_ajax_referer( self::ADAPTER_DISMISS_NONCE_ACTION );
 
 		if ( ! current_user_can( 'manage_options' ) ) {

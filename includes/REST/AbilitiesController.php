@@ -37,6 +37,7 @@ namespace AcrossAI_MCP_Manager\Includes\REST;
 use AcrossAI_MCP_Manager\Includes\Database\MCPServer\Query as MCPServerQuery;
 use AcrossAI_MCP_Manager\Includes\Database\MCPServerAbility\ExposureResolver;
 use AcrossAI_MCP_Manager\Includes\Database\MCPServerAbility\Query as MCPServerAbilityQuery;
+use AcrossAI_MCP_Manager\Includes\Utilities\CacheHeaders;
 use WP_Error;
 use WP_REST_Request;
 use WP_REST_Response;
@@ -193,7 +194,8 @@ final class AbilitiesController {
 			$response['abilities'] = $abilities;
 		}
 
-		return rest_ensure_response( $response );
+		// Per-server, per-request response — never cache. See DEC-OAUTH-DONOTCACHEPAGE-PATTERN (ai-connectors D7).
+		return CacheHeaders::apply_to_rest_response( new WP_REST_Response( $response ) );
 	}
 
 	/**
@@ -307,11 +309,11 @@ final class AbilitiesController {
 
 		// Return the refreshed override rows (FR-010 — never require a follow-up GET).
 		ExposureResolver::_reset_cache_for_tests();
-		return rest_ensure_response(
+		return CacheHeaders::apply_to_rest_response( new WP_REST_Response(
 			array(
 				'overrides' => $this->fetch_overrides( $server_id ),
 			)
-		);
+		) );
 	}
 
 	/**

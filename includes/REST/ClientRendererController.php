@@ -26,6 +26,7 @@
 
 namespace AcrossAI_MCP_Manager\Includes\REST;
 
+use AcrossAI_MCP_Manager\Includes\Utilities\CacheHeaders;
 use WP_Application_Passwords;
 use WP_Error;
 use WP_REST_Request;
@@ -272,12 +273,13 @@ final class ClientRendererController {
 			return $created;
 		}
 
-		return new WP_REST_Response(
+		// Raw Application Password in response body — MUST NOT cache. See DEC-OAUTH-DONOTCACHEPAGE-PATTERN.
+		return CacheHeaders::apply_to_rest_response( new WP_REST_Response(
 			array(
 				'password' => $created[0],
 				'app_id'   => $created[1]['uuid'] ?? '',
 			),
 			201
-		);
+		) );
 	}
 }

@@ -40,6 +40,7 @@ use AcrossAI_MCP_Manager\Includes\Database\MCPServer\Query as MCPServerQuery;
 use AcrossAI_MCP_Manager\Includes\Database\MCPServer\ToolPolicy;
 use AcrossAI_MCP_Manager\Includes\Database\MCPServerTool\Query as MCPServerToolQuery;
 use AcrossAI_MCP_Manager\Includes\MCP\ToolExposureGate;
+use AcrossAI_MCP_Manager\Includes\Utilities\CacheHeaders;
 use WP_Error;
 use WP_REST_Request;
 use WP_REST_Response;
@@ -237,7 +238,8 @@ final class ToolsController {
 			$response['abilities'] = $abilities;
 		}
 
-		return rest_ensure_response( $response );
+		// Per-server, per-request response — never cache. See DEC-OAUTH-DONOTCACHEPAGE-PATTERN (ai-connectors D7).
+		return CacheHeaders::apply_to_rest_response( new WP_REST_Response( $response ) );
 	}
 
 	/**
@@ -383,13 +385,13 @@ final class ToolsController {
 			return $refreshed;
 		}
 
-		return rest_ensure_response(
+		return CacheHeaders::apply_to_rest_response( new WP_REST_Response(
 			array(
 				'tools'   => ToolPolicy::compose_for_row( $refreshed ),
 				'added'   => array_values( array_merge( $columns_added, $curated_applied['added'] ) ),
 				'removed' => array_values( array_merge( $columns_removed, $curated_applied['removed'] ) ),
 			)
-		);
+		) );
 	}
 
 	/**
