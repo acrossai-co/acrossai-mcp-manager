@@ -608,3 +608,35 @@ When a plugin needs generic per-entity key-value settings, use the WP-canonical 
 Canonical example: `includes/Database/MCPServerMeta/{Schema,Table,Row,Query}.php` shipped in F037 Pivot B (commit `8d55d21`).
 
 Related: `DEC-TOOL-SELECTION-PRESENCE-MODEL` (alternative storage shape for boolean sets); `D28` (BerlinDB `$upgrades` reconciliation pattern).
+
+
+---
+
+
+### 2026-08-02 — A20 — Cross-plugin option namespace exclusion on uninstall
+
+**Status**
+Active
+
+**Constraint**
+When plugin A's `uninstall.php` runs a `wp_options` LIKE-sweep, and plugin B (companion / sibling) shares a common prefix with plugin A, the sweep MUST explicitly exclude plugin B's owned namespace. Otherwise plugin A destroys plugin B's data on uninstall — a silent cross-plugin data-boundary violation.
+
+**Rationale**
+Prior to F040, mcp-manager's uninstall swept `WHERE option_name LIKE 'acrossai_mcp_%'`, which was safe because mcp-manager owned every key matching that prefix. Post-F040, the `acrossai_mcp_connector_%` sub-prefix moved to the acrossai-ai-connectors companion plugin. Without exclusion, uninstalling mcp-manager would delete the companion's per-connector settings + admin-approval version stamps + all `acrossai_mcp_connector_%_db_version` BerlinDB version options — silently rolling back the companion's storage to a "fresh install" state.
+
+**Reference impl**
+`uninstall.php:83-88`:
+
+```sql
+SELECT option_name FROM {$wpdb->options}
+WHERE option_name LIKE 'acrossai_mcp_%'
+  AND option_name NOT LIKE 'acrossai_mcp_connector_%'
+```
+
+**How to apply**
+Every future subsystem extraction from mcp-manager to a companion plugin MUST audit the option-key prefix contract and add a matching `AND option_name NOT LIKE '<companion-prefix>%'` clause to `uninstall.php`'s LIKE-sweep. The companion plugin's own `uninstall.php` handles its own cleanup (dual-gated by operator opt-in + F040-style ownership probe).
+
+**Related**
+- `DEC-UNINSTALL-OPT-IN-GATE` (operator-opt-in gate for the destructive teardown itself).
+- F040 § FR-003 (the concrete application of this pattern for `acrossai_mcp_connector_%`).
+- B44 (companion pattern for BerlinDB tables — same "own your namespace, don't touch other plugins' namespace" principle applied to tables instead of options).

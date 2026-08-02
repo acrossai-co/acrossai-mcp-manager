@@ -211,16 +211,6 @@ final class Main {
 		// omitting either produces the "Table doesn't exist" fallback bug or the
 		// silent-fail-open enforcement gate (SEC-020-T-001).
 		\AcrossAI_MCP_Manager\Includes\Database\MCPServerTool\Table::instance();
-		// Feature 021 — per DEC-BERLINDB-TABLE-REQUEST-BOOT. Three new OAuth
-		// tables must materialize before any /authorize, /token, or Bearer
-		// bootstrap fires. Co-commit invariant with Activator maybe_upgrade().
-		\AcrossAI_MCP_Manager\Includes\Database\OAuthClients\Table::instance();
-		\AcrossAI_MCP_Manager\Includes\Database\OAuthTokens\Table::instance();
-		\AcrossAI_MCP_Manager\Includes\Database\OAuthAuthCodes\Table::instance();
-		// F032 — ConnectorApprovedUsers per-request boot per DEC-BERLINDB-TABLE-REQUEST-BOOT.
-		// Backs the AI Connectors "Approved Users" panel + the OAuth authorize
-		// require_admin_approval gate. Co-commit invariant with Activator maybe_upgrade().
-		\AcrossAI_MCP_Manager\Includes\Database\ConnectorApprovedUsers\Table::instance();
 		// F037 — MCPServerMeta per-request boot per DEC-BERLINDB-TABLE-REQUEST-BOOT.
 		// Generic per-server key-value meta table (WP-canonical shape:
 		// meta_id, server_id, meta_key, meta_value). Backs F037's Embeds tab
@@ -266,37 +256,8 @@ final class Main {
 		\AcrossAI_MCP_Manager\Includes\Database\CliAuthLog\Table::instance()->maybe_upgrade();
 		\AcrossAI_MCP_Manager\Includes\Database\MCPServerAbility\Table::instance()->maybe_upgrade();
 		\AcrossAI_MCP_Manager\Includes\Database\MCPServerTool\Table::instance()->maybe_upgrade();
-		// F032 (T024 — REVISED 2026-07-21 after runtime bug):
-		// OAuthClients MUST fire FIRST because OAuthTokens + OAuthAuthCodes JOIN backfill
-		// against `oauth_clients.server_id` — that column MUST exist AND be populated before
-		// the JOIN runs. Original R2 ordering (Tokens/AuthCodes first) triggered
-		// "Unknown column 'c.server_id' in 'where clause'" and left the migration in a
-		// half-broken state. See debug.log 2026-07-21 08:25 for the observed failure.
-		// AGGREGATE OBSERVABILITY SIGNAL: moved out of OAuthClients callback into a
-		// coordinator fire below (Main is the natural coordinator; OAuthClients no longer
-		// needs to reach into sibling Tables via get_last_purge_count()).
-		\AcrossAI_MCP_Manager\Includes\Database\OAuthClients\Table::instance()->maybe_upgrade();
-		\AcrossAI_MCP_Manager\Includes\Database\OAuthTokens\Table::instance()->maybe_upgrade();
-		\AcrossAI_MCP_Manager\Includes\Database\OAuthAuthCodes\Table::instance()->maybe_upgrade();
-		\AcrossAI_MCP_Manager\Includes\Database\ConnectorApprovedUsers\Table::instance()->maybe_upgrade();
 		// F037 — reconcile MCPServerMeta schema on admin_init per D28.
 		\AcrossAI_MCP_Manager\Includes\Database\MCPServerMeta\Table::instance()->maybe_upgrade();
-
-		// F032 aggregate observability signal — fires exactly once per reconcile pass iff
-		// any of the three OAuth Tables purged legacy rows this pass. Coordinator lives
-		// here rather than in OAuthClients::upgrade_to_1_0_1 Step 6 to eliminate the
-		// cross-Table get_last_purge_count() coupling that trapped the original R2 design.
-		$clients_purged    = \AcrossAI_MCP_Manager\Includes\Database\OAuthClients\Table::instance()->get_last_purge_count();
-		$tokens_purged     = \AcrossAI_MCP_Manager\Includes\Database\OAuthTokens\Table::instance()->get_last_purge_count();
-		$auth_codes_purged = \AcrossAI_MCP_Manager\Includes\Database\OAuthAuthCodes\Table::instance()->get_last_purge_count();
-		if ( $clients_purged > 0 || $tokens_purged > 0 || $auth_codes_purged > 0 ) {
-			do_action(
-				'acrossai_mcp_oauth_legacy_dcr_purged',
-				$clients_purged,
-				$tokens_purged,
-				$auth_codes_purged
-			);
-		}
 	}
 
 	/**
@@ -489,8 +450,10 @@ final class Main {
 		 *   when the user clicks the X button. Nonce + manage_options gated.
 		 */
 		$this->loader->add_action( 'admin_notices', $notices, 'render_missing_adapter_notice' );
-		$this->loader->add_action( 'admin_notices', $notices, 'render_oauth_https_notice' );
-		$this->loader->add_action( 'admin_notices', $notices, 'render_disable_wp_cron_notice' );
+		// F040 follow-up: the OAuth HTTPS and OAuth-cron-disabled notices moved
+		// to the acrossai-ai-connectors companion plugin — mcp-manager no longer
+		// owns the OAuth token endpoint or the OAuth cleanup cron, so those
+		// warnings are companion territory now.
 		$this->loader->add_action(
 			'wp_ajax_acrossai_mcp_dismiss_adapter_notice',
 			$notices,
@@ -615,36 +578,11 @@ final class Main {
 		$this->loader->add_action( 'shutdown', $current_server_holder, 'clear', 999 );
 
 		/**
-		 * Feature 021 — Admin OAuth credential generator REST route.
-		 *
-		 * `/wp-json/acrossai-mcp-manager/v1/oauth/generate-client` — POST from
-		 * AIConnectorsTab. Capability gate (`manage_options`) + WP nonce enforced
-		 * in the controller's permission callback.
+		 * Feature 040 — the OAuth admin REST controllers (ClientRegistration + ConnectorAdmin)
+		 * moved to acrossai-ai-connectors companion plugin. The companion registers
+		 * them under the same `acrossai-mcp-manager/v1` namespace so AI-client discovery
+		 * URLs stay unchanged.
 		 */
-		$oauth_client_registration = \AcrossAI_MCP_Manager\Includes\OAuth\ClientRegistrationController::instance();
-		$this->loader->add_action( 'rest_api_init', $oauth_client_registration, 'register_routes' );
-
-		/**
-		 * F024 — Admin REST endpoints for the nested-tab AI Connectors UI:
-		 * connector-settings save, revoke-client-tokens, delete-client,
-		 * revoke-connector-tokens (nuclear), approve-pending-consent.
-		 */
-		$oauth_connector_admin = \AcrossAI_MCP_Manager\Includes\OAuth\ConnectorAdminController::instance();
-		$this->loader->add_action( 'rest_api_init', $oauth_connector_admin, 'register_routes' );
-
-		// F032 — Default listener for `acrossai_mcp_connector_user_approval_revoked`.
-		// Cascades the approval-revoke into an active-token revoke for the same
-		// (server, connector, user) triple. Third-party plugins can
-		// `remove_action()` to disable OR filter
-		// `acrossai_mcp_connector_revoke_tokens_on_approval_revoked` to opt out.
-		// Wired here per §A1 (Main.php-only hook registration).
-		$this->loader->add_action(
-			'acrossai_mcp_connector_user_approval_revoked',
-			\AcrossAI_MCP_Manager\Includes\OAuth\ConnectorAdminController::class,
-			'cascade_revoke_tokens_on_approval_revoked',
-			10,
-			4
-		);
 
 		$this->loader->add_action(
 			'mcp_server_deleted',
@@ -701,50 +639,13 @@ final class Main {
 		$this->loader->add_action( 'init', $client_renderer_rest, 'register_shortcodes_and_actions' );
 
 		/**
-		 * Feature 021 — OAuth 2.1 rewrite-rule router + daily cleanup cron.
-		 *
-		 * All A1-compliant wiring — the router owns rule shape, this method
-		 * owns hook registration. parse_request dispatches to Discovery /
-		 * Authorization / Token controllers (Phase 5 completes those).
-		 *
-		 * SEC-021-T01 co-commit: the cron action wire below MUST land with
-		 * the Activator's wp_schedule_event() call, so no cron-without-callback
-		 * window exists between Phase 2 activation and Phase 5 controller ship.
+		 * OAuth 2.1 stack (OAuthRouter, Cleanup, TokenValidator, UserLifecycle,
+		 * BearerChallengeHeader) moved to acrossai-ai-connectors companion plugin
+		 * (Feature 040). Companion registers identical hooks under the same
+		 * namespace (`acrossai-mcp-manager/v1`) and cron hook name
+		 * (`acrossai_mcp_manager_oauth_cleanup`), so existing bearer tokens
+		 * and discovery URLs continue to work when the companion is active.
 		 */
-		$oauth_router = \AcrossAI_MCP_Manager\Includes\OAuth\OAuthRouter::instance();
-		$this->loader->add_action( 'init', $oauth_router, 'register_rewrite_rules' );
-		$this->loader->add_filter( 'query_vars', $oauth_router, 'add_query_var' );
-		$this->loader->add_action( 'parse_request', $oauth_router, 'parse_request' );
-
-		$oauth_cleanup = \AcrossAI_MCP_Manager\Includes\OAuth\Cleanup::instance();
-		$this->loader->add_action( 'acrossai_mcp_manager_oauth_cleanup', $oauth_cleanup, 'run' );
-
-		/**
-		 * Feature 021 — Bearer TokenValidator + user-deletion cascade.
-		 *
-		 * TokenValidator hooks `determine_current_user @ 20`. Q1 audience-binding
-		 * enforced at call time — cross-server tokens rejected → anonymous
-		 * (mcp-adapter denies at current_user_can). Zero DB touch when no
-		 * bearer header is present (SC-011 short-circuit).
-		 *
-		 * UserLifecycle hooks `deleted_user @ 10`. Bulk-revokes every token
-		 * for the deleted user + deletes pending auth codes + fires
-		 * `token_revoked` per row (FR-042 / Q4).
-		 */
-		$token_validator = \AcrossAI_MCP_Manager\Includes\OAuth\TokenValidator::instance();
-		$this->loader->add_filter( 'determine_current_user', $token_validator, 'authenticate', 20 );
-
-		$user_lifecycle = \AcrossAI_MCP_Manager\Includes\OAuth\UserLifecycle::instance();
-		$this->loader->add_action( 'deleted_user', $user_lifecycle, 'on_user_deleted', 10 );
-
-		/**
-		 * F024 hotfix (2026-07-11) — RFC 6750 / RFC 9728 `WWW-Authenticate`
-		 * header on 401 responses from MCP routes. AI clients (Claude,
-		 * ChatGPT, Cursor) rely on this header to auto-discover the OAuth
-		 * server via the RFC 9728 protected-resource metadata pointer.
-		 */
-		$bearer_challenge = \AcrossAI_MCP_Manager\Includes\OAuth\BearerChallengeHeader::instance();
-		$this->loader->add_filter( 'rest_post_dispatch', $bearer_challenge, 'add_bearer_challenge', 10, 3 );
 
 		/**
 		 * Feature 037 — [acrossai_mcp_embed] shortcode registration.

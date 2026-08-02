@@ -40,7 +40,10 @@ final class RegistryTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Verifies all_tabs() returns the 10 registered tabs in canonical order.
+	 * Verifies all_tabs() returns the 12 registered built-in tabs.
+	 *
+	 * Post-F037 added Embeds tab; post-F040 added AIConnectorsPromoTab as a
+	 * built-in placeholder (companion overrides via last-wins dedup when active).
 	 */
 	public function test_slug_ordering_final(): void {
 		$slugs = array_map(
@@ -52,14 +55,16 @@ final class RegistryTest extends WP_UnitTestCase {
 		$this->assertContains( 'overview', $slugs );
 		$this->assertContains( 'npm', $slugs );
 		$this->assertContains( 'clients', $slugs );
+		$this->assertContains( 'ai-connectors', $slugs );
 		$this->assertContains( 'wp-cli', $slugs );
 		$this->assertContains( 'tools', $slugs );
 		$this->assertContains( 'abilities', $slugs );
 		$this->assertContains( 'access-control', $slugs );
 		$this->assertContains( 'mcp-tracker', $slugs );
+		$this->assertContains( 'embeds', $slugs );
 		$this->assertContains( 'update-server', $slugs );
 		$this->assertContains( 'danger-zone', $slugs );
-		$this->assertCount( 10, $slugs );
+		$this->assertCount( 12, $slugs );
 	}
 
 	/**
@@ -126,29 +131,29 @@ final class RegistryTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Plugin-source servers see 9 tabs (11 total minus UpdateServer + DangerZone).
+	 * Plugin-source servers see 10 tabs (12 total minus UpdateServer + DangerZone).
 	 */
-	public function test_visible_tabs_returns_9_when_plugin_source(): void {
+	public function test_visible_tabs_returns_10_when_plugin_source(): void {
 		$visible = Registry::instance()->visible_tabs(
 			array(
 				'id'              => 1,
 				'registered_from' => 'plugin',
 			)
 		);
-		$this->assertCount( 9, $visible );
+		$this->assertCount( 10, $visible );
 	}
 
 	/**
-	 * Database-source servers see 11 tabs (full canonical set).
+	 * Database-source servers see 12 tabs (full canonical set).
 	 */
-	public function test_visible_tabs_returns_11_when_database_source(): void {
+	public function test_visible_tabs_returns_12_when_database_source(): void {
 		$visible = Registry::instance()->visible_tabs(
 			array(
 				'id'              => 2,
 				'registered_from' => 'database',
 			)
 		);
-		$this->assertCount( 11, $visible );
+		$this->assertCount( 12, $visible );
 	}
 
 	// =========================================================================
@@ -182,12 +187,12 @@ final class RegistryTest extends WP_UnitTestCase {
 		Registry::instance()->for_server( $server );
 
 		$this->assertSame( $server, $captured_server, 'Filter must receive the exact $server argument.' );
-		$this->assertSame( 10, $captured_count, 'Filter must be seeded with the 10 built-in entries.' );
+		$this->assertSame( 12, $captured_count, 'Filter must be seeded with the 12 built-in entries.' );
 	}
 
 	/**
-	 * With no callback registered, `for_server()` returns the 10 built-ins
-	 * in canonical priority order.
+	 * With no callback registered, `for_server()` returns the 12 built-ins
+	 * in canonical priority order (priority ASC, insertion-order tiebreak).
 	 */
 	public function test_for_server_returns_builtins_when_no_callback(): void {
 		$tabs = Registry::instance()->for_server(
@@ -201,20 +206,83 @@ final class RegistryTest extends WP_UnitTestCase {
 
 		$this->assertSame(
 			array(
-				'overview',
-				'npm',
-				'clients',
-				'wp-cli',
-				'tools',
-				'abilities',
-				'access-control',
-				'mcp-tracker',
-				'update-server',
-				'danger-zone',
+				'overview',       // 10
+				'npm',            // 20
+				'clients',        // 30
+				'ai-connectors',  // 35 — F040 promo placeholder
+				'wp-cli',         // 40
+				'tools',          // 50
+				'abilities',      // 60
+				'access-control', // 70
+				'mcp-tracker',    // 80
+				'embeds',         // 90 (defined first at prio 90)
+				'update-server',  // 90 (defined after embeds — insertion-order tiebreak)
+				'danger-zone',    // 100
 			),
 			$slugs,
 			'Canonical priority order MUST be preserved when no callback runs.'
 		);
+	}
+
+	/**
+	 * F040 last-wins dedup — a filter callback registering an entry with the
+	 * same slug as a built-in REPLACES the built-in (rather than being
+	 * silently rejected as it was pre-F040). Enables the built-in-placeholder
+	 * → companion-override pattern used by AIConnectorsPromoTab.
+	 */
+	public function test_filter_last_registration_replaces_earlier_same_slug(): void {
+		$override_invoked = false;
+
+		add_filter(
+			Registry::FILTER_NAME,
+			static function ( array $tabs ) use ( &$override_invoked ): array {
+				$tabs[] = array(
+					'slug'            => 'overview', // Same slug as OverviewTab built-in.
+					'label'           => 'Overridden Overview',
+					'priority'        => 10,
+					'render_callback' => static function () use ( &$override_invoked ): void {
+						$override_invoked = true;
+						echo 'overridden overview body';
+					},
+				);
+				return $tabs;
+			},
+			10,
+			2
+		);
+
+		$server = array(
+			'id'              => 1,
+			'registered_from' => 'database',
+		);
+		$tabs   = Registry::instance()->for_server( $server );
+
+		// Find the 'overview' entry in the effective list.
+		$overview = null;
+		foreach ( $tabs as $tab ) {
+			if ( 'overview' === $tab->slug() ) {
+				$overview = $tab;
+				break;
+			}
+		}
+		$this->assertNotNull( $overview, 'Overview slug MUST still be present after override.' );
+		$this->assertSame( 'Overridden Overview', $overview->label(), 'F040 last-wins: filter contribution MUST replace the built-in label.' );
+
+		// Slug uniqueness invariant still holds — no duplicate 'overview' entries.
+		$slugs = array_map( static fn ( $t ) => $t->slug(), $tabs );
+		$this->assertSame(
+			count( $slugs ),
+			count( array_unique( $slugs ) ),
+			'F040 last-wins MUST maintain slug uniqueness in the effective list.'
+		);
+
+		// Dispatch via render() MUST hit the override callback, not the built-in.
+		ob_start();
+		Registry::instance()->render( 'overview', $server );
+		$body = ob_get_clean();
+
+		$this->assertTrue( $override_invoked, 'render() MUST dispatch to the override callback.' );
+		$this->assertStringContainsString( 'overridden overview body', $body );
 	}
 
 	/**

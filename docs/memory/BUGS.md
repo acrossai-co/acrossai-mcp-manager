@@ -1600,6 +1600,258 @@ Any diff that adds a filter callback which wraps another callback in a closure. 
 
 ---
 
+### 2026-08-01 - B43 — Loader signature mismatch: `$loader->add_filter($hook, array($this, 'method'), $priority, $args)` fatals at fire time
+
+**Status**
+Active
+
+**Symptoms**
+Admin page (or any page firing the mis-registered filter/action) crashes with:
+
+```
+Fatal error: Uncaught TypeError: call_user_func_array(): Argument #1 ($callback)
+must be a valid callback, first array member is not a valid class name or object
+in wp-includes/class-wp-hook.php:343
+```
+
+The error appears at *fire time*, not at *registration time* — the plugin activates cleanly, and only later when the filter/action actually fires (often when a specific admin screen loads) does the fatal happen. Grep-visible in the stack trace as `apply_filters('<filter-name>', ...)` or `do_action('<action-name>', ...)` calling into `WP_Hook->apply_filters()`.
+
+**Root cause**
+Copy-paste habit: developer used the **native WP `add_filter()` signature** (`$hook, $callback, $priority, $accepted_args`) when calling the plugin's own **Loader class**, whose signature is DIFFERENT: `$hook, $component, $callback_string, $priority, $accepted_args` (component and callback method name are two separate positional args, not a combined array).
+
+Bad (compiles cleanly, fatals at fire time):
+```php
+$this->loader->add_filter( 'my_hook', array( $this, 'my_method' ), 10, 2 );
+//                                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^   ^^  ^
+// Interpreted by Loader as $component ─────────────────────────────  |   |
+// Interpreted by Loader as $callback (method name string) ──────────┘   |
+// Interpreted by Loader as $priority ──────────────────────────────────┘
+// $accepted_args defaults to 1
+```
+
+When `Loader::run()` fires, it emits:
+```php
+add_filter( 'my_hook', array( $component, $callback ), $priority, $accepted_args );
+// which becomes:
+add_filter( 'my_hook', array( array( $this, 'my_method' ), 10 ), 2, 1 );
+//                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+// A 2-element callback array where the FIRST element is another array
+// and the second is an integer — invalid for call_user_func_array
+```
+
+Right:
+```php
+$this->loader->add_filter( 'my_hook', $this, 'my_method', 10, 2 );
+```
+
+The class-string variant works the same way:
+```php
+// Static call — component is a class-string, callback is the static-method name.
+$this->loader->add_action( 'my_hook', SomeClass::class, 'static_method', 10, 4 );
+```
+
+**Discovered by**
+Feature 040 (2026-08-01) — the AI Connectors companion plugin's tab registration on `acrossai_mcp_manager_server_tabs` fatalled the moment a site admin loaded the server-edit screen (which is where `Registry::visible_tabs()` fires the filter). The bug had been latent in the companion since the tab-injection code was written, hidden by mcp-manager still owning the OAuth stack and the companion's self-disable probe short-circuiting `bootstrap_oauth_hooks()` — so this Loader call never actually executed until F040 flipped ownership.
+
+**Future mistake prevented**
+Any add_filter/add_action call routed through the plugin's own `Loader` class MUST use the 5-arg positional shape `( $hook, $component, $callback_string, $priority, $accepted_args )` — never the WP-native 4-arg `array(...)`-callback shape. This is a signature-shape difference between the abstraction layer and the WP core function it eventually delegates to, and the two shapes silently compose incorrectly (no PHP warning at registration time — the fatal only fires when the hook fires).
+
+**Prevention / Detection**
+
+Grep gate at review time:
+```bash
+# Any Loader::add_filter / add_action call whose 2nd arg is an inline array() → wrong shape.
+grep -rEn '\$this->loader->add_(action|filter)\s*\(\s*[^,]+,\s*array\s*\(' \
+  --include='*.php' includes/ admin/ public/
+```
+
+Every hit needs refactoring to separate the `$component` and `$callback` args:
+```
+# BEFORE
+$this->loader->add_filter( 'hook', array( $this, 'method' ), 10, 2 );
+# AFTER
+$this->loader->add_filter( 'hook', $this, 'method', 10, 2 );
+```
+
+Runtime detection (belt-and-suspenders — if the Loader is your own code, you can add this):
+```php
+// In Loader::add() — reject the wrong shape at registration time, not fire time.
+private function add( $hooks, $hook, $component, $callback, $priority, $accepted_args ) {
+    if ( is_array( $component ) ) {
+        _doing_it_wrong(
+            __METHOD__,
+            esc_html__(
+                'Loader::add_filter/add_action received an array as $component; expected an object or class-string. Did you use the native WP add_filter( $hook, array( $this, "method" ), ... ) shape instead of the Loader shape $hook, $this, "method", $priority, $args?',
+                'text-domain'
+            ),
+            '1.0.0'
+        );
+        return $hooks;
+    }
+    if ( ! is_string( $callback ) ) {
+        _doing_it_wrong(
+            __METHOD__,
+            esc_html__( 'Loader::add_filter/add_action $callback MUST be a method-name string.', 'text-domain' ),
+            '1.0.0'
+        );
+        return $hooks;
+    }
+    // ...normal storage...
+}
+```
+
+**Reference impl**
+
+- `wp-content/plugins/acrossai-ai-connectors/includes/Main.php:709` — pre-fix WRONG form (kept in git history for reference; superseded by fix).
+- `wp-content/plugins/acrossai-ai-connectors/includes/Main.php:718` (post-fix) — CORRECT 5-arg form with an inline docblock explaining the footgun.
+- `wp-content/plugins/acrossai-ai-connectors/includes/Loader.php:94-110` — the Loader signature that both plugins use.
+- `wp-content/plugins/acrossai-mcp-manager/includes/Main.php` — every `$this->loader->add_action/add_filter` call is the reference form for how to call it correctly (many valid examples in that file).
+
+**Evidence**
+
+- Production fatal: loading `?page=acrossai_mcp_manager&action=edit&server=1` after F040 activation.
+- Root cause verified: matched the reported "first array member is not a valid class name or object" TypeError to the specific Loader-call misuse via stack-trace analysis (Registry.php:151 apply_filters → WP_Hook::apply_filters → call_user_func_array on the malformed callback).
+- Fix commit: single-line edit at `acrossai-ai-connectors/includes/Main.php:709` — removed the `array(...)` wrapper, split into separate `$this, 'register_ai_connectors_tab'` positional args.
+
+**Where to look**
+
+Any plugin that has its own Loader/HookRegistry/Dispatcher abstraction around WP's `add_action`/`add_filter`. Common shapes for this abstraction:
+- **AcrossAI convention (both plugins)**: 5-arg `( $hook, $component, $callback, $priority, $accepted_args )` — the pattern this bug hit.
+- **Some vendor plugins**: 4-arg `( $hook, $callback, $priority, $accepted_args )` (matches WP native).
+- **WooCommerce-style event dispatchers**: `->on( $event, $listener )` — no positional args at all.
+
+Whenever you introduce a Loader abstraction, decide on ONE signature and enforce it (grep gate + runtime `_doing_it_wrong` guard). Mixing signatures across the codebase because "some places use the WP native shape and some use ours" is a recipe for B43-class fatals that only surface at hook-fire time.
+
+**Related**
+
+- B42 (2026-07-31) — the OTHER latent bug F040 surfaced (same "probe hides latent bug" meta-pattern).
+- PATTERN-PROBE-HIDES-LATENT-BUG (WORKLOG 2026-08-01) — when a defense-in-depth guard is retired, expect a shakedown of previously-unreachable buggy paths. B42 and B43 are the first two witnesses.
+
+---
+
+### 2026-07-31 - B42 — `add_rewrite_rule()` on `plugins_loaded` fatals because `$wp_rewrite` is not yet initialized
+
+**Status**
+Active
+
+**Symptoms**
+Fatal error the moment a plugin's `plugins_loaded` handler fires:
+
+```
+Fatal error: Uncaught Error: Call to a member function add_rule() on null
+in /wp-includes/rewrite.php:143
+Stack trace:
+#0 <plugin>/OAuthRouter.php(N): add_rewrite_rule('^\\.well-known/o...', 'index.php?...', 'top')
+#1 <plugin>/Main.php(M): <Class>->register_rewrite_rules()
+#2 <plugin>/Main.php(M): <Class>->maybe_run_first_run_migration('')
+#3 wp-includes/class-wp-hook.php: WP_Hook->do_action(Array)
+#4 wp-includes/plugin.php: do_action('plugins_loaded')
+```
+
+**Root cause**
+`add_rewrite_rule()` is a wrapper around `$wp_rewrite->add_rule( $regex, $query, $after )`. The `$wp_rewrite` global (an instance of `WP_Rewrite`) is instantiated in `wp-settings.php` at the line `$GLOBALS['wp_rewrite'] = new WP_Rewrite();` — **which fires AFTER `do_action( 'plugins_loaded' )`** in the WP bootstrap sequence. Any plugin that calls `add_rewrite_rule()` (directly or transitively via a router/registrar class) during `plugins_loaded` hits `$wp_rewrite->add_rule(...)` on a `null` receiver and fatals.
+
+The bug is easy to write and easy to miss: the WP Codex says "call `add_rewrite_rule()` after `init`" but doesn't spell out WHY, and the fatal only manifests when the calling code path is actually reached — so a probe-guarded handler (like the AI Connectors self-disable probe) can hide the bug for months until the probe stops guarding.
+
+**Discovered by**
+Feature 040 (2026-07-31) — deleted `AuthorizationController.php` from mcp-manager, which flipped the AI Connectors companion plugin's `mcp_manager_still_owns_oauth()` probe from `true` → `false` for the first time in production. The probe had been guarding the companion's `maybe_run_first_run_migration()` on `plugins_loaded @ 20`, which internally called `OAuthRouter::instance()->register_rewrite_rules()` → `add_rewrite_rule()` → fatal.
+
+**Future mistake prevented**
+Any plugin file that calls `add_rewrite_rule()` (or any function that does — `add_rewrite_endpoint`, `add_rewrite_tag`, `flush_rewrite_rules`, `wp_add_rewrite_rules`, etc.) MUST be wired to a hook that fires **on or after `init`**. Never `muplugins_loaded`, `plugins_loaded`, `setup_theme`, or `after_setup_theme` — every one of those runs before `$wp_rewrite` exists.
+
+**Prevention / Detection**
+
+Grep gate at review time:
+
+```bash
+# Every handler that ends up calling add_rewrite_rule() (or the router that wraps it) MUST be wired to init or later.
+grep -rEn "add_action\s*\(\s*['\"](muplugins_loaded|plugins_loaded|setup_theme|after_setup_theme)['\"]" \
+  --include='*.php' includes/ admin/ public/ | while read -r line; do
+  file="${line%%:*}"
+  method=$(echo "$line" | grep -oE "array[^)]+" | tail -1)
+  # Trace whether the handler calls register_rewrite_rules / add_rewrite_rule
+  echo "REVIEW: $line"
+done
+
+# Direct-call detection — any add_rewrite_rule outside an init-or-later context.
+grep -rEn 'add_rewrite_rule\s*\(' --include='*.php' includes/ admin/ public/
+```
+
+Every hit needs verification that the enclosing method is either (a) called only from `init` (or later hooks: `wp_loaded`, `template_redirect`, admin-init, REST-init, etc.), (b) called from an activation/deactivation hook (WP re-bootstraps to `init` before firing those), or (c) called from a WP-CLI command context (where `$wp_rewrite` is set up during CLI bootstrap).
+
+Runtime detection via WP_DEBUG:
+
+```php
+// In any wrapper method that calls add_rewrite_rule():
+global $wp_rewrite;
+if ( ! ( $wp_rewrite instanceof \WP_Rewrite ) ) {
+    _doing_it_wrong(
+        __METHOD__,
+        esc_html__( 'add_rewrite_rule() called before $wp_rewrite is initialized. Wire this to init or later.', 'text-domain' ),
+        '1.0.0'
+    );
+    return;
+}
+```
+
+**Fix pattern**
+
+The correct hook is **`init` at any priority** (WP core sets up `$wp_rewrite` at init@0). If your handler also depends on other init@10 handlers having already fired (e.g. it wants to `flush_rewrite_rules()` and other plugins are registering rules on init@10), wire to **`init` at a priority ≥ 11** (recommended: `init @ 999`).
+
+Before (broken):
+
+```php
+add_action( 'plugins_loaded', array( $this, 'maybe_run_first_run_migration' ), 20 );
+
+public function maybe_run_first_run_migration(): void {
+    // ...version-diff check...
+    OAuthRouter::instance()->register_rewrite_rules();  // ← fatal: $wp_rewrite is null
+    flush_rewrite_rules();
+}
+```
+
+After (correct):
+
+```php
+// init@999 — $wp_rewrite is ready AND any init@10 rule registrations
+// (including this plugin's own bootstrap_oauth_hooks() wiring) have run.
+add_action( 'init', array( $this, 'maybe_run_first_run_migration' ), 999 );
+
+public function maybe_run_first_run_migration(): void {
+    // ...version-diff check...
+    // No need to call register_rewrite_rules() ourselves — bootstrap_oauth_hooks()
+    // has already wired it on init@10 via the Loader. Just flush.
+    flush_rewrite_rules();
+}
+```
+
+**Reference impl**
+
+- `wp-content/plugins/acrossai-ai-connectors/includes/Main.php:264` — post-fix `add_action('init', ..., 999)` wiring.
+- `wp-content/plugins/acrossai-ai-connectors/includes/Main.php:~600` — post-fix migration method (`register_rewrite_rules()` line deleted; `flush_rewrite_rules()` retained).
+
+**Evidence**
+
+- Production incident: activating the companion plugin post-Feature-040 fatals during `plugins_loaded` before the plugins page renders.
+- Root cause verified via `wp-includes/rewrite.php` line 143 (`$wp_rewrite->add_rule(...)`) + `wp-settings.php` bootstrap ordering (`$GLOBALS['wp_rewrite']` instantiated after `do_action('plugins_loaded')`).
+- Fix commit: `wp-content/plugins/acrossai-ai-connectors/includes/Main.php` — 2 edits (hook change + delete redundant register call).
+
+**Where to look**
+
+Any plugin or theme file registering a WordPress hook whose handler ends up in a rewrite-rules chain. Common footguns beyond `plugins_loaded`:
+- `muplugins_loaded` (fires even earlier).
+- `setup_theme` / `after_setup_theme` (both fire before `$wp_rewrite`).
+- `plugin_loaded` for a specific plugin file (still pre-init).
+- Constructors of singletons wired via `plugins_loaded` — if the constructor calls `add_rewrite_rule()`, same fatal.
+- First-run / version-migration handlers — these are the most common pattern that trips B42 because they naturally want to fire "early" to reconcile state before user code runs, but rewrite rules are a special case that must wait.
+
+**Related**
+
+- Prior WordPress-timing bug patterns in this codebase — none directly, but the shape (probe hides latent bug until probe deactivates) generalizes to any long-lived defense-in-depth guard.
+- Feature 040 WORKLOG entry (2026-07-31) — the migration that discovered this bug.
+
+---
+
 ### 2026-07-29 - B41 — Cross-user enumeration via target-user-id parameter
 
 **Pattern**
@@ -1619,3 +1871,62 @@ The primitive evaluates its own gates FOR the target user, NOT against the calli
 **Related**
 - `D40 / DEC-USER-SCOPED-ENUMERATION-COMPOSES-GATES` (F038 architectural companion — same feature, this is the prevention side)
 - SEC-001 from `docs/security-reviews/2026-07-29-037-user-accessible-mcp-servers-shortcode-plan.md`
+
+
+---
+
+
+### 2026-08-02 - B44 — BerlinDB Table subclass added but uninstall.php DROP list not updated → orphaned table on uninstall
+
+**Status**
+Active
+
+**Symptoms**
+Operator deletes the plugin (with `acrossai_mcp_uninstall_delete_data=1`); most tables are dropped, but one specific table (whose Table subclass was added in a recent feature) survives. No error, no warning — the operator sees a mostly-clean uninstall and only notices the orphaned table on `SHOW TABLES` or during a fresh reinstall.
+
+**Root cause**
+`uninstall.php` maintains a `$tables` array of literal table names to DROP. When a new BerlinDB `Database/<Module>/Table.php` subclass is added (with its own `protected $name = 'acrossai_mcp_...'`), the table is created on activation via `maybe_upgrade()` — but there is no compile-time coupling between the Table subclass and the uninstall DROP list. If the PR author forgets to add a matching line to `uninstall.php`, the table becomes an orphan on uninstall and there's no test that catches it.
+
+**Discovered by**
+F037 MCPServerMeta table (added 2026-07-28) survived uninstall for weeks. Surfaced 2026-08-02 during F040 uninstall verification.
+
+**Future mistake prevented**
+Every new `includes/Database/<Module>/Table.php` PR MUST add a matching line to `uninstall.php`'s `$tables` array. This is easy to forget because the Table subclass appears self-contained; the uninstall coupling is invisible from the Table's code.
+
+**Prevention / Detection**
+
+Grep gate at PR review:
+
+```bash
+# Extract every BerlinDB Table $name and verify each is in uninstall.php's DROP list.
+for name in $(grep -rEh "protected \\\$name\s*=\s*'acrossai_" includes/Database/ | \
+              grep -oE "'acrossai_[^']+'" | tr -d "'"); do
+  grep -q "$name" uninstall.php || echo "MISSING FROM UNINSTALL: $name"
+done
+# Expected: no output. Any hit is a bug — add to uninstall.php's $tables array.
+```
+
+Test-based gate (recommended — add once to `tests/phpunit/Uninstall/UninstallSweepBoundaryTest.php`):
+
+```php
+public function test_every_berlindb_table_is_in_uninstall_drop_list(): void {
+    $uninstall_contents = file_get_contents( ACROSSAI_MCP_MANAGER_PLUGIN_PATH . 'uninstall.php' );
+    $table_files        = glob( ACROSSAI_MCP_MANAGER_PLUGIN_PATH . 'includes/Database/*/Table.php' );
+    foreach ( $table_files as $file ) {
+        $contents = file_get_contents( $file );
+        if ( preg_match( "/protected \\\$name\s*=\s*'([^']+)'/", $contents, $m ) ) {
+            $this->assertStringContainsString(
+                $m[1],
+                $uninstall_contents,
+                "BerlinDB Table {$m[1]} (from {$file}) MUST be in uninstall.php's \$tables array"
+            );
+        }
+    }
+}
+```
+
+**Reference impl** (post-fix): `uninstall.php:60` — `acrossai_mcp_servers_meta` added 2026-08-02.
+
+**Related**
+- B34 (BerlinDB silent write-loss on schema drift — same "add table but forget to reconcile" class of coverage gap).
+- PATTERN-COMPILE-TIME-COUPLING-MISSING generalizes both B34 and B44: when TWO artifacts must stay in sync, either enforce it at compile-time (a shared registry both consult), or enforce it via a test/grep gate. Never rely on PR reviewer memory.
