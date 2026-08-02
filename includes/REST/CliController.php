@@ -21,6 +21,7 @@ namespace AcrossAI_MCP_Manager\Includes\REST;
 
 use AcrossAI_MCP_Manager\Includes\Database\CliAuthLog\Recorder;
 use AcrossAI_MCP_Manager\Includes\Database\MCPServer\Query as MCPServerQuery;
+use AcrossAI_MCP_Manager\Includes\Utilities\CacheHeaders;
 use AcrossAI_MCP_Manager\Includes\Utilities\SiteSlug;
 use AcrossAI_MCP_Manager\Public\Partials\FrontendAuth;
 use WP_Error;
@@ -189,9 +190,7 @@ final class CliController {
 		$ct_info = $request->get_content_type();
 		$value   = strtolower( (string) ( $ct_info['value'] ?? '' ) );
 		if ( 'application/json' !== $value && 'application/x-www-form-urlencoded' !== $value ) {
-			$resp = new WP_REST_Response( array( 'error' => 'invalid_request' ), 400 );
-			$resp->header( 'Cache-Control', 'no-store' );
-			return $resp;
+			return CacheHeaders::apply_to_rest_response( new WP_REST_Response( array( 'error' => 'invalid_request' ), 400 ) );
 		}
 		return null;
 	}
@@ -203,14 +202,18 @@ final class CliController {
 	 */
 	public function handle_health( WP_REST_Request $request ): WP_REST_Response {
 		unset( $request );
-		return new WP_REST_Response(
-			array(
-				'plugin_installed' => true,
-				'plugin_active'    => true,
-				'version'          => defined( 'ACROSSAI_MCP_MANAGER_VERSION' ) ? (string) ACROSSAI_MCP_MANAGER_VERSION : '0.0.0',
-				'site_slug'        => SiteSlug::get(),
-			),
-			200
+		// Global response — safe to edge-cache. Explicit opt-in so intermediaries
+		// (LSC, CDNs) can cache without ambiguity. See DEC-OAUTH-DONOTCACHEPAGE-PATTERN.
+		return CacheHeaders::apply_public_cache_to_rest_response(
+			new WP_REST_Response(
+				array(
+					'plugin_installed' => true,
+					'plugin_active'    => true,
+					'version'          => defined( 'ACROSSAI_MCP_MANAGER_VERSION' ) ? (string) ACROSSAI_MCP_MANAGER_VERSION : '0.0.0',
+					'site_slug'        => SiteSlug::get(),
+				),
+				200
+			)
 		);
 	}
 
@@ -263,14 +266,15 @@ final class CliController {
 			)
 		);
 
-		return new WP_REST_Response(
+		// Per-request auth code — MUST NOT cache. See DEC-OAUTH-DONOTCACHEPAGE-PATTERN.
+		return CacheHeaders::apply_to_rest_response( new WP_REST_Response(
 			array(
 				'auth_code'  => $auth_code,
 				'auth_url'   => $auth_url,
 				'expires_in' => self::AUTH_CODE_TTL,
 			),
 			200
-		);
+		) );
 	}
 
 	/**
@@ -294,16 +298,19 @@ final class CliController {
 		if ( 'approved' === ( $payload['status'] ?? '' )
 			&& hash_equals( (string) ( $payload['server_id'] ?? '' ), $server )
 		) {
-			return new WP_REST_Response(
+			// Per-code session token — MUST NOT cache.
+			return CacheHeaders::apply_to_rest_response( new WP_REST_Response(
 				array(
 					'approved' => true,
 					'token'    => (string) ( $payload['session_token'] ?? '' ),
 				),
 				200
-			);
+			) );
 		}
 
-		return new WP_REST_Response( array( 'approved' => false ), 200 );
+		// Even the "still pending" response varies per-code and per-poll — MUST NOT cache
+		// (otherwise a cached `false` would keep serving after the auth flips to `true`).
+		return CacheHeaders::apply_to_rest_response( new WP_REST_Response( array( 'approved' => false ), 200 ) );
 	}
 
 	/**
@@ -358,7 +365,8 @@ final class CliController {
 		 * documented consumer needs it, and hiding it keeps the API's
 		 * identifier surface single-string (slug) instead of dual (int+slug).
 		 */
-		return new WP_REST_Response(
+		// Per-session inventory (bound to the session token) — MUST NOT cache.
+		return CacheHeaders::apply_to_rest_response( new WP_REST_Response(
 			array(
 				'servers' => array(
 					array(
@@ -375,7 +383,7 @@ final class CliController {
 				),
 			),
 			200
-		);
+		) );
 	}
 
 	/**
@@ -484,7 +492,9 @@ final class CliController {
 			$uuid
 		);
 
-		$resp = new WP_REST_Response(
+		// Application Password in response body — MUST NOT cache. Full defense
+		// via CacheHeaders (DONOTCACHEPAGE + no-store + Pragma).
+		$resp = CacheHeaders::apply_to_rest_response( new WP_REST_Response(
 			array(
 				'app_password' => $raw_password,
 				'username'     => (string) $user->user_login,
@@ -493,8 +503,7 @@ final class CliController {
 				'server_id'    => $request_server_id,
 			),
 			200
-		);
-		$resp->header( 'Cache-Control', 'no-store' );
+		) );
 		$resp->header( 'Pragma', 'no-cache' );
 		return $resp;
 	}
@@ -593,8 +602,6 @@ final class CliController {
 	 * @param int    $status HTTP status.
 	 */
 	private function error( string $code, int $status ): WP_REST_Response {
-		$resp = new WP_REST_Response( array( 'error' => $code ), $status );
-		$resp->header( 'Cache-Control', 'no-store' );
-		return $resp;
+		return CacheHeaders::apply_to_rest_response( new WP_REST_Response( array( 'error' => $code ), $status ) );
 	}
 }
