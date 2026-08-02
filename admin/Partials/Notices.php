@@ -1,6 +1,6 @@
 <?php
 /**
- * Admin notice renderers — action-result notices + adapter-missing notice.
+ * Admin notice renderers — action-result notices + shared-collection filter.
  *
  * @package AcrossAI_MCP_Manager
  * @subpackage Admin\Partials
@@ -8,33 +8,39 @@
 
 namespace AcrossAI_MCP_Manager\Admin\Partials;
 
-use AcrossAI_MCP_Manager\Includes\Utilities\CacheHeaders;
-
 defined( 'ABSPATH' ) || exit;
 
 /**
  * Centralised admin-notice handlers extracted from Settings (RT-2, 2026-06-17).
  *
- * Spec FR-015 explicitly admits "a dedicated `Admin\Partials\Notices` class —
- * implementer's choice"; this is the implementer choosing it.
+ * Two responsibilities today:
  *
- * Responsibilities:
- *  - FR-016 — render success/error notice from the `?notice=...` query var
- *             set by Settings::handle_actions() redirects
- *  - FR-015 — render the dismissible "MCP adapter package missing" warning
- *             and persist its per-user, sticky dismissal via admin-ajax (Q3)
+ *  1. FR-016 — render the one-shot success/error notice indicated by the
+ *     `?notice=<slug>` query var set by `Settings::handle_actions()` after a
+ *     form action redirect. This stays on the standard `admin_notices` hook
+ *     because it's page-scoped and transient; the shared collection would be
+ *     wrong for a "server saved" flash.
+ *
+ *  2. Push persistent-condition notices (missing MCP adapter, missing
+ *     wpb-access-control library) into the cross-plugin `acrossai_notices`
+ *     filter introduced in acrossai-co/main-menu 0.0.30. The vendor package
+ *     handles rendering (Notices submenu + WP-native dismissible summary)
+ *     and per-user fingerprint-based dismissal — this class only supplies
+ *     the records.
  *
  * Constitution: singleton + private __construct + zero add_action/add_filter.
  * Hooks wired by Includes\Main::define_admin_hooks().
  */
 class Notices {
 
-	public const ADAPTER_DISMISS_META_KEY     = 'acrossai_mcp_dismissed_adapter_notice';
-	public const ADAPTER_DISMISS_NONCE_ACTION = 'acrossai_mcp_dismiss_adapter_notice';
-
 	/** @var Notices|null */
 	protected static $_instance = null;
 
+	/**
+	 * Get the singleton instance.
+	 *
+	 * @return self
+	 */
 	public static function instance(): self {
 		if ( null === self::$_instance ) {
 			self::$_instance = new self();
@@ -42,9 +48,12 @@ class Notices {
 		return self::$_instance;
 	}
 
-	private function __construct() {
-		// NO add_action / add_filter — wired by Includes\Main::define_admin_hooks().
-	}
+	/**
+	 * Private constructor — enforces the plugin-wide singleton convention.
+	 * No add_action / add_filter here; hooks are wired by
+	 * Includes\Main::define_admin_hooks().
+	 */
+	private function __construct() {}
 
 	// ─────────────────────────────────────────────────────────────────────────
 	// FR-016 — Action-result notice from `?notice=...` query var.
@@ -84,57 +93,55 @@ class Notices {
 		);
 	}
 
-	// ─────────────────────────────────────────────────────────────────────────
-	// FR-015 / Q3 — Adapter-missing notice (render + dismissal).
-	// Contract: specs/002-admin-ui/contracts/notice-dismissal.md
-	// ─────────────────────────────────────────────────────────────────────────
-
-	/**
-	 * Render a dismissible warning when the WordPress MCP adapter package is
-	 * missing. Short-circuits on (a) adapter present, (b) sticky per-user dismissal.
-	 * Wired on `admin_notices`.
-	 */
-	public function render_missing_adapter_notice(): void {
-		if ( class_exists( '\WP\MCP\Plugin' ) ) {
-			return; // Adapter installed — nothing to surface.
-		}
-		if ( get_user_meta( get_current_user_id(), self::ADAPTER_DISMISS_META_KEY, true ) ) {
-			return; // User already dismissed it — Q3 sticky semantics.
-		}
-
-		$nonce = wp_create_nonce( self::ADAPTER_DISMISS_NONCE_ACTION );
-
-		printf(
-			'<div class="notice notice-warning is-dismissible acrossai-mcp-adapter-notice" data-nonce="%s"><p>%s</p></div>',
-			esc_attr( $nonce ),
-			esc_html__( 'The WordPress MCP adapter package is not installed. MCP servers will not respond until you install the wordpress/mcp-adapter package.', 'acrossai-mcp-manager' )
-		);
-	}
-
-	/**
-	 * Admin-ajax handler: persist the user's dismissal of the adapter notice.
-	 * Wired on `wp_ajax_acrossai_mcp_dismiss_adapter_notice`.
+	/*
+	 * Shared `acrossai_notices` filter — persistent conditions surfaced via
+	 * the cross-plugin Notices submenu and dismissible summary bundled with
+	 * acrossai-co/main-menu 0.0.30+.
 	 *
-	 * Idempotent: setting the meta to 1 when already 1 is a no-op success.
+	 * Filter contract:
+	 *   id      — required, unique per registration (deduped first-wins)
+	 *   title   — esc_html
+	 *   message — wp_kses_post; inline HTML allowed
+	 *   type    — error|warning|info|success (default warning)
+	 *   source  — optional label shown on the notice card
+	 *   action  — optional { label, url } CTA
+	 *
+	 * Timing rule: the vendor reads this filter on admin_menu priority 25 and
+	 * memoizes the result, so the add_filter() call in Includes\Main runs at
+	 * admin bootstrap time — well before the read window.
 	 */
-	public function handle_adapter_notice_dismissal(): void {
-		// Per-user, state-mutating AJAX response — must not be cached by any
-		// intermediary. Belt-and-suspenders even though wp_send_json_* is
-		// typically not cached. See DEC-OAUTH-DONOTCACHEPAGE-PATTERN.
-		CacheHeaders::send_no_store();
 
-		check_ajax_referer( self::ADAPTER_DISMISS_NONCE_ACTION );
-
-		if ( ! current_user_can( 'manage_options' ) ) {
-			wp_send_json_error( array( 'message' => 'forbidden' ), 403 );
+	/**
+	 * Append MCP-Manager persistent notices to the shared collection.
+	 *
+	 * @param array<int, array<string, mixed>> $notices Notices accumulated by upstream consumers.
+	 * @return array<int, array<string, mixed>>
+	 */
+	public function register_shared_notices( array $notices ): array {
+		if ( ! class_exists( '\WP\MCP\Plugin' ) ) {
+			$notices[] = array(
+				'id'      => 'acrossai_mcp_manager_adapter_missing',
+				'title'   => __( 'WordPress MCP adapter missing', 'acrossai-mcp-manager' ),
+				'message' => __( 'MCP servers will not respond until you install the wordpress/mcp-adapter package via composer.', 'acrossai-mcp-manager' ),
+				'type'    => 'error',
+				'source'  => __( 'MCP Manager', 'acrossai-mcp-manager' ),
+			);
 		}
 
-		update_user_meta(
-			get_current_user_id(),
-			self::ADAPTER_DISMISS_META_KEY,
-			1
-		);
+		if ( ! class_exists( '\WPBoilerplate\AccessControl\AccessControlManager' ) ) {
+			$notices[] = array(
+				'id'      => 'acrossai_mcp_manager_wpb_access_control_missing',
+				'title'   => __( 'Access control library missing', 'acrossai-mcp-manager' ),
+				'message' => sprintf(
+					/* translators: %s: library class name, wrapped in <code>. */
+					__( 'The wpb-access-control library (%s) is not loaded. Per-server MCP access-control rules are inactive and all tool calls will pass (fail-open). Install or activate the library to enforce saved rules.', 'acrossai-mcp-manager' ),
+					'<code>WPBoilerplate\\AccessControl\\AccessControlManager</code>'
+				),
+				'type'    => 'warning',
+				'source'  => __( 'MCP Manager', 'acrossai-mcp-manager' ),
+			);
+		}
 
-		wp_send_json_success();
+		return $notices;
 	}
 }

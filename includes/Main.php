@@ -409,13 +409,21 @@ final class Main {
 
 		/**
 		 * Admin notices — extracted to Admin\Partials\Notices per RT-2.
-		 * - render_action_result_notice consumes the `?notice=...` query var set by
-		 *   Settings::handle_actions() redirects (FR-016)
-		 * - render_missing_adapter_notice + handle_adapter_notice_dismissal
-		 *   together implement the dismissible adapter-missing warning (FR-015 + Q3)
+		 *
+		 * Two hooks:
+		 * - render_action_result_notice ON admin_notices — one-shot flash message
+		 *   consuming the `?notice=<slug>` query var set by Settings::handle_actions()
+		 *   redirects (FR-016). Page-scoped; stays on the standard hook.
+		 * - register_shared_notices ON acrossai_notices — persistent-condition
+		 *   records (missing MCP adapter, missing wpb-access-control library)
+		 *   pushed into the cross-plugin collector introduced in
+		 *   acrossai-co/main-menu 0.0.30. Vendor renders them on the Notices
+		 *   submenu + WP-native dismissible summary; per-user fingerprint
+		 *   dismissal is handled upstream.
 		 */
 		$notices = \AcrossAI_MCP_Manager\Admin\Partials\Notices::instance();
 		$this->loader->add_action( 'admin_notices', $notices, 'render_action_result_notice' );
+		$this->loader->add_filter( 'acrossai_notices', $notices, 'register_shared_notices' );
 
 		/**
 		 * ApplicationPasswords REST routes (US3 — Phase 2).
@@ -438,27 +446,17 @@ final class Main {
 		$access_control = \AcrossAI_MCP_Manager\Includes\AccessControl\AcrossAI_MCP_Access_Control::instance();
 		$this->loader->add_action( 'init', $access_control, 'boot_manager', 5 );
 		$this->loader->add_action( 'rest_api_init', $access_control, 'register_rest_api' );
-		$this->loader->add_action( 'admin_notices', $access_control, 'maybe_show_library_notice' );
+		// F015 library-missing warning: now surfaced via the shared
+		// acrossai_notices filter (see Notices::register_shared_notices above).
 		$this->loader->add_filter( 'mcp_adapter_pre_tool_call', $access_control, 'gate_mcp_tool_call', 10, 4 );
 
-		/**
-		 * Adapter-missing notice (US4 — FR-015 + Q3). Lives on Notices per RT-2.
-		 * - render_missing_adapter_notice runs unconditionally on admin_notices;
-		 *   the renderer self-guards on class_exists('\WP\MCP\Plugin') AND on the
-		 *   per-user user_meta dismissal flag (sticky, never resets on upgrade).
-		 * - handle_adapter_notice_dismissal is the admin-ajax endpoint called
-		 *   when the user clicks the X button. Nonce + manage_options gated.
-		 */
-		$this->loader->add_action( 'admin_notices', $notices, 'render_missing_adapter_notice' );
 		// F040 follow-up: the OAuth HTTPS and OAuth-cron-disabled notices moved
 		// to the acrossai-ai-connectors companion plugin — mcp-manager no longer
 		// owns the OAuth token endpoint or the OAuth cleanup cron, so those
-		// warnings are companion territory now.
-		$this->loader->add_action(
-			'wp_ajax_acrossai_mcp_dismiss_adapter_notice',
-			$notices,
-			'handle_adapter_notice_dismissal'
-		);
+		// warnings are companion territory now. The adapter-missing warning
+		// (US4 — FR-015 + Q3) migrated to the shared `acrossai_notices` filter
+		// registered above; dismiss + persistence are handled by
+		// acrossai-co/main-menu 0.0.30's SummaryNoticeEmitter.
 
 		// TODO (phase N): wire Admin\Partials\ApplicationPasswords.
 		// $app_passwords = \AcrossAI_MCP_Manager\Admin\Partials\ApplicationPasswords::instance();
@@ -470,8 +468,8 @@ final class Main {
 		 * `rest_api_init` so `Plugin::instance()`'s internal REST route
 		 * registration lands during WordPress's REST bootstrap window.
 		 * Graceful when adapter package is absent (US3 — sets status
-		 * 'not-found'; `Notices::render_missing_adapter_notice()` handles the
-		 * admin banner separately).
+		 * 'not-found'; `Notices::register_shared_notices()` surfaces the
+		 * warning via the acrossai_notices filter).
 		 */
 		$mcp_controller = \AcrossAI_MCP_Manager\Includes\MCP\Controller::instance();
 		$this->loader->add_action( 'rest_api_init', $mcp_controller, 'initialize_adapter' );
