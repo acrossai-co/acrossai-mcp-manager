@@ -4,7 +4,7 @@ Tags: mcp, ai, copilot, vscode, claude
 Requires at least: 7.0
 Requires PHP: 8.1
 Tested up to: 7.0
-Stable tag: 0.2.0
+Stable tag: 0.2.2
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -180,6 +180,15 @@ No additional software is needed on the WordPress side. Your MCP clients (VS Cod
 4. Per-provider configuration file locations and top-level keys
 
 == Changelog ==
+
+= 0.2.2 =
+* **Notices — migrated persistent-condition banners to the cross-plugin `acrossai_notices` filter.** The "MCP adapter package missing" and "wpb-access-control library missing" warnings no longer render as inline `admin_notices` banners on every screen. They're pushed into the shared collection introduced in `acrossai-co/main-menu` 0.0.30, which surfaces them in two consolidated places: (1) a **Notices submenu** under the AcrossAI parent menu (with a count bubble; the page also stays reachable when the count is zero and renders an "All clear" empty state per the 0.0.31 fix) and (2) a **single WP-native dismissible summary** on every other admin page. Dismissal is now fingerprint-based (per-user meta `_acrossai_notices_summary_fp`) — adding, resolving, or renaming a notice re-shows the summary automatically. **Deletions**: `Notices::render_missing_adapter_notice`, `Notices::handle_adapter_notice_dismissal`, `ADAPTER_DISMISS_META_KEY`, `ADAPTER_DISMISS_NONCE_ACTION`, `AcrossAI_MCP_Access_Control::maybe_show_library_notice`, and the US4 dismiss-persistence handler in `src/js/backend.js` — all obsoleted by the shared summary. **Additions**: `Notices::register_shared_notices()` returns records with ids `acrossai_mcp_manager_adapter_missing` (type `error`) and `acrossai_mcp_manager_wpb_access_control_missing` (type `warning`), both scoped with `source: 'MCP Manager'`. One-shot action-result flashes (`?notice=<slug>`) stay on the standard `admin_notices` hook — page-scoped transient messages don't fit the shared collection model.
+* **UI — Redesigned the AI Connectors placeholder tab as a centered sales card.** When the `acrossai-ai-connectors` companion add-on is not installed or not active, the AI Connectors tab on the server-edit page (`?page=acrossai_mcp_manager&action=edit&server=<id>&tab=ai-connectors`) now renders a vertically-centered polished card sourced from https://acrossai.co/ai-connectors/ — headline ("Connect WordPress to Claude, ChatGPT & Grok in one click"), supported-client pills (Claude · ChatGPT · Grok), four benefit bullets, a purple CTA ("Install add-on" / "Activate add-on" depending on companion state), a "Learn more" link, and a 14-day money-back trust line. State resolution unchanged — Registry's last-wins dedup at priority 35 still swaps the placeholder out for the companion's real `AIConnectorsTab` the moment the add-on activates.
+* **Dependencies: bump `acrossai-co/main-menu` `0.0.29` → `0.0.31`.** 0.0.30 shipped the shared `acrossai_notices` filter + Notices submenu + `SummaryNoticeEmitter`. 0.0.31 fixed a "Sorry, you are not allowed to access this page." error on direct visits to `admin.php?page=acrossai-notices` when the notice count was zero (page callback is now always wired; empty-state sidebar row is hidden via inline `<style>` on `admin_head` rather than `remove_submenu_page()`, which had desynced `$_registered_pages`).
+* **Internal: `ACROSSAI_MCP_MANAGER_VERSION` constant + `Stable tag` bumped to `0.2.2` matching the plugin header** (backfills the `Stable tag` drift that persisted since 0.2.0).
+
+= 0.2.1 =
+* **Security — Defended REST + AJAX response paths against full-page cache poisoning.** Full-page caches (LiteSpeed Cache, WP Rocket, W3 Total Cache, WP Super Cache, host-level FastCGI cache) don't honor arbitrary `Cache-Control: no-store` headers when making caching decisions — they gate on `DONOTCACHEPAGE` (WordPress-community convention) and their admin exclusion list. Companion fix to `acrossai-ai-connectors` 0.5.3 PR #13 (`DEC-OAUTH-DONOTCACHEPAGE-PATTERN`). New `includes/Utilities/CacheHeaders.php` — port of the utility from `acrossai-ai-connectors` — applies a three-pronged defense (constant + headers + WP filter) on every per-session and per-server response emission surface: `GET /servers/{id}/abilities`, `GET /servers/{id}/tools`, `GET /auth/status`, `GET /servers`, `POST /auth/start`, `POST /auth/exchange`, `POST /generate-app-password`, and the `wp_ajax_acrossai_mcp_dismiss_adapter_notice` AJAX endpoint. Prevents cross-server data leaks (per-server ability/tool rosters bleeding into other sessions) and stale-response classes (cached `{approved:false}` served after the flip to `true`). Also fixes plugin-header vs `ACROSSAI_MCP_MANAGER_VERSION` constant drift — B5 bug pattern (constant lagged at 0.1.9 while header sat at 0.2.0). Both now aligned at 0.2.1.
 
 = 0.2.0 =
 * **Dependencies: bump `acrossai-co/main-menu` `0.0.27` → `0.0.29`.** Picks up the shared main-menu package's latest baseline for the 0.2.0 release cycle.
