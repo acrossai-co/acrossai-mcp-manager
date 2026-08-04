@@ -61,6 +61,13 @@ final class AIConnectorsPromoTab extends AbstractServerTab {
 	private const DOCS_URL = 'https://github.com/acrossai-co/acrossai-mcp-manager/blob/main/docs/extending-connector-profiles.md';
 
 	/**
+	 * AcrossAI brand logo — matches the URL the vendor's `AddonsPageRenderer`
+	 * uses for the shared Add-ons page add-on icons, so the promo card reads
+	 * as first-party AcrossAI chrome rather than a plugin-specific graphic.
+	 */
+	private const LOGO_URL = 'https://acrossai.co/wp-content/uploads/2026/07/acrossai-logo-2.svg';
+
+	/**
 	 * Whether the scoped CSS has been emitted this request. Prevents
 	 * duplicate `<style>` blocks when the tab renders more than once.
 	 *
@@ -147,14 +154,13 @@ final class AIConnectorsPromoTab extends AbstractServerTab {
 		$cta_label = 'inactive' === $state
 			? __( 'Activate add-on', 'acrossai-mcp-manager' )
 			: __( 'Install add-on', 'acrossai-mcp-manager' );
-		$cta_url = $this->resolve_cta_url( $state );
+		$cta_url   = $this->resolve_cta_url( $state );
 		?>
 <div class="acai-aic-promo">
 	<div class="acai-aic-promo__card">
 
-		<div class="acai-aic-promo__icon" aria-hidden="true">
-			<?php echo $this->render_network_svg(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Static SVG literal. ?>
-		</div>
+		<img class="acai-aic-promo__logo" src="<?php echo esc_url( self::LOGO_URL ); ?>" alt="<?php esc_attr_e( 'AcrossAI', 'acrossai-mcp-manager' ); ?>" />
+
 
 		<div class="acai-aic-promo__badge-row">
 			<span class="acai-aic-promo__badge">
@@ -318,38 +324,6 @@ final class AIConnectorsPromoTab extends AbstractServerTab {
 	}
 
 	/**
-	 * Returns the inline SVG for the AI Connectors brand icon — an
-	 * interconnected-nodes network graphic matching the design mockup.
-	 * Static literal; safe to echo without escaping.
-	 *
-	 * @return string SVG markup.
-	 */
-	private function render_network_svg(): string {
-		return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="30" height="30" role="img" focusable="false">'
-			// Connection lines — drawn first so nodes overlay them.
-			. '<g stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" opacity="0.85">'
-			. '<line x1="24" y1="24" x2="24" y2="8" />'
-			. '<line x1="24" y1="24" x2="40" y2="16" />'
-			. '<line x1="24" y1="24" x2="40" y2="32" />'
-			. '<line x1="24" y1="24" x2="24" y2="40" />'
-			. '<line x1="24" y1="24" x2="8" y2="32" />'
-			. '<line x1="24" y1="24" x2="8" y2="16" />'
-			. '</g>'
-			// Outer nodes.
-			. '<g fill="currentColor">'
-			. '<circle cx="24" cy="8" r="2.6" />'
-			. '<circle cx="40" cy="16" r="2.6" />'
-			. '<circle cx="40" cy="32" r="2.6" />'
-			. '<circle cx="24" cy="40" r="2.6" />'
-			. '<circle cx="8" cy="32" r="2.6" />'
-			. '<circle cx="8" cy="16" r="2.6" />'
-			. '</g>'
-			// Central node — larger, filled.
-			. '<circle cx="24" cy="24" r="5" fill="currentColor" />'
-			. '</svg>';
-	}
-
-	/**
 	 * Emits the promo landing's scoped stylesheet once per request.
 	 *
 	 * Visual language matches `AcrossAI_Main_Menu\ConsultationsPageRenderer`
@@ -385,18 +359,14 @@ final class AIConnectorsPromoTab extends AbstractServerTab {
 	box-shadow: 0 2px 8px -4px rgba(85,56,238,0.12), 0 1px 3px rgba(0,0,0,.05);
 }
 .acai-aic-promo__card-glow { display: none; }
-.acai-aic-promo__icon {
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	width: 52px;
-	height: 52px;
-	border-radius: 12px;
-	background: linear-gradient(135deg, #eef2ff 0%, #e0e7ff 100%);
-	color: #4f46e5;
+.acai-aic-promo__logo {
+	display: block;
+	width: auto;
+	height: 48px;
+	max-width: 180px;
 	margin: 0 auto 14px;
+	object-fit: contain;
 }
-.acai-aic-promo__icon svg { width: 26px; height: 26px; }
 .acai-aic-promo__badge {
 	display: inline-block;
 	padding: 2px 10px;
