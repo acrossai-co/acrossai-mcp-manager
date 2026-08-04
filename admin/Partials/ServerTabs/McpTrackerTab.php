@@ -36,11 +36,15 @@ final class McpTrackerTab extends AbstractServerTab {
 	/**
 	 * Returns the tab slug.
 	 *
+	 * Note: the slug is `mcp-log` (renamed from `mcp-tracker`); the class,
+	 * body copy, and outbound links still reference the third-party
+	 * "MCP Tracker" plugin (WPVMCPT), which is a distinct product name.
+	 *
 	 * @since 0.0.6
 	 * @return string
 	 */
 	public function slug(): string {
-		return 'mcp-tracker';
+		return 'mcp-log';
 	}
 
 	/**
@@ -50,7 +54,7 @@ final class McpTrackerTab extends AbstractServerTab {
 	 * @return string
 	 */
 	public function label(): string {
-		return __( 'MCP Tracker', 'acrossai-mcp-manager' );
+		return __( 'Logs', 'acrossai-mcp-manager' );
 	}
 
 	/**
