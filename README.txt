@@ -1,6 +1,6 @@
 === AcrossAI MCP Manager ===
 Contributors: raftaar1191
-Tags: mcp, ai, copilot, vscode, claude
+Tags: mcp, ai, claude, chatgpt, cursor, copilot, vscode, gemini
 Requires at least: 7.0
 Requires PHP: 8.1
 Tested up to: 7.0
@@ -8,117 +8,49 @@ Stable tag: 0.2.2
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
-Connect WordPress to MCP clients like VS Code, Claude, and Copilot using secure application passwords.
+Connect WordPress to Claude, ChatGPT, Cursor, VS Code, Copilot, Gemini and any MCP-compatible AI client — with per-server access control.
 
 == Description ==
 
-MCP Manager uses the standard `@automattic/mcp-wordpress-remote@latest` package with WordPress Application Passwords for the default remote flow. It also includes an optional experimental direct Claude Connectors mode backed by a WordPress-hosted OAuth approval flow.
+MCP Manager connects your WordPress site to any MCP-compatible AI client — Claude, ChatGPT, Cursor, VS Code, GitHub Copilot, Gemini, and more — so those clients can safely read, edit, and act on your site.
 
-MCP Manager is a WordPress plugin that enables seamless integration with Model Context Protocol (MCP) servers, allowing AI assistants and code editors to safely access your WordPress instance through secure application passwords.
+Every headline section below links to the full documentation at [acrossai.co/doc-category/mcp-manager](https://acrossai.co/doc-category/mcp-manager/) — the docs are the source of truth and get updated first. Source and issues live at [github.com/acrossai-co/acrossai-mcp-manager](https://github.com/acrossai-co/acrossai-mcp-manager).
 
 = Key Features =
 
-* **Multi-Client Support**: Configure MCP for:
-  - VS Code with Copilot
-  - Claude Desktop App
-  - GitHub Copilot & Codex
-  - OpenAI ChatGPT Codex
-  - Custom MCP Clients
-
-* **Secure Authentication**: Uses WordPress native Application Passwords system
-  - One-click password generation
-  - Secure credential management
-  - Password revocation support
-  - Per-server Access Control still enforced after authentication
-
-* **Easy Configuration**:
-  - Copy-paste ready JSON configurations
-  - Per-provider configuration file paths
-  - Automatic top-level key detection
-
-* **Format #1 Standard**: Uses the Automattic-recommended MCP configuration format
-  - npx command execution
-  - @automattic/mcp-wordpress-remote@latest package
-  - Full environment variable support
+* **Multiple MCP servers per site** — create, enable, disable, and configure independently. → [Docs](https://acrossai.co/docs/mcp-servers/)
+* **Multi-client connection guides** — copy-paste-ready configs for Claude Desktop, VS Code + Copilot, GitHub Copilot, ChatGPT, Cursor, Gemini CLI, and custom clients. → [Docs](https://acrossai.co/docs/mcp-connect-a-client/)
+* **CLI browser-approval flow** — let terminal users connect with one command; approval happens in a browser tab. → [Docs](https://acrossai.co/docs/mcp-cli-connections/)
+* **WP-CLI (STDIO) transport** — local clients can connect through a WP-CLI subprocess with no network credential transmission. → [Docs](https://acrossai.co/docs/mcp-wp-cli-stdio/)
+* **Application Passwords under the hood** — WordPress-native credentials, one-click generation, and revocation from the user profile page. → [Docs](https://acrossai.co/docs/mcp-application-passwords/)
+* **Per-server tool and ability curation** — pick exactly which WordPress abilities each MCP server exposes as callable tools. → [Docs](https://acrossai.co/docs/mcp-tools-and-abilities/)
+* **Per-server access control** — gate every MCP request by user, role, capability, or your own policy provider. → [Docs](https://acrossai.co/docs/mcp-access-control/)
+* **Frontend embeds** — shortcode + block to show your users how to connect their AI clients from your own site. → [Docs](https://acrossai.co/docs/mcp-embeds-shortcode-block/)
 
 = How It Works =
 
-1. Navigate to Settings → MCP Manager
-2. Select your MCP client (VS Code, Claude, GitHub Copilot, ChatGPT, or Custom)
-3. Click "Generate New Application Password"
-4. Copy the ready-to-use JSON configuration
-5. Paste into your client's configuration file
-6. Restart your MCP client
+1. Install and activate the plugin ([step-by-step](https://acrossai.co/docs/mcp-install-and-activate/))
+2. Open **AcrossAI → MCP** in your WordPress admin
+3. Pick your AI client tab (Claude, VS Code, ChatGPT, Cursor, Gemini, GitHub Copilot, or Custom)
+4. Generate a new Application Password with one click
+5. Copy the ready-made JSON config and paste it into your client
+6. Restart your client — it now sees your site's abilities
 
-All application passwords are managed through WordPress's native Application Passwords system and appear in your profile under Account Management.
+Longer walkthrough with screenshots: [Getting started → connect your first AI client](https://acrossai.co/docs/mcp-getting-started/).
 
-= CLI Connection and Authorization Flow =
+= Connection Types =
 
-MCP Manager also supports a browser-assisted CLI connection flow for local MCP clients.
+MCP Manager ships with three connection styles out of the box, plus one optional paid add-on:
 
-Typical command:
-
-`npx -y @acrossai/mcp-manager --siteurl=https://example.com --server=default-mcp-server`
-
-Flow summary:
-
-1. The CLI checks `/wp-json/acrossai-mcp-manager/v1/health`
-2. The CLI starts auth with `/wp-json/acrossai-mcp-manager/v1/auth/start`
-3. WordPress returns an `auth_code` and frontend `auth_url`
-4. The CLI opens the frontend approval page at `/acrossai-mcp-manager/`
-5. If needed, the user signs in through normal WordPress login
-6. The signed-in user approves access in the browser
-7. The CLI polls `/auth/status` until the request is approved
-8. The CLI fetches the approved user's accessible servers from `/servers`
-9. The CLI exchanges the approved code at `/auth/exchange`
-10. WordPress creates a one-time Application Password and the CLI writes the MCP client config
-
-Terminology:
-
-* **Sign in / Log in** = WordPress account authentication
-* **Connect** = starting the CLI-to-site linking flow
-* **Authorize / Approve access** = granting the CLI permission in the browser
-
-Important notes:
-
-* The frontend authorization page must never be cached
-* Auth codes are single-use
-* `/servers` and `/auth/exchange` respect per-server access control
-* User-facing copy should say **CLI Connections** rather than **npm Login**
-* Generated remote MCP configs use Application Passwords and explicitly disable OAuth discovery in `@automattic/mcp-wordpress-remote`
-
-= Experimental Direct Claude Connectors =
-
-An optional **Claude Connectors Screen (Experimental)** setting can enable a direct OAuth flow for Claude's hosted connectors.
-
-When the global feature toggle is enabled and a specific server is configured in its **Claude Connector** tab, the plugin exposes:
-
-* `/.well-known/oauth-authorization-server`
-* `/.well-known/oauth-protected-resource?resource=<mcp-url>`
-* `/acrossai-mcp-connectors/oauth/authorize/`
-* `/wp-json/acrossai-mcp-manager/v1/connector/oauth/token`
-
-Important notes:
-
-* Disabled by default
-* The Application Password flow remains available and supported
-* The master experimental toggle is global, but OAuth client settings are stored per server
-* Direct connector approval signs Claude in as a WordPress user
-* Per-server Access Control still applies to every MCP request after OAuth
-* Public HTTPS is recommended for hosted connector usage
-
-= Provider Configuration Paths =
-
-* **VS Code**: ~/.config/Code/User/globalStorage/Copilot.copilot-chat/mcp.json (top-level key: "servers")
-* **Claude**: ~/Library/Application Support/Claude/claude_desktop_config.json (top-level key: "mcpServers")
-* **GitHub Copilot**: ~/.gh-copilot/config.json (top-level key: "servers")
-* **OpenAI ChatGPT**: ~/.config/chatgpt/config.json (top-level key: "servers")
-* **Custom**: ./your-project/.mcp/config.json (top-level key: configurable)
+* **MCP Client (npx bridge)** — the default. Paste a JSON config into Claude Desktop, VS Code, Cursor, etc. Uses `@automattic/mcp-wordpress-remote@latest` with a WordPress Application Password. → [Docs](https://acrossai.co/docs/mcp-connect-a-client/)
+* **CLI Connections (browser approval)** — one command in the terminal, one click in the browser, zero password copying. → [Docs](https://acrossai.co/docs/mcp-cli-connections/)
+* **WP-CLI (STDIO)** — local subprocess, no network credential transmission. Best for CI or local dev boxes. → [Docs](https://acrossai.co/docs/mcp-wp-cli-stdio/)
+* **AI Connectors (paid add-on)** — one-click Claude, ChatGPT, and Grok hosted-OAuth connectors. Requires the separate [AcrossAI AI Connectors plugin](https://acrossai.co/ai-connectors/) (14-day money-back). → [Docs](https://acrossai.co/docs/mcp-ai-connectors/)
 
 = Requirements =
 
-* WordPress 5.9 or higher
-* PHP 7.4 or higher
+* WordPress 7.0 or higher
+* PHP 8.1 or higher
 * WordPress Application Passwords support (built-in since WP 5.6)
 
 == Installation ==
@@ -135,42 +67,33 @@ Or:
 
 == Frequently Asked Questions ==
 
-= Is my password secure? =
+Full FAQ + troubleshooting lives at [acrossai.co/docs/mcp-faq-troubleshooting](https://acrossai.co/docs/mcp-faq-troubleshooting/). Quick answers below.
 
-Yes! MCP Manager uses WordPress's native Application Passwords system. Each password is:
-- Generated using WordPress's secure methods
-- Associated with your user account
-- Visible in your profile for management
-- Revocable at any time
+= Are my credentials secure? =
 
-= Can I use this with multiple MCP clients? =
+Yes. MCP Manager uses WordPress's native Application Passwords — each one is generated by WordPress, tied to your user, revocable from the profile page, and never stored in this plugin's own tables. Full detail: [Application passwords & security](https://acrossai.co/docs/mcp-application-passwords/).
 
-Yes! You can generate separate passwords for each client (VS Code, Claude, GitHub Copilot, ChatGPT, and any custom client).
+= Can I connect multiple AI clients to the same site? =
 
-= Where are my application passwords saved? =
+Yes — generate a separate password (or CLI approval) per client. You can also run multiple MCP servers on the same site with different tool/ability sets and per-server access rules. See [MCP servers](https://acrossai.co/docs/mcp-servers/).
 
-All application passwords are managed through WordPress's native Application Passwords system. View and manage them at:
-User Profile → Account Management → Application Passwords
+= Which AI clients are supported? =
 
-= What MCP clients are supported? =
+Claude Desktop, ChatGPT, Cursor, VS Code (with Copilot), GitHub Copilot, Gemini CLI, and any custom MCP-compatible client. Adding a new client is a filter callback. See [Connecting an AI client](https://acrossai.co/docs/mcp-connect-a-client/).
 
-- Visual Studio Code (with Copilot)
-- Anthropic Claude Desktop App
-- GitHub Copilot
-- OpenAI ChatGPT Codex
-- Any custom MCP client supporting the standard format
+= Does it work on multisite? =
 
-= Can I revoke a password? =
+Yes — each site in the network configures independently.
 
-Yes! You can revoke any application password from your profile page under Account Management → Application Passwords.
+= Do I need the paid AI Connectors add-on? =
 
-= Is this compatible with multisite? =
+Only if you want the one-click hosted-OAuth flow for Claude, ChatGPT, or Grok. All other connection styles (MCP Client, CLI, WP-CLI STDIO) are free and shipped with this plugin. See [AI Connectors add-on](https://acrossai.co/ai-connectors/).
 
-Yes! MCP Manager works with WordPress multisite installations. Each site can be configured independently.
+== Support ==
 
-= Do I need to install additional software? =
-
-No additional software is needed on the WordPress side. Your MCP clients (VS Code extension, Claude app, etc.) handle the integration.
+* **Docs hub** — [acrossai.co/doc-category/mcp-manager](https://acrossai.co/doc-category/mcp-manager/)
+* **Troubleshooting & FAQ** — [acrossai.co/docs/mcp-faq-troubleshooting](https://acrossai.co/docs/mcp-faq-troubleshooting/)
+* **Source code + issue tracker** — [github.com/acrossai-co/acrossai-mcp-manager](https://github.com/acrossai-co/acrossai-mcp-manager)
 
 == Screenshots ==
 
