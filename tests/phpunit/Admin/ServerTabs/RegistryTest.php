@@ -60,7 +60,7 @@ final class RegistryTest extends WP_UnitTestCase {
 		$this->assertContains( 'tools', $slugs );
 		$this->assertContains( 'abilities', $slugs );
 		$this->assertContains( 'access-control', $slugs );
-		$this->assertContains( 'mcp-tracker', $slugs );
+		$this->assertContains( 'mcp-log', $slugs );
 		$this->assertContains( 'embeds', $slugs );
 		$this->assertContains( 'update-server', $slugs );
 		$this->assertContains( 'danger-zone', $slugs );
@@ -214,7 +214,7 @@ final class RegistryTest extends WP_UnitTestCase {
 				'tools',          // 50
 				'abilities',      // 60
 				'access-control', // 70
-				'mcp-tracker',    // 80
+				'mcp-log',    // 80
 				'embeds',         // 90 (defined first at prio 90)
 				'update-server',  // 90 (defined after embeds — insertion-order tiebreak)
 				'danger-zone',    // 100
@@ -347,7 +347,7 @@ final class RegistryTest extends WP_UnitTestCase {
 				return array_values(
 					array_filter(
 						$tabs,
-						static fn ( array $entry ): bool => 'mcp-tracker' !== ( $entry['slug'] ?? '' )
+						static fn ( array $entry ): bool => 'mcp-log' !== ( $entry['slug'] ?? '' )
 					)
 				);
 			},
@@ -361,12 +361,12 @@ final class RegistryTest extends WP_UnitTestCase {
 		);
 		$slugs  = array_map( static fn ( $t ) => $t->slug(), Registry::instance()->for_server( $server ) );
 
-		$this->assertNotContains( 'mcp-tracker', $slugs );
+		$this->assertNotContains( 'mcp-log', $slugs );
 		$this->assertCount( 9, $slugs );
 
 		// Unknown-slug render() falls back to the first surviving tab.
 		ob_start();
-		Registry::instance()->render( 'mcp-tracker', $server );
+		Registry::instance()->render( 'mcp-log', $server );
 		$body = ob_get_clean();
 		$this->assertIsString( $body );
 	}
