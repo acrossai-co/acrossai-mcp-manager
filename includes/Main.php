@@ -147,7 +147,7 @@ final class Main {
 		$this->define( 'ACROSSAI_MCP_MANAGER_PLUGIN_URL', plugin_dir_url( \ACROSSAI_MCP_MANAGER_PLUGIN_FILE ) );
 		$this->define( 'ACROSSAI_MCP_MANAGER_PLUGIN_NAME_SLUG', 'acrossai-mcp-manager' );
 		$this->define( 'ACROSSAI_MCP_MANAGER_PLUGIN_NAME', 'AcrossAI MCP Manager' );
-		$this->define( 'ACROSSAI_MCP_MANAGER_VERSION', '0.2.3' );
+		$this->define( 'ACROSSAI_MCP_MANAGER_VERSION', '0.2.4' );
 	}
 
 	/**
@@ -440,9 +440,11 @@ final class Main {
 		// filter (D18) is the canonical MCP-boundary enforcement hook.
 		// NB: `register_default_providers` filter is intentionally NOT wired —
 		// the vendor's AccessControlManager::load_providers() already registers
-		// WpRoleProvider + WpUserProvider + WpCapabilityProvider + BuddyBoss +
-		// MemberPress as defaults. Third-party plugins can still hook the
+		// WpRoleProvider + WpUserProvider + WpCapabilityProvider as defaults.
+		// Third-party plugins can still hook the
 		// `acrossai_mcp_access_control_providers` filter to append their own.
+		// (BuddyBoss + MemberPress providers moved to acrossai/user-access-pro
+		// in wpb-access-control v3.0.0.)
 		$access_control = \AcrossAI_MCP_Manager\Includes\AccessControl\AcrossAI_MCP_Access_Control::instance();
 		$this->loader->add_action( 'init', $access_control, 'boot_manager', 5 );
 		$this->loader->add_action( 'rest_api_init', $access_control, 'register_rest_api' );

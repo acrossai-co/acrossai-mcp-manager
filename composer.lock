@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "f1e038d47b72f144f6c4598907b879a1",
+    "content-hash": "0ee50f0722787ed49408119c387894a4",
     "packages": [
         {
             "name": "acrossai-co/main-menu",
@@ -290,16 +290,16 @@
         },
         {
             "name": "wpboilerplate/wpb-access-control",
-            "version": "v2.0.0",
+            "version": "v3.1.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/WPBoilerplate/wpb-access-control.git",
-                "reference": "4f0e94eef7c899c5155ea9351364d3efeeecb443"
+                "reference": "2e8f9560a0ae2f594e01510c1cbc17112bdfe3a9"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/WPBoilerplate/wpb-access-control/zipball/4f0e94eef7c899c5155ea9351364d3efeeecb443",
-                "reference": "4f0e94eef7c899c5155ea9351364d3efeeecb443",
+                "url": "https://api.github.com/repos/WPBoilerplate/wpb-access-control/zipball/2e8f9560a0ae2f594e01510c1cbc17112bdfe3a9",
+                "reference": "2e8f9560a0ae2f594e01510c1cbc17112bdfe3a9",
                 "shasum": ""
             },
             "require": {
@@ -367,7 +367,7 @@
                 "issues": "https://github.com/WPBoilerplate/wpb-access-control/issues",
                 "source": "https://github.com/WPBoilerplate/wpb-access-control"
             },
-            "time": "2026-06-30T18:42:47+00:00"
+            "time": "2026-08-08T08:57:32+00:00"
         }
     ],
     "packages-dev": [

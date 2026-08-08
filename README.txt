@@ -4,7 +4,7 @@ Tags: mcp, ai, claude, chatgpt, cursor, copilot, vscode, gemini
 Requires at least: 7.0
 Requires PHP: 8.1
 Tested up to: 7.0
-Stable tag: 0.2.3
+Stable tag: 0.2.4
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -103,6 +103,10 @@ Only if you want the one-click hosted-OAuth flow for Claude, ChatGPT, or Grok. A
 4. Per-provider configuration file locations and top-level keys
 
 == Changelog ==
+
+= 0.2.4 =
+* **Dependencies — bump `wpboilerplate/wpb-access-control` `2.0.0` → `3.1.0`.** Two vendor changes surface in the per-server **Access Control** tab (`?tab=access-control`): (1) new **"Any logged-in user"** option in the *Who can access* dropdown — backed by the new `TYPE_AUTHENTICATED` sentinel in `AccessControlManager` (returns `true` iff `$user_id > 0`), and (2) the existing "Everyone (no restriction)" option is relabelled **"Public (no login required)"** — pure UI relabel, same underlying behavior (`TYPE_EVERYONE` unchanged, existing rules unaffected). v3.0.0 also removed the built-in `BuddyBossProfileTypeProvider` + `MemberPressMembershipProvider` (moved to a separate `acrossai/user-access-pro` add-on); this plugin never wired them into the *Who can access* dropdown, so removal has no visible effect here. Docblock at `includes/Main.php` refreshed to drop the stale BuddyBoss/MemberPress reference. No data migration required.
+* **Internal: `ACROSSAI_MCP_MANAGER_VERSION` constant + `Stable tag` bumped to `0.2.4` matching the plugin header.**
 
 = 0.2.3 =
 * **UX — In-context nudges to install the AcrossAI Abilities Manager add-on.** When the sibling `acrossai-abilities-manager` plugin is not active, the server-edit **Abilities** and **Tools** tabs (`?tab=abilities` / `?tab=tools`) now surface a small WordPress-native `notice-info` block above the picker with a link to the shared Add-ons page (`admin.php?page=acrossai-addons`). Without the add-on both pickers only list the three core abilities WordPress ships by default (`core/get-environment-info`, `core/get-site-info`, `core/get-user-info`); the add-on registers a rich library of built-in abilities that populate both surfaces. Detection is a plain `is_plugin_active()` check — same message + same link covers both "not installed" and "installed-but-off" states. Placed after the existing "Server is disabled" warning and before the `wp_get_abilities()` capability check, so the nudge is visible even when the abilities API itself is missing.
