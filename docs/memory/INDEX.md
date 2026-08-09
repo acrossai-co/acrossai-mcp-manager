@@ -161,6 +161,7 @@ This is a compact routing map for durable memory. Keep it short. It points to so
 ## Worklog Entries
 | Date | Feature | Summary | Source |
 |---|---|---|---|
+| 2026-08-09 | Notices | Gate-tied cache-exclusion warnings for nonce/OTP-carrying URLs MUST push a conditional row into `acrossai_notices` gated on the enabling setting — inline settings-section banner alone is invisible after the first visit | WORKLOG.md |
 | 2026-07-02 | F011 | BerlinDB-backed Table subclasses — phantom-version guard (`maybe_upgrade` override) prevents silent short-circuit when version option stamped but physical table missing | WORKLOG.md |
 | 2026-07-03 | F012 | Vendor-owned shared Settings page — `register_setting()` option_group MUST be the shared `'acrossai-settings'` slug, not the per-tab page slug; wrong group makes Save silently no-op with no operator-visible error | WORKLOG.md |
 | 2026-07-04 | F015 | Run `/speckit-analyze` AFTER `speckit-implement` when mid-session decisions supersede spec (Q4/Q1 pivots, user-directed table rename, technology pivots) — catches stale FR text, dead-code follow-ups, docs-vs-shipping drift the pre-implement audit can't see | WORKLOG.md |
