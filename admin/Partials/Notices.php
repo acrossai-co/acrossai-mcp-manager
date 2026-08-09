@@ -142,6 +142,21 @@ class Notices {
 			);
 		}
 
+		if ( (bool) get_option( 'acrossai_mcp_npm_login_enabled', false ) ) {
+			$auth_url  = \AcrossAI_MCP_Manager\Public\Partials\FrontendAuth::get_base_url();
+			$notices[] = array(
+				'id'      => 'acrossai_mcp_manager_cli_auth_cache_exclusion',
+				'title'   => __( 'Exclude CLI auth URL from page cache', 'acrossai-mcp-manager' ),
+				'message' => sprintf(
+					/* translators: %s: the frontend CLI authorization URL, wrapped in <code>. */
+					__( 'The npm / npx CLI connection flow is enabled. The frontend authorization page at %s contains time-sensitive auth codes and nonces. If your hosting, CDN, or caching plugin caches this URL, authentication will silently fail. Exclude this path from all page-caching rules.', 'acrossai-mcp-manager' ),
+					'<code>' . esc_url( $auth_url ) . '</code>'
+				),
+				'type'    => 'warning',
+				'source'  => __( 'MCP Manager', 'acrossai-mcp-manager' ),
+			);
+		}
+
 		return $notices;
 	}
 }
