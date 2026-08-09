@@ -1,28 +1,55 @@
 <?php
 /**
- * MCP HTTP transport default-capability filter callback.
+ * MCP HTTP transport default-capability filter callback (F042).
  *
- * Feature 042 — replaces the earlier DB-row-seeding approach with a runtime
- * filter that hooks the vendor `mcp_adapter_default_transport_permission_user_capability`
- * (fired at `vendor/wordpress/mcp-adapter/includes/Transport/HttpTransport.php:119`).
+ * This class is filter #1 of the plugin's TWO-FILTER, PER-SERVER MCP
+ * permission stack. The two filters run side-by-side, wired adjacently in
+ * `includes/Main.php::define_public_hooks()`:
  *
- * Rule-aware semantics:
+ *   1. `mcp_adapter_default_transport_permission_user_capability` (F042, THIS class)
+ *      Fires inside the WP REST `permission_callback` at
+ *      `vendor/wordpress/mcp-adapter/includes/Transport/HttpTransport.php:119`.
+ *      Returns a WP capability string; the vendor caller runs
+ *      `current_user_can( <returned-cap> )` and returns 401 on false.
+ *      Server resolution: URL route → MCPServerQuery lookup → server_slug.
+ *
+ *   2. `mcp_adapter_pre_tool_call` (F015, {@see AcrossAI_MCP_Access_Control::gate_mcp_tool_call})
+ *      Fires at MCP tool-call dispatch. Returns $args on allow, WP_Error 403
+ *      on deny per the operator's wpb-ac rule.
+ *      Server resolution: $server->get_server_id() from the McpServer instance
+ *      passed as the 4th filter arg → server_slug.
+ *
+ * Rule-aware semantics for THIS filter:
  *
  *   - When the wpb-access-control table has NO rule for the current server
  *     (RuleQuery::get_rule() returns `['key' => '', 'value' => []]` — the same
  *     state that renders "No user access added by admin" in the vendor
  *     dropdown) → return `'manage_options'` so the transport gate blocks
- *     non-admins.
+ *     non-admins (defense-in-depth: hard-stops non-admin traffic before it
+ *     ever reaches the F015 tool-call layer, which would otherwise fail-open).
  *
  *   - When any rule exists (Anyone / Authenticated / role / user / capability)
  *     → return the vendor default (`'read'`) so the transport gate becomes
- *     permissive and the existing F015 wrapper's `gate_mcp_tool_call` (on
- *     `mcp_adapter_pre_tool_call`) does the real true/false enforcement per
- *     the operator's configured rule.
+ *     permissive and the F015 wrapper's `gate_mcp_tool_call` does the real
+ *     true/false enforcement per the operator's configured rule.
+ *
+ * Per-server property: neither filter has any hardcoded server slug or
+ * "default server special case". Both resolve the current server
+ * independently per request. Adding a new server via **Add New Server**
+ * causes both filters to apply their semantics to that server on the next
+ * request with no code change.
  *
  * No DB writes. No coupling to server-creation code paths. Every server
  * (default-seeded + user-created + pre-042 legacy) inherits the admin-only
  * default automatically until the operator sets a rule.
+ *
+ * Test coverage:
+ *   - {@see \AcrossAI_MCP_Manager\Tests\Includes\AccessControl\TransportPermissionDefaultTest}
+ *     14 unit tests, every branch of `filter_default_capability()` in isolation.
+ *   - {@see \AcrossAI_MCP_Manager\Tests\Includes\AccessControl\TransportPermissionRoleMatrixTest}
+ *     12 composed tests exercising BOTH filters end-to-end across 6 user roles
+ *     × 4 rule shapes × ≥4 servers per test, including a 5×4 truth-table
+ *     matrix that directly proves per-server independence.
  *
  * @package AcrossAI_MCP_Manager
  * @since   0.2.5

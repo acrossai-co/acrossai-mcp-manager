@@ -450,11 +450,28 @@ final class Main {
 		$this->loader->add_action( 'rest_api_init', $access_control, 'register_rest_api' );
 		// F015 library-missing warning: now surfaced via the shared
 		// acrossai_notices filter (see Notices::register_shared_notices above).
+
+		// ─────────────────────────────────────────────────────────────────
+		// MCP two-filter, per-server permission stack (F015 + F042).
+		//
+		// Filter 2 (F015, tool-call layer): resolves server via
+		// $server->get_server_id() → wpb-ac rule lookup → WP_Error 403 on deny
+		// per operator rule; fail-open (allow) when no rule.
+		//
+		// Filter 1 (F042, transport layer): resolves server via URL route →
+		// MCPServerQuery lookup → returns 'manage_options' when no rule
+		// (admin-only default), returns vendor default 'read' when any rule
+		// exists (defers enforcement to F015 filter 2).
+		//
+		// Both are per-server (no hardcoded slugs, no default-server special
+		// case). Together they form a defense-in-depth stack: rules-less
+		// servers are hard-blocked to admins at filter 1; rule-configured
+		// servers get precise enforcement at filter 2.
+		// See specs/042-default-manage-options-access-rule/plan.md for the
+		// full flow diagram and test-coverage map.
+		// ─────────────────────────────────────────────────────────────────
 		$this->loader->add_filter( 'mcp_adapter_pre_tool_call', $access_control, 'gate_mcp_tool_call', 10, 4 );
 
-		// F042 — HTTP transport permission default: return manage_options when
-		// the current server has NO wpb-ac rule; return vendor default when a
-		// rule exists (defers real enforcement to gate_mcp_tool_call above).
 		$transport_default = \AcrossAI_MCP_Manager\Includes\AccessControl\TransportPermissionDefault::instance();
 		$this->loader->add_filter( 'mcp_adapter_default_transport_permission_user_capability', $transport_default, 'filter_default_capability', 10, 2 );
 

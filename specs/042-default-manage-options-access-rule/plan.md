@@ -13,7 +13,11 @@ Register a single filter callback on the vendor `mcp_adapter_default_transport_p
 **Language/Version**: PHP 7.4+ (plugin min), tested on PHP 8.1+/8.4.
 **Primary Dependencies**: `wordpress/mcp-adapter` (owns the filter this feature hooks) + `wpboilerplate/wpb-access-control` v2/v3 (rule read via `RuleQuery::get_rule()`). Both already loaded via composer.
 **Storage**: Reads only. One `RuleQuery::get_rule()` call per unique route per MCP HTTP request (transient-cached inside the vendor).
-**Testing**: Manual verification via the recipe in `spec.md` SC-001..SC-008. No new PHPUnit files strictly required — the callback is a ~30-line early-return chain; the vendor's `RuleQuery` + MCPServerQuery methods are covered by their own upstream tests.
+**Testing**: 2 PHPUnit test files under `tests/phpunit/Includes/AccessControl/` (picked up by the existing `admin` suite — no `phpunit.xml.dist` change):
+- `TransportPermissionDefaultTest.php` — 14 unit tests covering every branch of `filter_default_capability()` in isolation. Real `MCPServerQuery` + real vendor `RuleQuery`, no mocks. Transactional DB rollback per test.
+- `TransportPermissionRoleMatrixTest.php` — 12 composed integration tests exercising **both filters end-to-end** via a `user_can_reach()` helper that mirrors `HttpTransport::check_permission` (layer 1) + `gate_mcp_tool_call` (layer 2). Covers 6 user roles × 4 rule shapes (none / wp_role / wp_user / wp_capability / `authenticated` / `everyone`) × ≥4 servers per test, including a 5×4 truth-table matrix and a multi-server user-ID rule test that directly proves per-server independence.
+
+Manual verification recipe in `spec.md` SC-001..SC-006 remains as an operator smoke test.
 **Target Platform**: WordPress admin + REST, any host.
 **Project Type**: WordPress plugin — 1 new file (`TransportPermissionDefault.php`) + 2 edited (`Main.php`, `AccessControlTab.php`).
 **Performance Goals**: One `MCPServerQuery::query()` + one `RuleQuery::get_rule()` per unique route per MCP HTTP request. Memoized per-request in a private array. Vendor `get_rule()` uses a transient cache under the hood.
@@ -49,6 +53,84 @@ Register a single filter callback on the vendor `mcp_adapter_default_transport_p
 - **D19** (fail-open observability) — behavior fails open on unknown route / missing vendor / missing server; no `do_action` observability fire because this is a plugin-wide default rather than a per-request access decision. ✓
 
 **No constitution deviations. No memory-hub decision-level entry warranted** — this feature applies a known-good runtime-filter pattern; the durable lesson is the "vendor-UI-owns-the-table → don't write to that table" note captured briefly in the planings-tasks nav.
+
+## Two-filter per-server architecture (deep dive)
+
+The completed feature ships **two vendor-filter callbacks running side-by-side, each server-scoped, together forming a defense-in-depth stack** for MCP HTTP requests:
+
+### Filter 1 — Transport permission (F042, this feature)
+
+- **Vendor filter**: `mcp_adapter_default_transport_permission_user_capability`
+- **Fires at**: `vendor/wordpress/mcp-adapter/includes/Transport/HttpTransport.php:119`, inside the REST `permission_callback` for every MCP request.
+- **Signature**: `(string $default, HttpRequestContext $context): string`
+- **Callback**: `\AcrossAI_MCP_Manager\Includes\AccessControl\TransportPermissionDefault::filter_default_capability`
+- **Registration**: `includes/Main.php:459` — `$this->loader->add_filter( 'mcp_adapter_default_transport_permission_user_capability', $transport_default, 'filter_default_capability', 10, 2 )`
+- **How it resolves the current server**: extracts route via `$context->request->get_route()` → splits on first `/` into `(namespace, route)` → `MCPServerQuery::instance()->query([ 'server_route_namespace' => $ns, 'server_route' => $path ])` → uses matched row's `server_slug`.
+- **Verdict shape**: returns a WP capability string; the vendor caller runs `current_user_can( <returned-cap> )`. `false` → HTTP 401.
+
+### Filter 2 — Tool-call gate (F015, pre-existing, unchanged)
+
+- **Vendor filter**: `mcp_adapter_pre_tool_call`
+- **Fires at**: `vendor/wordpress/mcp-adapter/includes/Handlers/Tools/ToolsHandler.php:182`, immediately before every MCP tool execution.
+- **Signature**: `(array $args, string $tool_name, McpTool $tool, McpServer $server): array|WP_Error`
+- **Callback**: `\AcrossAI_MCP_Manager\Includes\AccessControl\AcrossAI_MCP_Access_Control::gate_mcp_tool_call`
+- **Registration**: `includes/Main.php:453` — `$this->loader->add_filter( 'mcp_adapter_pre_tool_call', $access_control, 'gate_mcp_tool_call', 10, 4 )` (priority 10; F017 + F020 layer on at priorities 20 + 30 per DEC-F020-TOOL-ENFORCEMENT-PRIORITY).
+- **How it resolves the current server**: reads `$server->get_server_id()` directly from the McpServer instance passed as the 4th filter arg → cross-verifies via `MCPServerQuery` → uses the row's `server_slug`.
+- **Verdict shape**: returns `$args` on allow; returns `WP_Error( 'acrossai_mcp_access_denied', ..., array( 'status' => 403 ) )` on deny; fires `acrossai_mcp_access_control_denied` observability action before every deny return.
+
+### Combined per-request flow
+
+```
+Incoming MCP HTTP request → /wp-json/mcp/<some-server-slug>
+                    │
+                    ▼
+[WP REST router matches route registered by HttpTransport::register_routes]
+                    │
+                    ▼
+[HttpTransport::check_permission() → apply_filters( filter-1 )]  ◄─ FILTER 1
+   ├─ TransportPermissionDefault resolves server via URL route
+   ├─ Looks up wpb-ac rule for that server_slug
+   ├─ No rule  → returns 'manage_options' → current_user_can('manage_options')
+   │            → subscriber/editor/etc: FALSE → HTTP 401 (request stops here)
+   │            → admin: TRUE → continues
+   └─ Rule set → returns 'read' → current_user_can('read')
+                → any authenticated user: TRUE → continues
+                → anonymous: FALSE → HTTP 401
+                    │
+                    ▼
+[MCP request handler routes to tools/call handler]
+                    │
+                    ▼
+[ToolsHandler::call_tool() → apply_filters( filter-2 )]  ◄─ FILTER 2
+   ├─ gate_mcp_tool_call resolves server via $server->get_server_id()
+   ├─ Looks up wpb-ac rule for that server_slug
+   ├─ No rule  → user_has_access() returns TRUE (vendor fail-open)
+   │            → returns $args (allow) → tool executes
+   └─ Rule set → user_has_access() evaluates rule against current user
+                → allow: returns $args → tool executes
+                → deny: returns WP_Error 403 (rule violation)
+```
+
+### Why both filters are needed (defense-in-depth)
+
+- Filter 1 alone can't do rule enforcement — it only returns a *capability string*, which can't express "role editor OR user id 5 OR capability edit_pages". So we defer to filter 2 for real rule work.
+- Filter 2 alone was fail-open on rules-less servers — any authenticated user could reach any un-configured server. Filter 1 closes that gap.
+- Together: rules-less servers are admin-only (filter 1 hard-stops non-admins); rule-configured servers get precise enforcement (filter 2 evaluates the rule).
+- **Neither filter has any hardcoded server slug or "default server special case"** — both resolve the current server independently per request from the request context.
+
+### Test coverage of the two-filter, per-server property
+
+| Property | Test file:method |
+|---|---|
+| Filter 1 wired correctly, callable via `apply_filters()` | `TransportPermissionDefaultTest::test_filter_is_wired_and_intercepts_vendor_default` |
+| Filter 1 admin-only when no rule | `TransportPermissionDefaultTest::test_returns_manage_options_when_server_exists_with_no_rule` |
+| Filter 1 defers when rule exists | `TransportPermissionDefaultTest::test_returns_default_when_server_has_any_rule` |
+| Filter 1 per-server memoization has no cross-server bleed | `TransportPermissionDefaultTest::test_memo_keys_are_per_route_and_do_not_collide` |
+| Filter 2 wired correctly (pre-existing, still passing) | `AcrossAI_MCP_Access_Control_Test::test_gate_mcp_tool_call_*` (F015 legacy tests) |
+| Both filters composed end-to-end, per (user, server) verdict | `TransportPermissionRoleMatrixTest::user_can_reach()` — used by every test in that file |
+| Multi-server independence (5×4 truth table) | `TransportPermissionRoleMatrixTest::test_multi_server_multi_user_matrix_evaluates_each_pair_independently` |
+| Same user, multiple servers with different wp_user rules | `TransportPermissionRoleMatrixTest::test_single_user_reaches_only_servers_whose_user_id_rule_lists_them` |
+| Rule mutation between simulated requests takes effect on both filters | `TransportPermissionRoleMatrixTest::test_rule_change_between_requests_takes_effect_after_memo_reset` |
 
 ## Implementation Notes
 

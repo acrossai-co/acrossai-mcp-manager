@@ -24,6 +24,23 @@ Hook the vendor mcp-adapter filter `mcp_adapter_default_transport_permission_use
 
 Per-request memoization ensures the DB lookup runs at most once per unique route per request. No writes to any table. The Access Control tab gets an info banner explaining the runtime-filter default policy.
 
+## Two-filter, per-server enforcement architecture
+
+Every MCP HTTP request passes through **two vendor filters, both server-scoped**:
+
+| # | Filter | Wired by | Callback | How it resolves "which server" | Verdict shape |
+|---|---|---|---|---|---|
+| 1 | `mcp_adapter_default_transport_permission_user_capability` | `Main.php:459` (F042 — this feature) | `TransportPermissionDefault::filter_default_capability` | Parses `HttpRequestContext->request->get_route()` into `(namespace, route)`; `MCPServerQuery` lookup → `server_slug` | Returns a WP capability string; caller runs `current_user_can()` |
+| 2 | `mcp_adapter_pre_tool_call` | `Main.php:453` (F015 — pre-existing) | `AcrossAI_MCP_Access_Control::gate_mcp_tool_call` | Reads `$server->get_server_id()` from the McpServer instance passed as filter arg → `server_slug` | Returns `$args` on allow, `WP_Error 403` on deny |
+
+**Per-server-ness is complete** — no server is treated as special. Both callbacks resolve the current server's slug from the request context (route in filter 1, McpServer object in filter 2), then look up rules keyed on that slug in `wp_mcp_access_control`. Add a new server → both filters pick it up automatically at the next request.
+
+**Layered decision** for any (user, server, request):
+1. **Filter 1 runs first** at the WP REST `permission_callback` stage. If no rule → demands `manage_options` → subscribers/editors/authors/contributors 401. If a rule exists → returns vendor default `'read'` → any subscriber+ passes filter 1.
+2. **Filter 2 runs second** at MCP tool-call dispatch. If no rule → fail-open (allow). If a rule → evaluates wpb-ac `user_has_access()` against the operator's rule → returns `WP_Error 403` on deny.
+
+Net effect (per server): admin-only when no rule; operator's rule enforced when a rule exists. The two filters together form a **defense-in-depth** stack — filter 1 hard-blocks non-admins from ever reaching the tool-call layer on rules-less servers; filter 2 is the truth for rule-configured servers.
+
 ## User Story - MCP servers are admin-only until the operator sets a rule (Priority: P1)
 
 An administrator activates the plugin (or updates from a pre-042 version). Every server — the seeded default, any pre-existing user-created server, any server they create after — starts admin-only at the transport layer. When they open the Access Control tab, the "Who can access" dropdown reads "No user access added by admin" (unchanged vendor UI state). A subscriber user attempting to hit any server's MCP endpoint receives 401 (blocked at the transport gate by `current_user_can('manage_options')`).
@@ -54,6 +71,8 @@ The admin then sets a rule via the vendor dropdown — say `WordPress role → E
 - **FR-008**: The filter MUST be wired in `Main::define_public_hooks()` via `$this->loader->add_filter( 'mcp_adapter_default_transport_permission_user_capability', $instance, 'filter_default_capability', 10, 2 )` — matches A1 (Loader-only hook wiring) and avoids B43 (5-arg Loader signature, not native `add_filter` shape).
 - **FR-009**: `AccessControlTab::render_body()` MUST prepend a `<div class="notice notice-info inline">` above the vendor React panel with a bold "Default policy: administrators only." headline and body text describing the "No user access added by admin" ↔ admin-only mapping and the ability to broaden access via the dropdown.
 - **FR-010**: NO DB writes to `wp_mcp_access_control` from plugin code — the earlier DB-row-seeding approach (`DefaultRuleSeeder`) MUST NOT exist in the final tree. Grep gate: `git grep 'RuleQuery.*set_rule\|access_control.*INSERT'` on the branch must return only vendor code.
+- **FR-011**: Both permission filters MUST resolve the current server independently per request — no hardcoded server slug, no "default server special case", no cross-server state. Filter 1 (`filter_default_capability`) resolves via URL route → `MCPServerQuery` lookup; filter 2 (`gate_mcp_tool_call`) resolves via `$server->get_server_id()`. Adding a new server via **Add New Server** MUST cause both filters to apply admin-only default to it on the next request with no code change or activation step.
+- **FR-012**: Filter 1 and filter 2 MUST both be wired via the Loader in `Main::define_public_hooks()` per A1 (no direct `add_filter()` calls, 5-arg Loader signature per B43). The two registrations MUST sit adjacent in code so future maintainers see the pair.
 
 ## Non-Goals
 
@@ -73,3 +92,8 @@ The admin then sets a rule via the vendor dropdown — say `WordPress role → E
 - **SC-006**: Same behavior on a newly-created server via **Add New Server** — no code path specific to the seeded default vs user-created; the filter treats every plugin-owned route identically.
 - **SC-007**: PHPCS clean on the new file + edited files (relative to their pre-042 baselines); PHPStan L8 exit 0.
 - **SC-008**: `git grep 'RuleQuery.*set_rule\|new RuleQuery' includes/ admin/` returns exactly one hit (`TransportPermissionDefault.php` `new RuleQuery` — for the read call) and zero writes.
+- **SC-009**: `git grep -n "'mcp_adapter_pre_tool_call'\|'mcp_adapter_default_transport_permission_user_capability'" includes/Main.php` returns exactly TWO hits, both inside `define_public_hooks()`, both using the 5-arg Loader shape (`$this->loader->add_filter( 'hook', $singleton, 'method', 10, N )` — never `array( $obj, 'method' )`).
+- **SC-010**: The PHPUnit suite `admin` includes two feature-042 test files at `tests/phpunit/Includes/AccessControl/`:
+  - `TransportPermissionDefaultTest.php` — 14 tests covering every branch of `filter_default_capability()` in isolation (route parsing, server lookup, rule presence, default passthrough, memoization, filter-wiring regression guard).
+  - `TransportPermissionRoleMatrixTest.php` — 12 tests composing both filters end-to-end via `user_can_reach()`, exercising 6 user roles × 4 rule shapes × ≥4 servers per test = 36+ (user, server) verdict assertions. Explicitly proves per-server independence via a 5×4 multi-server truth table (Group G).
+- **SC-011**: Each test that creates a fixture server uses a `uniqid()`-suffixed slug (`no-rule-{uniq}`, `matrix-editor-{uniq}`, etc.) and asserts against that slug — proving the code is server-agnostic (no test hardcodes `mcp-adapter-default-server` except one dedicated regression test that names it).

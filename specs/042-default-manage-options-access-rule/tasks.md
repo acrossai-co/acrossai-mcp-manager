@@ -6,7 +6,12 @@ description: "Task list for Feature 042 — runtime-filter default of manage_opt
 
 **Input**: [spec.md](./spec.md), [plan.md](./plan.md)
 
-**Tests**: No new PHPUnit files required for merge. The vendor filter, `RuleQuery::get_rule()`, and `MCPServerQuery::query()` are all upstream-tested. The callback is a ~30-line early-return chain; manual verification recipe in spec.md SC-001..SC-006 is the gate.
+**Tests**: 2 PHPUnit test files under `tests/phpunit/Includes/AccessControl/` (picked up by the existing `admin` suite — no phpunit.xml.dist change):
+
+- `TransportPermissionDefaultTest.php` — 14 unit tests covering every branch of `filter_default_capability()` in isolation. Real `MCPServerQuery` + real vendor `RuleQuery`, no mocks. Transactional DB rollback per test.
+- `TransportPermissionRoleMatrixTest.php` — 12 composed integration tests exercising BOTH filters end-to-end via a `user_can_reach()` helper that mirrors `HttpTransport::check_permission` (layer 1) + `gate_mcp_tool_call` (layer 2). Covers 6 user roles × 4 rule shapes × ≥4 servers per test, including a 5×4 truth-table matrix and a multi-server user-ID rule test.
+
+Manual verification recipe in `spec.md` SC-001..SC-006 remains as an operator smoke test.
 
 **Organization**: One user story (US1). Shipped on branch `feat/042-default-manage-options-access-rule` (force-push replacing the earlier DB-seeder attempt).
 
@@ -43,9 +48,15 @@ description: "Task list for Feature 042 — runtime-filter default of manage_opt
 
 ## Phase 5: Quality Gates
 
-- [ ] T012 [US1] `php -l` on all 3 files → No syntax errors detected.
-- [ ] T013 [US1] `vendor/bin/phpcs --standard=phpcs.xml.dist` on `TransportPermissionDefault.php` + `AccessControlTab.php` → 0 errors. Main.php has pre-existing baseline exceptions unrelated to this change.
-- [ ] T014 [US1] `vendor/bin/phpstan analyse` (L8) on all 3 files → exit 0, no errors.
+- [X] T012 [US1] `php -l` on all 3 files → No syntax errors detected.
+- [X] T013 [US1] `vendor/bin/phpcs --standard=phpcs.xml.dist` on `TransportPermissionDefault.php` + `AccessControlTab.php` + both new test files → 0 errors. Main.php has pre-existing baseline exceptions unrelated to this change.
+- [X] T014 [US1] `vendor/bin/phpstan analyse` (L8) on all 3 code files → exit 0, no errors.
+
+## Phase 5b: Automated Tests
+
+- [X] T014a [US1] Create `tests/phpunit/Includes/AccessControl/TransportPermissionDefaultTest.php` — 14 unit tests covering every branch of `filter_default_capability()` (singleton contract, 4 route-parsing early returns, unknown server, server-with-no-rule → `manage_options`, server-with-rule → deferral, seeded default server, default-passthrough on both branches, per-request memoization ×2, filter-wiring regression guard). Real `MCPServerQuery` + real vendor `RuleQuery`, no mocks.
+- [X] T014b [US1] Create `tests/phpunit/Includes/AccessControl/TransportPermissionRoleMatrixTest.php` — 12 composed integration tests exercising BOTH filters end-to-end via `user_can_reach()` helper. Covers 6 user roles × 4 rule shapes (none / wp_role / wp_user / wp_capability / `authenticated` / `everyone`) × ≥4 servers per test, including a 5×4 truth-table matrix that directly proves per-server independence (Group G) and a multi-server user-ID rule test (Group H).
+- [X] T014c [US1] Both test files land in the existing PHPUnit `admin` suite via the pre-existing `<directory>tests/phpunit/Includes/AccessControl</directory>` entry in `phpunit.xml.dist` — no `phpunit.xml.dist` edit needed. CI's `PHPUnit (integration)` job runs them automatically.
 
 ## Phase 6: Post-Merge Verification (manual)
 
@@ -64,7 +75,10 @@ description: "Task list for Feature 042 — runtime-filter default of manage_opt
 
 ## Ledger
 
-- **Files created**: `includes/AccessControl/TransportPermissionDefault.php`, `specs/042-default-manage-options-access-rule/{spec,plan,tasks}.md`, `docs/planings-tasks/042-default-manage-options-access-rule.md`.
-- **Files modified**: `includes/Main.php` (+5 lines for filter wiring), `admin/Partials/ServerTabs/AccessControlTab.php` (+21 lines: 1-line call + new render method).
-- **Files deleted vs pre-042**: none (branch was reset to main; prior PR #71 DB-seeder commits never merged).
-- **Total LOC (code)**: ~165 added.
+- **Files created (code)**: `includes/AccessControl/TransportPermissionDefault.php`.
+- **Files created (tests)**: `tests/phpunit/Includes/AccessControl/TransportPermissionDefaultTest.php` (14 tests, 408 lines), `tests/phpunit/Includes/AccessControl/TransportPermissionRoleMatrixTest.php` (12 tests, 529 lines).
+- **Files created (docs)**: `specs/042-default-manage-options-access-rule/{spec,plan,tasks}.md`, `docs/planings-tasks/042-default-manage-options-access-rule.md`.
+- **Files modified**: `includes/Main.php` (+6 lines for filter wiring, adjacent to the existing `mcp_adapter_pre_tool_call` registration so the pair is visually obvious), `admin/Partials/ServerTabs/AccessControlTab.php` (+31 lines: 1-line call + new `render_default_policy_notice()` method).
+- **Files deleted vs pre-042**: none (branch was reset to main; prior PR #71 DB-seeder commits never merged to main).
+- **Total LOC**: ~195 code + ~937 tests + ~500 docs.
+- **Test count**: 26 PHPUnit tests + 24 data-provider rows = 50+ assertions across the two-filter, per-server permission stack.
