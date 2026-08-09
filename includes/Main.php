@@ -452,6 +452,12 @@ final class Main {
 		// acrossai_notices filter (see Notices::register_shared_notices above).
 		$this->loader->add_filter( 'mcp_adapter_pre_tool_call', $access_control, 'gate_mcp_tool_call', 10, 4 );
 
+		// F042 — HTTP transport permission default: return manage_options when
+		// the current server has NO wpb-ac rule; return vendor default when a
+		// rule exists (defers real enforcement to gate_mcp_tool_call above).
+		$transport_default = \AcrossAI_MCP_Manager\Includes\AccessControl\TransportPermissionDefault::instance();
+		$this->loader->add_filter( 'mcp_adapter_default_transport_permission_user_capability', $transport_default, 'filter_default_capability', 10, 2 );
+
 		// F040 follow-up: the OAuth HTTPS and OAuth-cron-disabled notices moved
 		// to the acrossai-ai-connectors companion plugin — mcp-manager no longer
 		// owns the OAuth token endpoint or the OAuth cleanup cron, so those

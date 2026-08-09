@@ -81,6 +81,9 @@ final class AccessControlTab extends AbstractServerTab {
 	 * @return void
 	 */
 	protected function render_body( array $server ): void {
+		// F042 — Explain the default admin-only policy above the vendor panel.
+		$this->render_default_policy_notice();
+
 		// Section 1 — vendor wpb-access-control React panel (unchanged).
 		\AcrossAI_MCP_Manager\Public\Renderers\AccessControlBlock::instance()->render(
 			(int) $server['id'],
@@ -104,6 +107,29 @@ final class AccessControlTab extends AbstractServerTab {
 		$this->render_permission_override_form( $server );
 		AbilitiesManagerPromoCard::instance()->render_code_details();
 		echo '</div>';
+	}
+
+	/**
+	 * F042 — Info banner explaining the runtime-filter default policy.
+	 *
+	 * Enforced by {@see TransportPermissionDefault::filter_default_capability}
+	 * on `mcp_adapter_default_transport_permission_user_capability` — no DB
+	 * rules are seeded, and this banner describes the plugin's plugin-wide
+	 * policy, not per-server state.
+	 *
+	 * @return void
+	 */
+	private function render_default_policy_notice(): void {
+		echo '<div class="notice notice-info inline" style="margin:0 0 12px;"><p><strong>';
+		echo esc_html__( 'Default policy: administrators only.', 'acrossai-mcp-manager' );
+		echo '</strong> ';
+		printf(
+			/* translators: 1: dropdown label, 2: <code>manage_options</code>. */
+			esc_html__( 'When the %1$s dropdown below reads "No user access added by admin" (no rule configured), only users with the %2$s capability (WordPress administrators) can reach this server\'s MCP endpoint. Set any rule below — Anyone / Authenticated users / a role / a user / a capability — to broaden access. Enforced at request time via a runtime filter; no database access-control rules are seeded automatically.', 'acrossai-mcp-manager' ),
+			'<code>' . esc_html__( 'Who can access', 'acrossai-mcp-manager' ) . '</code>',
+			'<code>manage_options</code>'
+		);
+		echo '</p></div>';
 	}
 
 	/**
