@@ -4,7 +4,7 @@ Tags: mcp, ai, claude, chatgpt, cursor, copilot, vscode, gemini
 Requires at least: 7.0
 Requires PHP: 8.1
 Tested up to: 7.0
-Stable tag: 0.2.5
+Stable tag: 0.2.6
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -103,6 +103,10 @@ Only if you want the one-click hosted-OAuth flow for Claude, ChatGPT, or Grok. A
 4. Per-provider configuration file locations and top-level keys
 
 == Changelog ==
+
+= 0.2.6 =
+* **Refactor — `ConnectionMethodRegistry::get_ai_connectors()` now sources its DTOs from a new WordPress filter `acrossai_mcp_manager_discovery_ai_connectors` instead of calling the companion plugin's `ConnectorProfileRegistry` class directly.** The paid companion (`acrossai-pro` 0.8.0+) hooks the new filter and returns the same DTO shape from its own registry — Discovery's `ai_connector` category behaves identically for end users. Removes a hardcoded FQN string (`\AcrossAI_AI_Connectors\Includes\Connectors\ConnectorProfileRegistry`) from the free plugin so future companion renames / restructures don't silently break Discovery. Fail-safe unchanged: with no companion active, the filter returns an empty array and the `ai_connector` category is omitted from Discovery — no fatal, no warning.
+* **Internal: `ACROSSAI_MCP_MANAGER_VERSION` constant + `Stable tag` bumped to `0.2.6` matching the plugin header.**
 
 = 0.2.5 =
 * **⚠️ Security — Behavior change — MCP endpoints default to administrators only when no Access Control rule is set (Feature 042).** Previously, an MCP server with no rule configured in its **Access Control** tab was fail-open at the tool-call layer — any authenticated user could reach the server's `/wp-json/{namespace}/{route}` endpoint. Starting with 0.2.5, a new runtime filter (`mcp_adapter_default_transport_permission_user_capability`, hooked by the new `\AcrossAI_MCP_Manager\Includes\AccessControl\TransportPermissionDefault` singleton) hard-blocks non-admins at the REST `permission_callback` stage whenever the wpb-access-control dropdown reads **"No user access added by admin"**. Together with the existing F015 `mcp_adapter_pre_tool_call` gate, this ships a **two-filter, per-server permission stack** (defense-in-depth): filter 1 hard-stops non-admin traffic on rules-less servers; filter 2 does precise per-rule enforcement on rule-configured servers. **Neither filter has any hardcoded server slug or "default server special case"** — both resolve the current server independently per request (filter 1 via URL route → `MCPServerQuery` lookup; filter 2 via `$server->get_server_id()`). Adding a server via **Add New Server** applies both filters automatically. **Zero DB writes** — the runtime filter approach replaced an earlier DB-row-seeding attempt (dropped via force-push on PR #71) that conflicted with the vendor UI's admin state model. Ships with a static info banner on the **Access Control** tab describing the default policy + how to broaden access via the vendor dropdown (Anyone / Authenticated users / role / user / capability). **26 PHPUnit tests** across 2 files at `tests/phpunit/Includes/AccessControl/` (`TransportPermissionDefaultTest` + `TransportPermissionRoleMatrixTest`) cover every filter-callback branch in isolation plus 6 user roles × 4 rule shapes × ≥4 servers per test end-to-end (including a 5×4 truth-table matrix proving per-server independence).
