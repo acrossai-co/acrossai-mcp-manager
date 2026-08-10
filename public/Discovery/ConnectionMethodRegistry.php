@@ -211,35 +211,32 @@ final class ConnectionMethodRegistry {
 	 * @return array<int, array<string, mixed>>
 	 */
 	public function get_ai_connectors(): array {
-		// F040 — ConnectorProfileRegistry moved to acrossai-ai-connectors
-		// companion plugin. When the companion is absent (free-tier install),
-		// return an empty array so the discovery API's `ai_connector` category
-		// simply omits entries — no fatal, no warning.
-		$registry_class = '\AcrossAI_AI_Connectors\Includes\Connectors\ConnectorProfileRegistry';
-		if ( ! class_exists( $registry_class, false ) ) {
-			return array();
-		}
-		$profiles = $registry_class::instance()->get_profiles();
-		$dtos     = array();
-
-		foreach ( $profiles as $profile ) {
-			$icon_url  = $profile->get_icon_url();
-			$whitelist = $profile->get_redirect_uri_whitelist();
-			$dtos[]    = array(
-				'category'    => 'ai_connector',
-				'slug'        => $profile->get_slug(),
-				'name'        => $profile->get_name(),
-				'description' => '',
-				'icon'        => $icon_url,
-				'meta'        => array(
-					'icon_url'               => $icon_url,
-					'has_redirect_whitelist' => ! empty( $whitelist ),
-					'class'                  => get_class( $profile ),
-				),
-			);
-		}
-
-		return $dtos;
+		/**
+		 * Filter the AI connector DTOs exposed by the Discovery API's
+		 * `ai_connector` category.
+		 *
+		 * F040 — mcp-manager no longer owns AI connector profiles or the
+		 * DTOs derived from them. A companion plugin (acrossai-pro since
+		 * 0.8.0) hooks this filter and returns DTOs built from its own
+		 * ConnectorProfileRegistry. When no companion hooks in, the default
+		 * empty array causes the `ai_connector` category to be omitted from
+		 * Discovery — no fatal, no warning.
+		 *
+		 * Each DTO must be an array shaped:
+		 *   [
+		 *     'category'    => 'ai_connector',
+		 *     'slug'        => string  Machine identifier for the connector.
+		 *     'name'        => string  Human-readable display name.
+		 *     'description' => string  Optional short description.
+		 *     'icon'        => string  Icon URL.
+		 *     'meta'        => array   Companion-defined metadata.
+		 *   ]
+		 *
+		 * @since 0.2.6
+		 *
+		 * @param array<int, array<string, mixed>> $dtos Default empty array.
+		 */
+		return apply_filters( 'acrossai_mcp_manager_discovery_ai_connectors', array() );
 	}
 
 	/**
