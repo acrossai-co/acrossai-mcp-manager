@@ -274,15 +274,27 @@ class MCPServerListTable extends \WP_List_Table {
 		}
 
 		$quick_links = array(
-			'ai-connectors'  => __( 'Connectors', 'acrossai-mcp-manager' ),
-			'access-control' => __( 'Access Control', 'acrossai-mcp-manager' ),
-			'abilities'      => __( 'Abilities', 'acrossai-mcp-manager' ),
-			'clients'        => __( 'MCP Clients', 'acrossai-mcp-manager' ),
+			'ai-connectors'  => array(
+				'label' => __( 'Connectors', 'acrossai-mcp-manager' ),
+				'icon'  => 'admin-plugins',
+			),
+			'access-control' => array(
+				'label' => __( 'Access Control', 'acrossai-mcp-manager' ),
+				'icon'  => 'shield',
+			),
+			'abilities'      => array(
+				'label' => __( 'Abilities', 'acrossai-mcp-manager' ),
+				'icon'  => 'superhero-alt',
+			),
+			'clients'        => array(
+				'label' => __( 'MCP Clients', 'acrossai-mcp-manager' ),
+				'icon'  => 'admin-users',
+			),
 		);
 
-		$links = array();
-		foreach ( $quick_links as $tab_slug => $label ) {
-			$tab_url = add_query_arg(
+		$links_html = '';
+		foreach ( $quick_links as $tab_slug => $meta ) {
+			$tab_url     = add_query_arg(
 				array(
 					'page'   => AdminPageSlugs::PARENT,
 					'action' => 'edit',
@@ -291,10 +303,11 @@ class MCPServerListTable extends \WP_List_Table {
 				),
 				admin_url( 'admin.php' )
 			);
-			$links[] = sprintf(
-				'<a href="%s" class="acrossai-quicklink">%s</a>',
+			$links_html .= sprintf(
+				'<a href="%s" class="acrossai-quicklink"><span class="dashicons dashicons-%s" aria-hidden="true"></span><span class="acrossai-quicklink-label">%s</span></a>',
 				esc_url( $tab_url ),
-				esc_html( $label )
+				esc_attr( $meta['icon'] ),
+				esc_html( $meta['label'] )
 			);
 		}
 
@@ -302,7 +315,7 @@ class MCPServerListTable extends \WP_List_Table {
 			'<div class="acrossai-actions-cell"><div class="acrossai-actions-primary">%s%s</div><div class="acrossai-actions-quicklinks">%s</div></div>',
 			$edit_html,
 			$toggle_html,
-			implode( '<span class="acrossai-quicklink-sep" aria-hidden="true"> · </span>', $links )
+			$links_html
 		);
 	}
 }
