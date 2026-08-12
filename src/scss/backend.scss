@@ -232,6 +232,19 @@
 }
 
 // -------------------------------------------------------------------------
+// Server list — column widths.
+// Status + Registered From only render a single small badge each, so cap
+// their widths tightly. Route + Actions absorb the freed horizontal space.
+// WP-Lists adds `.column-<key>` to every <th>/<td> in .wp-list-table.
+// -------------------------------------------------------------------------
+.wp-list-table.mcp_servers {
+	.column-status,
+	.column-source {
+		width: 120px;
+	}
+}
+
+// -------------------------------------------------------------------------
 // Server list — Actions column.
 // Two-row layout: primary buttons (Edit, Enable/Disable) on top; per-tab
 // quicklinks below as pill-badges with a dashicon prefix. Pills are lighter
