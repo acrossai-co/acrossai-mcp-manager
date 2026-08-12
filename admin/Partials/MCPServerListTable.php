@@ -280,9 +280,9 @@ class MCPServerListTable extends \WP_List_Table {
 			'clients'        => __( 'MCP Clients', 'acrossai-mcp-manager' ),
 		);
 
-		$links_html = '';
+		$links = array();
 		foreach ( $quick_links as $tab_slug => $label ) {
-			$tab_url     = add_query_arg(
+			$tab_url = add_query_arg(
 				array(
 					'page'   => AdminPageSlugs::PARENT,
 					'action' => 'edit',
@@ -291,18 +291,18 @@ class MCPServerListTable extends \WP_List_Table {
 				),
 				admin_url( 'admin.php' )
 			);
-			$links_html .= sprintf(
-				'<a href="%s" class="button button-small acrossai-btn-quicklink">%s</a>',
+			$links[] = sprintf(
+				'<a href="%s" class="acrossai-quicklink">%s</a>',
 				esc_url( $tab_url ),
 				esc_html( $label )
 			);
 		}
 
 		return sprintf(
-			'<div class="acrossai-actions-cell">%s%s%s</div>',
+			'<div class="acrossai-actions-cell"><div class="acrossai-actions-primary">%s%s</div><div class="acrossai-actions-quicklinks">%s</div></div>',
 			$edit_html,
 			$toggle_html,
-			$links_html
+			implode( '<span class="acrossai-quicklink-sep" aria-hidden="true"> · </span>', $links )
 		);
 	}
 }

@@ -232,18 +232,45 @@
 }
 
 // -------------------------------------------------------------------------
-// Server list — Actions column: Enable/Disable toggle + quick-links into
-// per-server-edit tabs. Buttons wrap on narrow viewports.
+// Server list — Actions column.
+// Two-row layout: primary buttons (Edit, Enable/Disable) on top; per-tab
+// quick-links styled as WP-native inline text links below with " · "
+// separators. Keeps the cell readable at typical column widths and matches
+// the row-actions convention used elsewhere in wp-admin.
 // -------------------------------------------------------------------------
 .acrossai-actions-cell {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	align-items: flex-start;
+}
+
+.acrossai-actions-primary {
 	display: flex;
 	flex-wrap: wrap;
 	gap: 4px;
 	align-items: center;
 }
 
-.acrossai-actions-cell .acrossai-btn-quicklink {
-	font-weight: 400;
+.acrossai-actions-quicklinks {
+	font-size: 12px;
+	line-height: 1.6;
+	color: #50575e;
+}
+
+.acrossai-actions-quicklinks .acrossai-quicklink {
+	color: #2271b1;
+	text-decoration: none;
+}
+
+.acrossai-actions-quicklinks .acrossai-quicklink:hover,
+.acrossai-actions-quicklinks .acrossai-quicklink:focus {
+	color: #135e96;
+	text-decoration: underline;
+}
+
+.acrossai-actions-quicklinks .acrossai-quicklink-sep {
+	color: #c3c4c7;
 }
 
 // -------------------------------------------------------------------------
