@@ -39,25 +39,26 @@ class MCPServerListTable extends \WP_List_Table {
 	}
 
 	/**
-	 * Columns: Name, Status, Registered From, Route Namespace, Route, Version,
-	 * Actions. Plus a `cb` checkbox column to enable bulk actions.
+	 * Columns: Name, Status, Registered From, Route, Actions.
+	 * Plus a `cb` checkbox column to enable bulk actions.
 	 *
 	 * Slug column removed — the URL/route columns already carry the same
 	 * identity signal and the slug is exposed inline on the Name column edit
-	 * link. Actions column now bundles the Enable/Disable toggle with quick-
+	 * link. `route_namespace` + `route` merged into a single `Route` column
+	 * displayed as `<namespace>/<route>`. `version` column removed —
+	 * uncommonly referenced from the list view; still surfaced on the edit
+	 * page. Actions column bundles Edit + Enable/Disable toggle + quick-
 	 * access links into the per-server-edit tabs (Connectors, Access Control,
 	 * Abilities, MCP Clients).
 	 */
 	public function get_columns(): array {
 		return array(
-			'cb'              => '<input type="checkbox" />',
-			'name'            => esc_html__( 'Name', 'acrossai-mcp-manager' ),
-			'status'          => esc_html__( 'Status', 'acrossai-mcp-manager' ),
-			'source'          => esc_html__( 'Registered From', 'acrossai-mcp-manager' ),
-			'route_namespace' => esc_html__( 'Route Namespace', 'acrossai-mcp-manager' ),
-			'route'           => esc_html__( 'Route', 'acrossai-mcp-manager' ),
-			'version'         => esc_html__( 'Version', 'acrossai-mcp-manager' ),
-			'actions'         => esc_html__( 'Actions', 'acrossai-mcp-manager' ),
+			'cb'      => '<input type="checkbox" />',
+			'name'    => esc_html__( 'Name', 'acrossai-mcp-manager' ),
+			'status'  => esc_html__( 'Status', 'acrossai-mcp-manager' ),
+			'source'  => esc_html__( 'Registered From', 'acrossai-mcp-manager' ),
+			'route'   => esc_html__( 'Route', 'acrossai-mcp-manager' ),
+			'actions' => esc_html__( 'Actions', 'acrossai-mcp-manager' ),
 		);
 	}
 
@@ -117,16 +118,16 @@ class MCPServerListTable extends \WP_List_Table {
 	}
 
 	/**
-	 * Fallback column renderer for `route_namespace`, `route`, `version`.
+	 * Fallback column renderer for the merged `route` column
+	 * (`<namespace>/<route>`, with duplicate slashes at the join collapsed).
 	 */
 	public function column_default( $item, $column_name ): string {
 		switch ( $column_name ) {
-			case 'route_namespace':
-				return esc_html( $item['server_route_namespace'] );
 			case 'route':
-				return esc_html( $item['server_route'] );
-			case 'version':
-				return esc_html( $item['server_version'] );
+				$namespace = trim( (string) $item['server_route_namespace'], '/' );
+				$route     = ltrim( (string) $item['server_route'], '/' );
+				$combined  = '' === $namespace ? $route : $namespace . '/' . $route;
+				return esc_html( $combined );
 			default:
 				return '';
 		}
@@ -224,13 +225,28 @@ class MCPServerListTable extends \WP_List_Table {
 	}
 
 	/**
-	 * Actions column: Enable/Disable toggle followed by quick-access links
-	 * that jump directly to the corresponding tab on the server-edit page.
-	 * The toggle carries a per-row nonce; quick-links are plain nav.
+	 * Actions column: Edit + Enable/Disable toggle + quick-access links that
+	 * jump directly to the corresponding tab on the server-edit page. The
+	 * toggle carries a per-row nonce; Edit and quick-links are plain nav.
 	 *
 	 * @param array<string, mixed> $item Row data.
 	 */
 	public function column_actions( $item ): string {
+		$edit_url = add_query_arg(
+			array(
+				'page'   => AdminPageSlugs::PARENT,
+				'action' => 'edit',
+				'server' => (int) $item['id'],
+			),
+			admin_url( 'admin.php' )
+		);
+
+		$edit_html = sprintf(
+			'<a href="%s" class="button button-small button-primary acrossai-btn-edit">%s</a>',
+			esc_url( $edit_url ),
+			esc_html__( 'Edit', 'acrossai-mcp-manager' )
+		);
+
 		$toggle_url = wp_nonce_url(
 			add_query_arg(
 				array(
@@ -251,7 +267,7 @@ class MCPServerListTable extends \WP_List_Table {
 			);
 		} else {
 			$toggle_html = sprintf(
-				'<a href="%s" class="button button-small button-primary acrossai-btn-enable">%s</a>',
+				'<a href="%s" class="button button-small acrossai-btn-enable">%s</a>',
 				esc_url( $toggle_url ),
 				esc_html__( 'Enable', 'acrossai-mcp-manager' )
 			);
@@ -283,7 +299,8 @@ class MCPServerListTable extends \WP_List_Table {
 		}
 
 		return sprintf(
-			'<div class="acrossai-actions-cell">%s%s</div>',
+			'<div class="acrossai-actions-cell">%s%s%s</div>',
+			$edit_html,
 			$toggle_html,
 			$links_html
 		);
