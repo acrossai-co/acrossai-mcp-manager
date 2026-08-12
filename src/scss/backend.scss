@@ -232,6 +232,21 @@
 }
 
 // -------------------------------------------------------------------------
+// Server list — Actions column: Enable/Disable toggle + quick-links into
+// per-server-edit tabs. Buttons wrap on narrow viewports.
+// -------------------------------------------------------------------------
+.acrossai-actions-cell {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px;
+	align-items: center;
+}
+
+.acrossai-actions-cell .acrossai-btn-quicklink {
+	font-weight: 400;
+}
+
+// -------------------------------------------------------------------------
 // Access Control tab — fieldset inset around provider options.
 // -------------------------------------------------------------------------
 .acrossai-ac-options-row fieldset {
