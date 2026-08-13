@@ -452,16 +452,26 @@ final class Main {
 		// acrossai_notices filter (see Notices::register_shared_notices above).
 
 		// ─────────────────────────────────────────────────────────────────
-		// MCP two-filter, per-server permission stack (F015 + F042).
+		// MCP per-server permission stack (F015 + F042).
 		//
-		// Filter 2 (F015, tool-call layer): resolves server via
+		// Filter 2 (F015, MCP dispatch layer): resolves server via
 		// $server->get_server_id() → wpb-ac rule lookup → WP_Error 403 on deny
 		// per operator rule; fail-open (allow) when no rule.
+		//
+		// F015 covers ALL THREE MCP pre-dispatch filters — tools, resources,
+		// prompts — routed through the same shared enforcement helper. Prior
+		// to 0.2.8 only pre_tool_call was hooked, which meant rule-configured
+		// servers exposing resources or prompts were bypassed entirely by any
+		// authenticated user (F1 fix — see review 2026-08-13).
 		//
 		// Filter 1 (F042, transport layer): resolves server via URL route →
 		// MCPServerQuery lookup → returns 'manage_options' when no rule
 		// (admin-only default), returns vendor default 'read' when any rule
-		// exists (defers enforcement to F015 filter 2).
+		// exists (defers enforcement to F015 filter 2). Also returns
+		// 'manage_options' when the wpb-access-control library is missing —
+		// deliberate asymmetry with F015's fail-open so that a missing
+		// dependency degrades to admin-only, not "wide open" (F2 fix — see
+		// review 2026-08-13).
 		//
 		// Both are per-server (no hardcoded slugs, no default-server special
 		// case). Together they form a defense-in-depth stack: rules-less
@@ -471,6 +481,8 @@ final class Main {
 		// full flow diagram and test-coverage map.
 		// ─────────────────────────────────────────────────────────────────
 		$this->loader->add_filter( 'mcp_adapter_pre_tool_call', $access_control, 'gate_mcp_tool_call', 10, 4 );
+		$this->loader->add_filter( 'mcp_adapter_pre_resource_read', $access_control, 'gate_mcp_resource_read', 10, 4 );
+		$this->loader->add_filter( 'mcp_adapter_pre_prompt_get', $access_control, 'gate_mcp_prompt_get', 10, 4 );
 
 		$transport_default = \AcrossAI_MCP_Manager\Includes\AccessControl\TransportPermissionDefault::instance();
 		$this->loader->add_filter( 'mcp_adapter_default_transport_permission_user_capability', $transport_default, 'filter_default_capability', 10, 2 );

@@ -43,6 +43,17 @@
  * (default-seeded + user-created + pre-042 legacy) inherits the admin-only
  * default automatically until the operator sets a rule.
  *
+ * Fail direction is INTENTIONALLY asymmetric between the two gates:
+ *   - F015 fails OPEN when `AccessControlManager` is missing (returns args
+ *     so authenticated clients aren't hard-locked out by a missing library).
+ *   - F042 (this class) fails CLOSED under the same condition — returns
+ *     `manage_options` so the transport rejects non-admin traffic before
+ *     it can hit F015's fail-open path.
+ * Together they preserve defense-in-depth: a single dependency failure
+ * degrades to admin-only rather than "wide open to every logged-in user".
+ * Prior to 0.2.8 both gates failed open together, which meant a missing
+ * vendor package collapsed the entire two-gate stack.
+ *
  * Test coverage:
  *   - {@see \AcrossAI_MCP_Manager\Tests\Includes\AccessControl\TransportPermissionDefaultTest}
  *     14 unit tests, every branch of `filter_default_capability()` in isolation.
@@ -166,12 +177,19 @@ final class TransportPermissionDefault {
 			return $default_capability;
 		}
 
-		if ( ! class_exists( RuleQuery::class ) ) {
-			// wpb-ac vendor missing — mirror F015's fail-open contract; leave
-			// the vendor transport default in place so authenticated users
-			// aren't hard-locked out by a missing library.
-			$this->memo[ $memo ] = $default_capability;
-			return $default_capability;
+		if ( ! $this->has_access_control_library() ) {
+			// Defense-in-depth: F015 (`gate_mcp_tool_call`) fails OPEN under
+			// the same condition (see `AcrossAI_MCP_Access_Control::is_available()`
+			// → early return $args). If BOTH gates fail open together, a
+			// missing wpb-access-control vendor package (composer breakage,
+			// autoloader race, missed dependency after site clone) collapses
+			// the entire two-gate stack — every authenticated user reaches
+			// every tool on every server, whether "no rule" or rule-configured.
+			// Preserve the stack by failing CLOSED here: hard-lock the
+			// transport to admins so F015's fail-open is caught upstream.
+			// Site admins still reach MCP endpoints and see the failure.
+			$this->memo[ $memo ] = self::ADMIN_ONLY_CAPABILITY;
+			return self::ADMIN_ONLY_CAPABILITY;
 		}
 
 		$rules    = new RuleQuery( AcrossAI_MCP_Access_Control::TABLE_SLUG );
@@ -186,5 +204,20 @@ final class TransportPermissionDefault {
 
 		$this->memo[ $memo ] = self::ADMIN_ONLY_CAPABILITY;
 		return self::ADMIN_ONLY_CAPABILITY;
+	}
+
+	/**
+	 * Test seam — whether the wpb-access-control vendor package is loaded.
+	 *
+	 * Extracted from an inline `class_exists()` call so PHPUnit tests can
+	 * subclass this class and override the check to exercise the fail-closed
+	 * branch without unloading Composer's autoloader.
+	 *
+	 * @since 0.2.8
+	 * @return bool True when `RuleQuery` is available (production path);
+	 *              false only when the vendor package failed to load.
+	 */
+	protected function has_access_control_library(): bool {
+		return class_exists( RuleQuery::class );
 	}
 }
