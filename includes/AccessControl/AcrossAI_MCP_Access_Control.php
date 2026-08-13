@@ -9,13 +9,19 @@
  * AcrossAI_Abilities_Access_Control (see DEC-ACCESS-CONTROL-V2-ADOPTION).
  *
  * Observability hooks (per FR-026 + Clarifications Q2 + Q3, D19 pattern):
- *   - do_action( 'acrossai_mcp_access_control_denied', int $user_id, string $server_slug_or_route, ?string $tool_name, string $context_slug )
- *     fires BEFORE the WP_Error / empty-list return at both enforcement sites.
- *     $tool_name is null at the /servers site (no tool), non-null at MCP boundary.
- *     $context_slug ∈ { 'cli_servers', 'mcp_tool_call' }.
- *   - do_action( 'acrossai_mcp_access_control_missing_server', int $server_id_or_slug, string $tool_name, int $user_id )
+ *   - do_action( 'acrossai_mcp_access_control_denied', int $user_id, string $server_slug_or_route, ?string $subject, string $context_slug )
+ *     fires BEFORE the WP_Error / empty-list return at every enforcement site.
+ *     $subject is null at the /servers site (no MCP subject), non-null at MCP
+ *     boundaries — where it carries the tool name / resource URI / prompt name
+ *     depending on the gate that fired.
+ *     $context_slug ∈ { 'cli_servers', 'mcp_tool_call', 'mcp_resource_read', 'mcp_prompt_get' }.
+ *   - do_action( 'acrossai_mcp_access_control_missing_server', int $server_id_or_slug, string $subject, int $user_id )
  *     fires on race with concurrent DELETE (MCPServerQuery returns 0 rows for
  *     the mcp-adapter-supplied server_id). Fail-open follows.
+ *
+ * Since 0.2.8 (F1 fix): the MCP boundary hooks fire from THREE gates —
+ * `gate_mcp_tool_call`, `gate_mcp_resource_read`, `gate_mcp_prompt_get` —
+ * all routed through the private `apply_ac_gate()` helper.
  *
  * @package AcrossAI_MCP_Manager
  * @since   0.0.7
@@ -259,13 +265,88 @@ final class AcrossAI_MCP_Access_Control {
 	 */
 	public function gate_mcp_tool_call( $args, $tool_name, $mcp_tool, $server ) {
 		unset( $mcp_tool );
+		return $this->apply_ac_gate( $args, $server, (string) $tool_name, 'mcp_tool_call' );
+	}
 
+	/**
+	 * Filter callback for `mcp_adapter_pre_resource_read` — F1 fix.
+	 *
+	 * Sibling of `gate_mcp_tool_call` for the MCP `resources/read` primitive.
+	 * Without this gate, F042 defers to the tool-call filter for rule-configured
+	 * servers, meaning any authenticated user could `POST {"method":"resources/read"}`
+	 * against an "Editors only" server and bypass the operator's rule entirely.
+	 * Vendor hook: {@see \WP\MCP\Handlers\Resources\ResourcesHandler} line 138.
+	 *
+	 * @since 0.2.8
+	 *
+	 * @param array<mixed>                               $request_params Params from the JSON-RPC request.
+	 * @param string                                     $uri            The resource URI being read.
+	 * @param \WP\MCP\Domain\Resources\McpResource|mixed $mcp_resource   The McpResource instance (unused).
+	 * @param \WP\MCP\Core\McpServer|mixed               $server         The McpServer instance.
+	 * @return array<mixed>|\WP_Error Original params on allow / fail-open; WP_Error on deny.
+	 */
+	public function gate_mcp_resource_read( $request_params, $uri, $mcp_resource, $server ) {
+		unset( $mcp_resource );
+		return $this->apply_ac_gate( $request_params, $server, (string) $uri, 'mcp_resource_read' );
+	}
+
+	/**
+	 * Filter callback for `mcp_adapter_pre_prompt_get` — F1 fix.
+	 *
+	 * Sibling of `gate_mcp_tool_call` for the MCP `prompts/get` primitive.
+	 * See `gate_mcp_resource_read` docblock for rationale — same bypass class
+	 * without this gate. Vendor hook:
+	 * {@see \WP\MCP\Handlers\Prompts\PromptsHandler} line 157.
+	 *
+	 * @since 0.2.8
+	 *
+	 * @param array<mixed>                           $arguments    Prompt arguments from the JSON-RPC request.
+	 * @param string                                 $prompt_name  The prompt name being fetched.
+	 * @param \WP\MCP\Domain\Prompts\McpPrompt|mixed $mcp_prompt   The McpPrompt instance (unused).
+	 * @param \WP\MCP\Core\McpServer|mixed           $server       The McpServer instance.
+	 * @return array<mixed>|\WP_Error Original arguments on allow / fail-open; WP_Error on deny.
+	 */
+	public function gate_mcp_prompt_get( $arguments, $prompt_name, $mcp_prompt, $server ) {
+		unset( $mcp_prompt );
+		return $this->apply_ac_gate( $arguments, $server, (string) $prompt_name, 'mcp_prompt_get' );
+	}
+
+	/**
+	 * Shared enforcement for the three MCP pre-dispatch filters
+	 * (`pre_tool_call`, `pre_resource_read`, `pre_prompt_get`).
+	 *
+	 * Fail-open semantics identical to the original `gate_mcp_tool_call`:
+	 *   - AC library missing → return $params unchanged. Paired with F042's
+	 *     fail-CLOSED behavior on the same condition — see
+	 *     {@see TransportPermissionDefault::filter_default_capability}.
+	 *   - Malformed server arg → return $params unchanged.
+	 *   - Server row not found (concurrent DELETE race) → fire
+	 *     `acrossai_mcp_access_control_missing_server`, return $params.
+	 *   - Manager boot failed → return $params.
+	 *
+	 * Deny path fires `acrossai_mcp_access_control_denied` with $context set
+	 * to the concrete gate slug so operators subscribed to the hook can
+	 * disambiguate tool vs resource vs prompt denials.
+	 *
+	 * @since 0.2.8
+	 *
+	 * @param mixed  $params  The filter's first arg — args / request_params /
+	 *                        arguments — returned unchanged on allow so the
+	 *                        vendor dispatch proceeds.
+	 * @param mixed  $server  The McpServer instance passed as the 4th filter arg.
+	 * @param string $subject Tool name / resource URI / prompt name — surfaced
+	 *                        in observability hooks and error data.
+	 * @param string $gate    Concrete gate slug — 'mcp_tool_call',
+	 *                        'mcp_resource_read', or 'mcp_prompt_get'.
+	 * @return mixed|\WP_Error $params on allow / fail-open; WP_Error on deny.
+	 */
+	private function apply_ac_gate( $params, $server, string $subject, string $gate ) {
 		if ( ! $this->is_available() ) {
-			return $args;
+			return $params;
 		}
 
 		if ( ! is_object( $server ) || ! method_exists( $server, 'get_server_id' ) ) {
-			return $args;
+			return $params;
 		}
 
 		$server_slug = (string) $server->get_server_id();
@@ -282,41 +363,50 @@ final class AcrossAI_MCP_Access_Control {
 
 		if ( empty( $rows ) ) {
 			/**
-			 * Fires when the mcp-adapter routes a tool call to a server ID
-			 * that no longer exists in the F011 DB (race with concurrent
-			 * DELETE). Fire-and-forget; fail-open follows.
+			 * Fires when the mcp-adapter routes a call to a server ID that no
+			 * longer exists in the F011 DB (race with concurrent DELETE).
+			 * Fire-and-forget; fail-open follows.
+			 *
+			 * The second arg carries the MCP subject: tool name for the
+			 * pre_tool_call gate, resource URI for pre_resource_read, prompt
+			 * name for pre_prompt_get. Subscribers should treat it as an
+			 * opaque label for logging, not a tool-name assumption.
 			 *
 			 * @since 0.0.7
+			 * @since 0.2.8 Second arg is now polymorphic (was always tool_name).
 			 *
 			 * @param string $server_slug The server_id string from mcp-adapter.
-			 * @param string $tool_name   The MCP tool being invoked.
+			 * @param string $subject     Tool name / resource URI / prompt name.
 			 * @param int    $user_id     The current user id.
 			 */
-			do_action( 'acrossai_mcp_access_control_missing_server', $server_slug, $tool_name, $user_id );
-			return $args;
+			do_action( 'acrossai_mcp_access_control_missing_server', $server_slug, $subject, $user_id );
+			return $params;
 		}
 
 		$manager = $this->get_manager();
 		if ( null === $manager ) {
-			return $args;
+			return $params;
 		}
 
 		if ( $manager->user_has_access( $user_id, 'acrossai-mcp-manager', $server_slug ) ) {
-			return $args;
+			return $params;
 		}
 
 		/**
-		 * Fires immediately BEFORE returning the WP_Error on deny at the MCP
-		 * tool-call boundary. Fire-and-forget; operators may hook for audit.
+		 * Fires immediately BEFORE returning the WP_Error on deny at any MCP
+		 * pre-dispatch gate. Fire-and-forget; operators may hook for audit.
 		 *
 		 * @since 0.0.7
+		 * @since 0.2.8 $context can now be 'mcp_resource_read' or 'mcp_prompt_get'
+		 *              in addition to 'mcp_tool_call'; $subject is the gate's
+		 *              polymorphic subject (tool name / URI / prompt name).
 		 *
 		 * @param int    $user_id     The current user id.
 		 * @param string $server_slug The rule key.
-		 * @param string $tool_name   The MCP tool name (never null at this site).
-		 * @param string $context     Fixed value 'mcp_tool_call'.
+		 * @param string $subject     Tool name / resource URI / prompt name.
+		 * @param string $context     Gate slug — 'mcp_tool_call' | 'mcp_resource_read' | 'mcp_prompt_get'.
 		 */
-		do_action( 'acrossai_mcp_access_control_denied', $user_id, $server_slug, $tool_name, 'mcp_tool_call' );
+		do_action( 'acrossai_mcp_access_control_denied', $user_id, $server_slug, $subject, $gate );
 
 		// Enriched error data — surfaced to any MCP client that renders WP_Error details.
 		// Includes the current user's roles + resolved server slug so operators can debug
@@ -337,7 +427,7 @@ final class AcrossAI_MCP_Access_Control {
 				'status'      => 403,
 				'server_slug' => $server_slug,
 				'user_roles'  => $user_roles,
-				'gate'        => 'mcp_tool_call',
+				'gate'        => $gate,
 			)
 		);
 	}
