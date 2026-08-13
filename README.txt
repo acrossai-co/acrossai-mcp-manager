@@ -4,7 +4,7 @@ Tags: mcp, ai, claude, chatgpt, cursor
 Requires at least: 7.0
 Requires PHP: 8.1
 Tested up to: 7.0
-Stable tag: 0.2.8
+Stable tag: 0.2.9
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -103,6 +103,10 @@ Only if you want the one-click hosted-OAuth flow for Claude, ChatGPT, or Grok. A
 4. Per-provider configuration file locations and top-level keys
 
 == Changelog ==
+
+= 0.2.9 =
+* **Dependencies — bump `acrossai-co/main-menu` `0.0.31` → `0.0.33`.** The upstream vendor renamed its "AI Connectors" baseline Add-ons entry to **AcrossAI Pro** in `0.0.32` — the shared Add-ons page (`admin.php?page=acrossai-addons`) and Dashboard card now advertise the renamed plugin (`acrossai-pro/acrossai-pro.php` install folder, `acrossai-pro` registry slug) instead of the former AI Connectors listing. `0.0.33` refreshed the AcrossAI Pro card copy — description now also mentions user access control across AcrossAI plugins — and points every AcrossAI Pro CTA (Add-ons card `more_url` / `learn_more_url`, Dashboard primary/secondary CTAs) at `https://acrossai.co/pricing/#pricing`. **No changes required in this plugin:** MCP Manager's `AddonsFilter::remove_self()` filters the `acrossai_addons` list by its own slug (`acrossai-mcp-manager`), so the vendor's baseline entry rename doesn't affect what shows on the Add-ons page here. The per-server-edit **Connectors/Integrations** tab still points at the separate `acrossai-ai-connectors` WordPress plugin (WP plugin folder slug, distinct from the vendor's addons-registry slug), so the promo card + CTA are unaffected. Transitive: `automattic/jetpack-autoloader` `v5.0.21` → `v5.0.23` (patch).
+* **Internal: `ACROSSAI_MCP_MANAGER_VERSION` constant + `Stable tag` bumped to `0.2.9` matching the plugin header.**
 
 = 0.2.8 =
 * **⚠️ Security — Behavior change — MCP `resources/read` and `prompts/get` requests are now gated by the per-server Access Control rule (F1 fix).** Prior to 0.2.8 the plugin only hooked the vendor's `mcp_adapter_pre_tool_call` filter. The two sibling pre-dispatch filters — `mcp_adapter_pre_resource_read` (`vendor/wordpress/mcp-adapter/includes/Handlers/Resources/ResourcesHandler.php:138`) and `mcp_adapter_pre_prompt_get` (`.../Prompts/PromptsHandler.php:157`) — had no subscriber. Combined with the Feature 042 transport layer intentionally deferring to F015 for rule-configured servers (returning the vendor `'read'` default so any authenticated user passes the transport gate, on the assumption that F015 would then enforce), any authenticated user could `POST {"method":"resources/read","params":{"uri":"…"}}` (or `{"method":"prompts/get"}`) against a server configured "Editors only" and the operator's rule was **never consulted**. 0.2.8 extracts the enforcement body of `gate_mcp_tool_call` into a shared private `apply_ac_gate()` helper and adds two sibling public callbacks — `gate_mcp_resource_read` + `gate_mcp_prompt_get` — wired adjacent to the existing tool-call filter in `Main::define_public_hooks()`. Deny path returns a `WP_Error` with a `gate` value of `mcp_resource_read` / `mcp_prompt_get` (previously always `mcp_tool_call`). Observability hooks are reused: `acrossai_mcp_access_control_denied` and `acrossai_mcp_access_control_missing_server` now fire from three MCP boundary sites — the `$context` arg discriminates and the `$subject` arg is polymorphic (tool name / resource URI / prompt name depending on which gate fired). New PHPUnit coverage at `tests/phpunit/Includes/AccessControl/McpDispatchGatesTest.php` — fail-open parity per gate, missing-server observability hook subject-arg carries URI/prompt name, three-context deny-hook contract, all three vendor filter registrations verified.
