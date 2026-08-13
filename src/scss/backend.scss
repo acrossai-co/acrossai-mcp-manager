@@ -232,6 +232,93 @@
 }
 
 // -------------------------------------------------------------------------
+// Server list — column widths.
+// Status + Registered From only render a single small badge each, so cap
+// their widths tightly. Route + Actions absorb the freed horizontal space.
+// WP-Lists adds `.column-<key>` to every <th>/<td> in .wp-list-table.
+// -------------------------------------------------------------------------
+.wp-list-table.mcp_servers {
+	.column-status,
+	.column-source {
+		width: 120px;
+	}
+}
+
+// -------------------------------------------------------------------------
+// Server list — Actions column.
+// Two-row layout: primary buttons (Edit, Enable/Disable) on top; per-tab
+// quicklinks below as pill-badges with a dashicon prefix. Pills are lighter
+// than full buttons but more scannable than plain text links — the icon
+// gives an at-a-glance signal for each tab.
+// -------------------------------------------------------------------------
+.acrossai-actions-cell {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	align-items: flex-start;
+}
+
+.acrossai-actions-primary {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px;
+	align-items: center;
+}
+
+.acrossai-actions-quicklinks {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px;
+	align-items: center;
+}
+
+.acrossai-actions-quicklinks .acrossai-quicklink {
+	align-items: center;
+	background: #f6f7f7;
+	border: 1px solid #dcdcde;
+	border-radius: 12px;
+	color: #50575e;
+	display: inline-flex;
+	font-size: 12px;
+	font-weight: 500;
+	gap: 4px;
+	line-height: 1.5;
+	padding: 2px 10px 2px 8px;
+	text-decoration: none;
+	transition:
+		background 0.12s ease,
+		border-color 0.12s ease,
+		color 0.12s ease;
+}
+
+.acrossai-actions-quicklinks .acrossai-quicklink:hover,
+.acrossai-actions-quicklinks .acrossai-quicklink:focus {
+	background: #f0f6fc;
+	border-color: #2271b1;
+	color: #2271b1;
+	text-decoration: none;
+	outline: none;
+}
+
+.acrossai-actions-quicklinks .acrossai-quicklink:focus-visible {
+	box-shadow: 0 0 0 2px #a7c9e8;
+}
+
+.acrossai-actions-quicklinks .acrossai-quicklink .dashicons {
+	color: #787c82;
+	font-size: 14px;
+	height: 14px;
+	line-height: 14px;
+	width: 14px;
+	transition: color 0.12s ease;
+}
+
+.acrossai-actions-quicklinks .acrossai-quicklink:hover .dashicons,
+.acrossai-actions-quicklinks .acrossai-quicklink:focus .dashicons {
+	color: #2271b1;
+}
+
+// -------------------------------------------------------------------------
 // Access Control tab — fieldset inset around provider options.
 // -------------------------------------------------------------------------
 .acrossai-ac-options-row fieldset {
