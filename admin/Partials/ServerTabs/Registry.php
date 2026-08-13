@@ -108,10 +108,11 @@ final class Registry {
 	 * Callers who want the effective (filter-applied) list MUST use
 	 * `for_server()` or `visible_tabs()`.
 	 *
-	 * Post-Feature 040 the built-in tab count is 10. The `AIConnectorsPromoTab`
-	 * entry at priority 35 is a PLACEHOLDER — when the acrossai-ai-connectors
-	 * companion plugin is active, it registers its real `AIConnectorsTab` via
-	 * the `acrossai_mcp_manager_server_tabs` filter (also priority 35), and
+	 * Post-0.2.10 the built-in tab count is 11 (was 12 pre-0.2.10 before the
+	 * F037 Embeds tab was hidden). The `AIConnectorsPromoTab` entry at
+	 * priority 35 is a PLACEHOLDER — when the acrossai-ai-connectors companion
+	 * plugin is active, it registers its real `AIConnectorsTab` via the
+	 * `acrossai_mcp_manager_server_tabs` filter (also priority 35), and
 	 * Registry's last-wins dedup (F040 follow-up) replaces the placeholder
 	 * with the real tab automatically. When the companion is missing/inactive,
 	 * the placeholder renders a promo card pointing at the add-on.
@@ -130,10 +131,14 @@ final class Registry {
 			new ToolsTab(),
 			new AbilitiesTab(),
 			new AccessControlTab(),
-			// Feature 037 — Embeds tab (priority 90). Per-server master
-			// toggle + per-transport sub-toggles for the [acrossai_mcp_embed]
-			// shortcode + block frontend output.
-			EmbedsTab::instance(),
+			// Note: EmbedsTab (F037, priority 90) removed from the built-in
+			// tab list in 0.2.10 — the per-server admin surface is hidden.
+			// The class itself is retained under admin/Partials/ServerTabs/
+			// so re-enabling is a one-line change here. The
+			// `[acrossai_mcp_embed]` shortcode + block continue to work; only
+			// the admin config UI is hidden. See includes/Main.php where
+			// `EmbedsTab::register()` is also skipped so REST + asset
+			// registration doesn't happen for the hidden tab.
 			new McpTrackerTab(),
 			new UpdateServerTab(),
 			new DangerZoneTab(),
