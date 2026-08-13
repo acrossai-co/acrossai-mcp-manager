@@ -40,10 +40,13 @@ final class RegistryTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Verifies all_tabs() returns the 12 registered built-in tabs.
+	 * Verifies all_tabs() returns the 11 registered built-in tabs.
 	 *
 	 * Post-F037 added Embeds tab; post-F040 added AIConnectorsPromoTab as a
 	 * built-in placeholder (companion overrides via last-wins dedup when active).
+	 * 0.2.10 removed EmbedsTab from the built-in list (tab hidden). The class
+	 * file is retained; re-enable by re-adding to Registry::all_tabs() +
+	 * uncommenting EmbedsTab::register() in Main::define_public_hooks().
 	 */
 	public function test_slug_ordering_final(): void {
 		$slugs = array_map(
@@ -61,10 +64,10 @@ final class RegistryTest extends WP_UnitTestCase {
 		$this->assertContains( 'abilities', $slugs );
 		$this->assertContains( 'access-control', $slugs );
 		$this->assertContains( 'mcp-log', $slugs );
-		$this->assertContains( 'embeds', $slugs );
 		$this->assertContains( 'update-server', $slugs );
 		$this->assertContains( 'danger-zone', $slugs );
-		$this->assertCount( 12, $slugs );
+		$this->assertNotContains( 'embeds', $slugs, '0.2.10 hid the Embeds tab from the built-in list.' );
+		$this->assertCount( 11, $slugs );
 	}
 
 	/**
@@ -131,29 +134,31 @@ final class RegistryTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Plugin-source servers see 10 tabs (12 total minus UpdateServer + DangerZone).
+	 * Plugin-source servers see 9 tabs (11 total minus UpdateServer + DangerZone).
+	 * Was 10 before 0.2.10 hid the Embeds tab.
 	 */
-	public function test_visible_tabs_returns_10_when_plugin_source(): void {
+	public function test_visible_tabs_returns_9_when_plugin_source(): void {
 		$visible = Registry::instance()->visible_tabs(
 			array(
 				'id'              => 1,
 				'registered_from' => 'plugin',
 			)
 		);
-		$this->assertCount( 10, $visible );
+		$this->assertCount( 9, $visible );
 	}
 
 	/**
-	 * Database-source servers see 12 tabs (full canonical set).
+	 * Database-source servers see 11 tabs (full canonical set).
+	 * Was 12 before 0.2.10 hid the Embeds tab.
 	 */
-	public function test_visible_tabs_returns_12_when_database_source(): void {
+	public function test_visible_tabs_returns_11_when_database_source(): void {
 		$visible = Registry::instance()->visible_tabs(
 			array(
 				'id'              => 2,
 				'registered_from' => 'database',
 			)
 		);
-		$this->assertCount( 12, $visible );
+		$this->assertCount( 11, $visible );
 	}
 
 	// =========================================================================
@@ -187,11 +192,11 @@ final class RegistryTest extends WP_UnitTestCase {
 		Registry::instance()->for_server( $server );
 
 		$this->assertSame( $server, $captured_server, 'Filter must receive the exact $server argument.' );
-		$this->assertSame( 12, $captured_count, 'Filter must be seeded with the 12 built-in entries.' );
+		$this->assertSame( 11, $captured_count, 'Filter must be seeded with the 11 built-in entries (Embeds tab hidden as of 0.2.10).' );
 	}
 
 	/**
-	 * With no callback registered, `for_server()` returns the 12 built-ins
+	 * With no callback registered, `for_server()` returns the 11 built-ins
 	 * in canonical priority order (priority ASC, insertion-order tiebreak).
 	 */
 	public function test_for_server_returns_builtins_when_no_callback(): void {
@@ -214,9 +219,8 @@ final class RegistryTest extends WP_UnitTestCase {
 				'tools',          // 50
 				'abilities',      // 60
 				'access-control', // 70
-				'mcp-log',    // 80
-				'embeds',         // 90 (defined first at prio 90)
-				'update-server',  // 90 (defined after embeds — insertion-order tiebreak)
+				'mcp-log',        // 80
+				'update-server',  // 90 (EmbedsTab at 90 removed in 0.2.10 — only entry at this slot now)
 				'danger-zone',    // 100
 			),
 			$slugs,

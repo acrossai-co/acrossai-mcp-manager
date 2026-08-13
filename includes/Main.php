@@ -147,7 +147,7 @@ final class Main {
 		$this->define( 'ACROSSAI_MCP_MANAGER_PLUGIN_URL', plugin_dir_url( \ACROSSAI_MCP_MANAGER_PLUGIN_FILE ) );
 		$this->define( 'ACROSSAI_MCP_MANAGER_PLUGIN_NAME_SLUG', 'acrossai-mcp-manager' );
 		$this->define( 'ACROSSAI_MCP_MANAGER_PLUGIN_NAME', 'AcrossAI MCP Manager' );
-		$this->define( 'ACROSSAI_MCP_MANAGER_VERSION', '0.2.9' );
+		$this->define( 'ACROSSAI_MCP_MANAGER_VERSION', '0.2.10' );
 	}
 
 	/**
@@ -550,13 +550,21 @@ final class Main {
 		$this->loader->add_action( 'rest_api_init', $tools_rest, 'register_routes' );
 
 		/**
-		 * Feature 037 — Embeds tab self-registration. `EmbedsTab::register()`
-		 * wires its own `admin_enqueue_scripts` + `rest_api_init` hooks
-		 * (per `AbstractReactMountServerTab`). Same shape any third-party
-		 * companion plugin uses: extend the base + call `register()` from
-		 * the plugin's boot code. Idempotent — safe against double-calls.
+		 * Feature 037 — Embeds tab self-registration is SKIPPED in 0.2.10+.
+		 *
+		 * The tab is hidden (removed from Registry::all_tabs()), so wiring
+		 * its `admin_enqueue_scripts` + `rest_api_init` hooks would only
+		 * register REST routes + enqueue React bundle assets for a UI that
+		 * never renders. The class file is retained under
+		 * admin/Partials/ServerTabs/EmbedsTab.php — restoring the tab is a
+		 * one-line re-add here plus in Registry. See Registry docblock for
+		 * the built-in tab count invariant.
+		 *
+		 * The `[acrossai_mcp_embed]` shortcode + block are unaffected — their
+		 * frontend rendering pipeline lives in public/Renderers/EmbedBlock/
+		 * and includes/Embeds/, all independent of this admin tab.
 		 */
-		\AcrossAI_MCP_Manager\Admin\Partials\ServerTabs\EmbedsTab::register();
+		// \AcrossAI_MCP_Manager\Admin\Partials\ServerTabs\EmbedsTab::register();
 
 		$tool_exposure_gate = \AcrossAI_MCP_Manager\Includes\MCP\ToolExposureGate::instance();
 		$this->loader->add_filter( 'mcp_adapter_pre_tool_call', $tool_exposure_gate, 'gate_tool_call_by_curation', 30, 4 );

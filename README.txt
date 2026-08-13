@@ -4,7 +4,7 @@ Tags: mcp, ai, claude, chatgpt, cursor
 Requires at least: 7.0
 Requires PHP: 8.1
 Tested up to: 7.0
-Stable tag: 0.2.9
+Stable tag: 0.2.10
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -103,6 +103,10 @@ Only if you want the one-click hosted-OAuth flow for Claude, ChatGPT, or Grok. A
 4. Per-provider configuration file locations and top-level keys
 
 == Changelog ==
+
+= 0.2.10 =
+* **Admin — Embeds tab hidden from the per-server-edit page.** The **Embeds** tab (formerly reached at `?page=acrossai_mcp_manager&action=edit&server=<id>&tab=embeds`) is no longer registered in `Registry::all_tabs()` and its self-registration in `Main::define_public_hooks()` (`EmbedsTab::register()`) is now commented out — so the tab's REST controller (`/acrossai-mcp-manager/v1/servers/{server_id}/embeds`) and its React bundle (`build/js/embeds.js` + `.css`, ~389 KiB) no longer enqueue on the server-edit screen. Direct URL access to `?tab=embeds` falls through to Registry's default (first surviving tab = Overview) rather than 404 — same graceful-fallback path any unknown slug takes. Built-in tab count: 12 → 11. The `admin/Partials/ServerTabs/EmbedsTab.php` class file, the underlying `[acrossai_mcp_embed]` shortcode, the block, and the `AbstractEmbedTransport` transports in `includes/Embeds/` are all retained — hiding is admin-UI-only; the frontend embed rendering pipeline is unaffected. Re-enabling the tab is a two-line change (re-add `EmbedsTab::instance()` to Registry + uncomment the `register()` call). Tests in `tests/phpunit/Admin/ServerTabs/RegistryTest.php` updated: expected counts adjusted (12 → 11 for canonical + database-source servers; 10 → 9 for plugin-source servers); ordering array + docblock counts refreshed; a new `assertNotContains( 'embeds', $slugs )` line locks in the invariant.
+* **Internal: `ACROSSAI_MCP_MANAGER_VERSION` constant + `Stable tag` bumped to `0.2.10` matching the plugin header.**
 
 = 0.2.9 =
 * **Dependencies — bump `acrossai-co/main-menu` `0.0.31` → `0.0.33`.** The upstream vendor renamed its "AI Connectors" baseline Add-ons entry to **AcrossAI Pro** in `0.0.32` — the shared Add-ons page (`admin.php?page=acrossai-addons`) and Dashboard card now advertise the renamed plugin (`acrossai-pro/acrossai-pro.php` install folder, `acrossai-pro` registry slug) instead of the former AI Connectors listing. `0.0.33` refreshed the AcrossAI Pro card copy — description now also mentions user access control across AcrossAI plugins — and points every AcrossAI Pro CTA (Add-ons card `more_url` / `learn_more_url`, Dashboard primary/secondary CTAs) at `https://acrossai.co/pricing/#pricing`. **No changes required in this plugin:** MCP Manager's `AddonsFilter::remove_self()` filters the `acrossai_addons` list by its own slug (`acrossai-mcp-manager`), so the vendor's baseline entry rename doesn't affect what shows on the Add-ons page here. The per-server-edit **Connectors/Integrations** tab still points at the separate `acrossai-ai-connectors` WordPress plugin (WP plugin folder slug, distinct from the vendor's addons-registry slug), so the promo card + CTA are unaffected. Transitive: `automattic/jetpack-autoloader` `v5.0.21` → `v5.0.23` (patch).
