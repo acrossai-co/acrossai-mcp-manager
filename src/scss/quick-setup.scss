@@ -1,0 +1,430 @@
+// F069 — MCP Quick Setup Wizard styles.
+//
+// All rules scoped under `.acrossai-mcp-quick-setup-wrap` so they can never
+// leak into the list-table view or per-server-edit tabs. Bundle enqueue is
+// gated on `?quick-setup=1` in admin/Main.php per SC-007, so this stylesheet
+// only ships to the wizard URL.
+//
+// Design tokens come from the Claude Design source of truth
+// (docs/quick-setup-design-brief.md) — colors match the mockup byte-for-byte.
+
+// ─────────────────────────────────────────────────────────────────────────
+// Design tokens
+// ─────────────────────────────────────────────────────────────────────────
+
+$qs-primary:        #3858e9;
+$qs-primary-hover:  #2f4dc7;
+$qs-brand-purple:   #4f46e5;
+$qs-success:        #4ab866;
+$qs-warning:        #f0b849;
+$qs-danger:         #cc1818;
+$qs-text:           #1e1e1e;
+$qs-text-muted:     #757575;
+$qs-border:         #ddd;
+$qs-border-strong:  #949494;
+$qs-bg-blue-tint:   #f0f4ff;
+$qs-bg-purple-tint: #f5f3ff;
+$qs-bg-warning:     #fcf9e8;
+$qs-bg-success:     #edfaef;
+$qs-bg-code:        #f6f7f7;
+$qs-bg-code-dark:   #23282d;
+$qs-radius:         2px;
+$qs-space:          8px;
+$qs-font-mono:      'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+$qs-font-body:      -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+
+// ─────────────────────────────────────────────────────────────────────────
+// Root scope
+// ─────────────────────────────────────────────────────────────────────────
+
+.acrossai-mcp-quick-setup-wrap {
+	font-family: $qs-font-body;
+	color: $qs-text;
+	max-width: 1280px;
+	margin: 20px auto;
+	background: #ffffff;
+	border-radius: $qs-radius;
+	box-shadow: 0 6px 26px rgba(0, 0, 0, 0.1);
+	overflow: hidden;
+
+	*, *::before, *::after {
+		box-sizing: border-box;
+	}
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Shell — header + progress bar + content pane + footer
+// ─────────────────────────────────────────────────────────────────────────
+
+.qs__progress {
+	height: 4px;
+	background: #e0e0e0;
+	display: flex;
+}
+
+.qs__progress-fill {
+	height: 4px;
+	background: $qs-primary;
+	transition: width 0.2s ease;
+}
+
+.qs__header {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 16px 24px;
+	border-bottom: 1px solid #f0f0f0;
+}
+
+.qs__header-logo {
+	height: 26px;
+	width: auto;
+	flex: none;
+
+	@media (max-width: 640px) {
+		height: 22px;
+	}
+}
+
+.qs__header-title {
+	flex: 1;
+	font-size: 14px;
+	font-weight: 600;
+	color: $qs-text;
+}
+
+.qs__header-exit {
+	color: $qs-text-muted;
+	font-size: 13px;
+	text-decoration: none;
+
+	&:hover, &:focus-visible {
+		color: $qs-primary;
+		text-decoration: underline;
+	}
+}
+
+.qs__step-counter {
+	font-size: 11px;
+	font-weight: 600;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	color: $qs-text-muted;
+	padding: 20px 24px 0;
+}
+
+.qs__content {
+	padding: 40px 24px;
+	max-width: 720px;
+	margin: 0 auto;
+}
+
+.qs__step-title {
+	font-size: 22px;
+	font-weight: 600;
+	margin: 0 0 6px;
+	color: $qs-text;
+}
+
+.qs__step-subtitle {
+	font-size: 14px;
+	color: $qs-text-muted;
+	margin: 0 0 24px;
+	line-height: 1.55;
+}
+
+.qs__footer {
+	display: flex;
+	gap: 12px;
+	padding: 16px 24px;
+	border-top: 1px solid #f0f0f0;
+
+	> * {
+		flex: 1;
+	}
+}
+
+// ARIA live region for step-change announcements (per FR-010a)
+.qs__sr-only {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	padding: 0;
+	margin: -1px;
+	overflow: hidden;
+	clip: rect(0, 0, 0, 0);
+	white-space: nowrap;
+	border: 0;
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Buttons
+// ─────────────────────────────────────────────────────────────────────────
+
+.qs-btn {
+	height: 40px;
+	padding: 0 20px;
+	border: 1px solid $qs-primary;
+	border-radius: $qs-radius;
+	background: $qs-primary;
+	color: #ffffff;
+	font-size: 13px;
+	font-weight: 500;
+	cursor: pointer;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 6px;
+	text-decoration: none;
+
+	&:hover:not([aria-disabled='true']),
+	&:focus-visible:not([aria-disabled='true']) {
+		background: $qs-primary-hover;
+		border-color: $qs-primary-hover;
+	}
+
+	&[aria-disabled='true'] {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+}
+
+.qs-btn--secondary {
+	background: #ffffff;
+	color: $qs-primary;
+
+	&:hover:not([aria-disabled='true']),
+	&:focus-visible:not([aria-disabled='true']) {
+		background: $qs-bg-blue-tint;
+		color: $qs-primary-hover;
+		border-color: $qs-primary-hover;
+	}
+}
+
+.qs-btn--link {
+	height: auto;
+	padding: 0;
+	background: transparent;
+	border: none;
+	color: $qs-primary;
+	font-size: 13px;
+	text-decoration: none;
+	cursor: pointer;
+
+	&:hover, &:focus-visible {
+		color: $qs-primary-hover;
+		text-decoration: underline;
+	}
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Notice (info / warning / success / error)
+// ─────────────────────────────────────────────────────────────────────────
+
+.qs-notice {
+	display: flex;
+	gap: 10px;
+	padding: 12px 14px;
+	border-radius: $qs-radius;
+	font-size: 13px;
+	line-height: 1.6;
+	color: $qs-text;
+	margin-bottom: 20px;
+
+	&--info    { background: $qs-bg-blue-tint;   border-left: 4px solid $qs-primary; }
+	&--warning { background: $qs-bg-warning;     border-left: 4px solid $qs-warning; }
+	&--success { background: $qs-bg-success;     border-left: 4px solid $qs-success; }
+	&--error   { background: #fdecec;            border-left: 4px solid $qs-danger; }
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Radio card (server picker rows + Step 5 method cards)
+// ─────────────────────────────────────────────────────────────────────────
+
+.qs-card {
+	display: flex;
+	align-items: flex-start;
+	gap: 12px;
+	padding: 18px;
+	border: 1px solid $qs-border;
+	border-radius: $qs-radius;
+	background: #ffffff;
+	cursor: pointer;
+	margin-bottom: 10px;
+	transition: border-color 0.15s ease, background 0.15s ease;
+
+	&:hover, &:focus-within {
+		border-color: $qs-primary;
+	}
+
+	&--selected {
+		border-color: $qs-primary;
+		background: $qs-bg-blue-tint;
+
+		.qs-card__radio {
+			border: 4px solid $qs-primary;
+		}
+	}
+}
+
+.qs-card__radio {
+	flex: none;
+	width: 16px;
+	height: 16px;
+	border-radius: 50%;
+	border: 1px solid $qs-border-strong;
+	background: #ffffff;
+	margin-top: 2px;
+}
+
+.qs-card__body {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+
+.qs-card__title {
+	font-size: 14px;
+	font-weight: 500;
+	color: $qs-text;
+}
+
+.qs-card__subtitle {
+	font-size: 12.5px;
+	color: $qs-text-muted;
+
+	code {
+		font-family: $qs-font-mono;
+		font-size: 11px;
+		background: transparent;
+		padding: 0;
+	}
+}
+
+.qs-card__badge {
+	display: inline-block;
+	padding: 2px 8px;
+	background: $qs-brand-purple;
+	color: #ffffff;
+	font-size: 10.5px;
+	font-weight: 700;
+	letter-spacing: 0.04em;
+	border-radius: $qs-radius;
+	margin-left: 8px;
+	vertical-align: middle;
+}
+
+.qs-card__badge--inactive {
+	background: $qs-text-muted;
+	font-weight: 500;
+	letter-spacing: 0;
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Code block (inline + pane variants)
+// ─────────────────────────────────────────────────────────────────────────
+
+.qs-code {
+	position: relative;
+	margin: 8px 0 16px;
+}
+
+.qs-code--inline {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	flex-wrap: wrap;
+
+	code {
+		flex: 1 1 320px;
+		min-width: 0;
+		padding: 11px 13px;
+		background: $qs-bg-code;
+		border: 1px solid $qs-border;
+		border-radius: $qs-radius;
+		font-family: $qs-font-mono;
+		font-size: 12px;
+		color: $qs-text;
+		overflow-x: auto;
+		white-space: nowrap;
+	}
+}
+
+.qs-code--pane {
+	border: 1px solid $qs-text;
+	border-radius: $qs-radius;
+	overflow: hidden;
+
+	.qs-code__title-bar {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		padding: 7px 11px;
+		background: $qs-text;
+
+		span {
+			flex: 1;
+			font-family: $qs-font-mono;
+			font-size: 10.5px;
+			letter-spacing: 0.05em;
+			text-transform: uppercase;
+			color: $qs-text-muted;
+		}
+	}
+
+	pre {
+		margin: 0;
+		padding: 13px 15px;
+		background: $qs-bg-code-dark;
+		color: #f0f0f0;
+		font-family: $qs-font-mono;
+		font-size: 11.5px;
+		line-height: 1.7;
+		overflow-x: auto;
+	}
+}
+
+.qs-code__copy-btn {
+	padding: 4px 11px;
+	border: 1px solid rgba(255, 255, 255, 0.28);
+	border-radius: $qs-radius;
+	background: transparent;
+	color: #ffffff;
+	font-size: 11.5px;
+	cursor: pointer;
+
+	.qs-code--inline & {
+		border-color: $qs-primary;
+		color: $qs-primary;
+		background: #ffffff;
+		height: 40px;
+		padding: 0 16px;
+		font-size: 13px;
+	}
+
+	&:hover, &:focus-visible {
+		opacity: 0.85;
+	}
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Mobile responsive — stack shell vertically
+// ─────────────────────────────────────────────────────────────────────────
+
+@media (max-width: 640px) {
+	.acrossai-mcp-quick-setup-wrap {
+		margin: 0;
+		border-radius: 0;
+		box-shadow: none;
+	}
+
+	.qs__content {
+		padding: 24px 16px;
+	}
+
+	.qs__header, .qs__footer {
+		padding: 12px 16px;
+	}
+}

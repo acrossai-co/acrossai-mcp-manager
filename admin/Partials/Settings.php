@@ -11,6 +11,7 @@ namespace AcrossAI_MCP_Manager\Admin\Partials;
 use AcrossAI_MCP_Manager\Includes\Database\MCPServer\DefaultServerSeeder;
 use AcrossAI_MCP_Manager\Includes\Database\MCPServer\Query;
 use AcrossAI_MCP_Manager\Includes\Utilities\AdminPageSlugs;
+use AcrossAI_MCP_Manager\Includes\Utilities\MCPServerFieldSanitizer;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -258,21 +259,28 @@ class Settings {
 
 	/**
 	 * Create-form handler. FR-007a. Caller already verified the nonce + cap.
+	 *
+	 * Sanitization delegated to the shared MCPServerFieldSanitizer helper
+	 * (F069 / TASK-SEC-001) so this admin form + the Quick Setup wizard's
+	 * REST controller apply identical validation with a hard-coded 6-key
+	 * whitelist defence against B7 mass-assignment via forged POST keys.
 	 */
 	private function handle_create_server(): void {
 		// phpcs:disable WordPress.Security.NonceVerification.Recommended
-		$name        = isset( $_POST['server_name'] ) ? sanitize_text_field( wp_unslash( $_POST['server_name'] ) ) : '';
-		$description = isset( $_POST['description'] ) ? sanitize_textarea_field( wp_unslash( $_POST['description'] ) ) : '';
-		$namespace   = isset( $_POST['server_route_namespace'] ) ? sanitize_text_field( wp_unslash( $_POST['server_route_namespace'] ) ) : 'mcp';
-		$route       = isset( $_POST['server_route'] ) ? sanitize_text_field( wp_unslash( $_POST['server_route'] ) ) : '';
-		$version     = isset( $_POST['server_version'] ) ? sanitize_text_field( wp_unslash( $_POST['server_version'] ) ) : 'v1.0.0';
+		$sanitized = MCPServerFieldSanitizer::sanitize_from_post( $_POST );
 		// phpcs:enable WordPress.Security.NonceVerification.Recommended
+
+		$name        = $sanitized['server_name'];
+		$description = $sanitized['description'];
+		$namespace   = $sanitized['server_route_namespace'];
+		$route       = $sanitized['server_route'];
+		$version     = $sanitized['server_version'];
+		$slug        = $sanitized['server_slug'];
 
 		if ( '' === $name ) {
 			$this->redirect_to_create( 'empty_name' );
 		}
 
-		$slug  = sanitize_title( $name );
 		$query = Query::instance();
 
 		// Slug collision check via Query — R1 mapping.
@@ -286,6 +294,9 @@ class Settings {
 			$this->redirect_to_create( 'slug_exists' );
 		}
 
+		// Route falls back to slug if the sanitizer left it empty (matches
+		// pre-F069 behavior — sanitizer preserves user's explicit route
+		// choice; empty route → slug alias).
 		if ( '' === $route ) {
 			$route = $slug;
 		}

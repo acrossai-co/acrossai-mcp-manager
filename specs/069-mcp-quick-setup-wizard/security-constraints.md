@@ -254,3 +254,164 @@ grep -rn "dangerouslySetInnerHTML" src/js/quick-setup/
 ```
 
 Save location: this review is authoritative at `specs/069-mcp-quick-setup-wizard/security-constraints.md` (per `/speckit-architecture-guard-governed-plan` Step 4). If you also want the audit trail under `docs/security-reviews/`, copy the file there and use the row above.
+
+---
+
+# Security Review — Tasks Phase (2026-08-16)
+
+```yaml
+---
+document_type: security-review
+review_type: tasks
+assessment_date: 2026-08-16
+codebase_analyzed: acrossai-mcp-manager / feature 069 tasks.md (63 tasks × 8 phases)
+total_files_analyzed: 1
+total_findings: 4
+overall_risk: LOW
+critical_count: 0
+high_count: 0
+medium_count: 1
+low_count: 3
+informational_count: 0
+owasp_categories: [A03, A04, A05, A07]
+cwe_ids: [CWE-915, CWE-209, CWE-613, CWE-346]
+---
+```
+
+## Executive summary (plain English)
+
+The task list correctly sequences security work — foundational security lands in Phase 2 (before any user story), critical enforcement lands in Phase 3 (US1 MVP), belt-and-suspenders grep gates land in Phase 8. All 5 plan-phase findings (SEC-001..005) are folded into aligned task IDs (TASK-SEC-001..005) with correct placement.
+
+**Four new findings** surface from the tasks-phase lens (one Medium, three Low):
+- **SEC-T-001 (Medium)** — Mass-assignment gap: Step 1b's `new_server` payload isn't explicitly whitelisted against MCPServer's known columns before sanitization (memory pattern B7).
+- **SEC-T-002 (Low)** — AC editor extraction (T032) lacks explicit security-continuity test.
+- **SEC-T-003 (Low)** — Phase 8 error-hygiene grep gate (T055) needs a matching inline constraint on the Phase 3 handler tasks so the audit isn't the ONLY defense.
+- **SEC-T-004 (Low)** — 12-hour REST nonce lifetime error surface (SEC-005 mitigation) lacks a client-side test.
+
+All 4 findings are advisory + non-blocking. Fold into `tasks.md` as `TASK-SEC-T-001..004` before implementation.
+
+## Tasks reviewed
+
+| Artifact | Location |
+|---|---|
+| Task list | `specs/069-mcp-quick-setup-wizard/tasks.md` (63 tasks, T001–T063) |
+| Plan-phase findings | This file (SEC-001..008 above), all folded with aligned IDs into tasks |
+| Memory synthesis | `specs/069-mcp-quick-setup-wizard/memory-synthesis.md` — B7 mass-assignment pattern surfaced during the tasks-phase walk |
+
+## Vulnerability findings
+
+### SEC-T-001 — [MEDIUM] Mass-assignment risk on Step 1b create-server payload
+
+**Finding_id**: SEC-T-001
+**Location**: `specs/069-mcp-quick-setup-wizard/tasks.md` T012 (shared sanitizer) + T021 (Step 1b handler)
+**OWASP category**: A03:2025-Injection
+**CWE**: CWE-915: Improperly Controlled Modification of Dynamically-Determined Object Attributes (Mass Assignment)
+**CVSS score**: 4.6 (Network / Low complexity / High privilege / User interaction / Unchanged / Low integrity impact)
+**Spec_kit_task**: TASK-SEC-T-001
+
+**Description**: T012 extracts a shared `MCPServerFieldSanitizer` helper for the 6 documented Step 1b fields (`server_name`, `server_slug`, `description`, `server_route_namespace`, `server_route`, `server_version`). T021 calls the sanitizer then `MCPServerQuery::instance()->add_item($sanitized)`. Neither task explicitly **whitelists the incoming payload keys** before sanitization. If an attacker POSTs `{ new_server: { server_name: "foo", is_enabled: 1, id: 999, created_at: "…" } }`, the sanitizer would pass the forged keys through to `add_item()`, which then forwards them to `$wpdb->insert()` — the `wp_acrossai_mcp_servers` table's writable columns include `is_enabled`, so this could set the newly-created server to enabled by the wizard's admin (bypassing Step 4's explicit toggle) or spoof timestamps.
+
+Memory pattern B7 documents this exact class: *"Mass-assignment via forged POST keys to $wpdb->update/insert — Query writers MUST filter against Schema::columns() before persisting."*
+
+**Recommendation**: Fold as **TASK-SEC-T-001** into Phase 2 (alongside T012):
+> The `MCPServerFieldSanitizer::sanitize()` helper MUST filter its input array against a hard-coded whitelist of exactly 6 keys (`server_name`, `server_slug`, `description`, `server_route_namespace`, `server_route`, `server_version`) BEFORE per-field sanitization runs. Any additional keys MUST be silently dropped. Extend T013's PHPUnit fixture set with a mass-assignment negative test: `{ 'server_name' => 'foo', 'is_enabled' => 1, 'id' => 999 }` MUST produce output with only `server_name` populated.
+
+**Rationale**: Constitution §III + memory B7. The whitelist is a per-field-add-item invariant that MUST live in the sanitizer, not at every caller.
+
+---
+
+### SEC-T-002 — [LOW] AC editor extraction (T032) lacks security-continuity test
+
+**Finding_id**: SEC-T-002
+**Location**: `specs/069-mcp-quick-setup-wizard/tasks.md` T032 (extract shared AccessControlEditor)
+**OWASP category**: A01:2025-Broken Access Control (regression risk during refactor)
+**CWE**: CWE-346: Origin Validation Error (regression pattern)
+**CVSS score**: 3.2 (Network / High complexity / High privilege / User interaction / Unchanged / Low integrity impact)
+**Spec_kit_task**: TASK-SEC-T-002
+
+**Description**: T032 refactors `src/js/access-control.js` from a tab-only mount into a shared `<AccessControlEditor server_id={id} onSave={fn} />` component that both the existing tab AND the wizard's Step 2 import. Refactors like this — extract-then-remount — carry a well-known risk class: security checks tied to the mount context (nonce lookup from `wpApiSettings`, capability check assumed by the calling tab, XSS-safe render of rule values) can silently move around or drop out when the component is scoped down for reuse. The task references DRY + component extraction but doesn't include an explicit **security-continuity check**.
+
+**Recommendation**: Fold as **TASK-SEC-T-002** into Phase 3 (US1, alongside T032):
+> After T032's extraction, add a PHPUnit or Jest test (harness TBD — plugin currently has no Jest; if none, at minimum a manual smoke checklist item) asserting the extracted `<AccessControlEditor>` preserves EVERY security check present in the current tab-mounted version:
+> 1. The Save action fires a request with a valid nonce for the correct wpb-ac REST route.
+> 2. The rule values are rendered as text-node children (no `dangerouslySetInnerHTML`).
+> 3. The component's own permission gate (if any exists in the current tab) is preserved.
+>
+> Grep the pre-refactor `src/js/access-control.js` for `wp_create_nonce`, `nonce`, `dangerouslySetInnerHTML`, `current_user_can` — every hit MUST have a corresponding call site in the post-refactor `AccessControlEditor.jsx`.
+
+**Rationale**: Refactoring across security boundaries is a classic silent-regression path. An explicit continuity check turns tribal knowledge into an executable assertion.
+
+---
+
+### SEC-T-003 — [LOW] Error-hygiene grep gate (T055) is the ONLY defense — needs inline constraint at handler tasks
+
+**Finding_id**: SEC-T-003
+**Location**: `specs/069-mcp-quick-setup-wizard/tasks.md` T019 (REST controller skeleton), T020 (handle_state), T021 (handle_step), T023 (handle_complete) — all Phase 3 US1 handler tasks — combined with T055 (Phase 8 grep gate for SEC-003)
+**OWASP category**: A05:2025-Security Misconfiguration
+**CWE**: CWE-209: Generation of Error Message Containing Sensitive Information
+**CVSS score**: 2.7 (Network / Low complexity / High privilege / User interaction / Unchanged / Low confidentiality impact)
+**Spec_kit_task**: TASK-SEC-T-003
+
+**Description**: SEC-003 (from the plan-phase review) landed as T055 — a Phase 8 grep gate asserting no `$e->getMessage()` or `$wpdb->last_error` leaks into REST error responses. The gate is correct, but it's the ONLY defense: T019/T020/T021/T023 (the actual handler-implementation tasks in Phase 3) don't cite the "no leaking internals" rule inline. A developer working on T021 in Phase 3 who catches an exception and reflexively passes `$e->getMessage()` into `WP_Error` won't notice the violation until Phase 8, at which point the fix requires a Phase 3 re-visit + re-review. Better pattern: embed the constraint AT implementation time (like T008 does for the CodeBlock dangerouslySetInnerHTML rule), with T055 as the belt-and-suspenders audit.
+
+**Recommendation**: Fold as **TASK-SEC-T-003** into Phase 3:
+> Amend T019/T020/T021/T023 descriptions to include: "Every `WP_Error` returned by this handler MUST use a hand-authored, user-facing message. Raw `$e->getMessage()`, `$wpdb->last_error`, transient key strings, or file paths MUST NEVER appear in the response `message` field. Reference: TASK-SEC-003 / T055."
+>
+> Requires a minor edit to tasks.md, not new tasks.
+
+**Rationale**: Compare with T008's inline pattern for SEC-004 — the constraint IS embedded at implementation time so devs see it while writing the code, not just at Phase 8 audit. T055 remains the enforcement audit, but the primary defense moves upstream where it belongs.
+
+---
+
+### SEC-T-004 — [LOW] 12-hour REST nonce expiry error surface (T026) lacks client-side test
+
+**Finding_id**: SEC-T-004
+**Location**: `specs/069-mcp-quick-setup-wizard/tasks.md` T026 (apiFetch nonce middleware wiring), T041 (REST PHPUnit — has server-side 403 test)
+**OWASP category**: A07:2025-Identification and Authentication Failures
+**CWE**: CWE-613: Insufficient Session Expiration
+**CVSS score**: 2.3 (Local / High complexity / High privilege / User interaction / Unchanged / Low availability impact)
+**Spec_kit_task**: TASK-SEC-T-004
+
+**Description**: T026 wires `apiFetch.createNonceMiddleware` and specifies: *"When a 403 error is caught in useWizardState's saveStep, surface a user-friendly error: 'Your session has expired. Please reload the page to continue.'"* T041 (REST PHPUnit) covers the server-side 403 branch. But **no test covers the client-side error surface** — the actual user-visible message on nonce expiry. If a future refactor of `useWizardState` accidentally drops the 403 handler, the wizard will show a generic "network error" instead of the friendly session-expired message — a UX regression, not a security regression per se, but the security intent (helping users recognize + recover from expired sessions) silently fails.
+
+**Recommendation**: Fold as **TASK-SEC-T-004** into Phase 3 (US1) or defer to Phase 8:
+> Add a client-side test asserting `useWizardState.saveStep()` surfaces the exact string "Your session has expired. Please reload the page to continue." when `apiFetch` throws a 403. **Blocker**: plugin has no Jest infra. Options:
+> (a) Add a lightweight Jest setup (~200 LOC test infra) and one component test. Cost: setup effort + ongoing maintenance.
+> (b) Manual QA checklist item in T061 explicitly asserting the message on a forced-403 scenario (e.g., set nonce lifetime to 60 seconds via `nonce_life` filter for the test run).
+>
+> Recommend (b) for this feature; escalate (a) to a follow-up if the wizard grows more client-side error paths.
+
+**Rationale**: Constitution §VII DoD is satisfied by manual QA per `quickstart.md`. Adding formal client-side testing infrastructure is out of scope for a single feature. Explicit checklist item + reproducer scenario is the right level of investment.
+
+## Confirmed secure patterns in the task list
+
+- **Foundational security first** — T012 (TASK-SEC-001 shared sanitizer) + T013 (parity PHPUnit) both land in Phase 2, BEFORE any user story phase. No user story can pass foundational without shared sanitizer available.
+- **Critical enforcement AT implementation time, not at audit** — T008 embeds the `dangerouslySetInnerHTML` prohibition INLINE at CodeBlock implementation (not just at Phase 8 grep). T022 embeds the F017-direct-service-call refactor inside the Step 3 handler task (not deferred). T026 embeds the apiFetch middleware wiring inside the React entry task. This is the correct pattern — SEC-T-003 flags one gap in this coverage (error-hygiene) that needs the same inline treatment.
+- **Layered audit gates in Phase 8** — T055 (error hygiene), T056 (no dangerouslySetInnerHTML), T057 (additive-only invariant), T058 (bundle-gating invariant) provide independent grep-based checks. These complement inline constraints; don't replace them.
+- **Every REST route has explicit permission + nonce test** — T041's 15-test coverage covers the full auth surface. No route ships without a 401/403 test.
+- **Activation redirect guard branches all tested** — T042 covers 4 guard branches (transient absent, non-admin skip, bulk-activation skip, network-activation skip) + happy path. Zero silent guard-bypass risk.
+- **Additive-only invariant enforced by grep gate** — T057 verifies FR-029/030 at merge time. No wizard PR can silently modify existing tabs / REST / DB schema.
+- **Test-hook naming convention** — no `_reset_for_tests` / `_for_testing` helpers introduced (B23 pattern avoided).
+
+## Action Plan & Next Steps
+
+1. **Durable Memory Preservation check** — **No new architectural patterns identified.** The four SEC-T-* findings are localized to this feature's task-list quality (mass-assignment whitelist enforcement, refactor-continuity assertion, inline-constraint-vs-grep-gate placement, client-side error-surface testing) rather than novel decisions. No `/speckit.memory-md.capture` needed. However, TASK-SEC-T-001's mass-assignment whitelist pattern is already documented in memory as B7 — this feature's application strengthens the pattern's evidence base; formal memory update deferred to `/speckit-memory-md-capture-from-diff` post-implementation.
+
+2. **Remediation planning** — No Critical or High findings; `/speckit.security-review.followup` NOT required. Fold SEC-T-001..004 into `tasks.md` as follow-up tasks (or amend existing tasks per the "inline constraint" recommendations):
+   - **TASK-SEC-T-001** — new Phase 2 task, blocking (Medium — mass-assignment whitelist in `MCPServerFieldSanitizer`).
+   - **TASK-SEC-T-002** — new Phase 3 task, alongside T032 (Low — AC editor extraction continuity check).
+   - **TASK-SEC-T-003** — amendment to T019/T020/T021/T023 descriptions (Low — inline error-hygiene constraint).
+   - **TASK-SEC-T-004** — new Phase 8 task, extends T061 manual QA (Low — client-side 403 error message assertion).
+
+3. **Recommended next command** — `/speckit-architecture-guard-refactor-generator` (Step 5 of the governed-tasks orchestrator) — converts any remaining architecture violations from the plan-phase review into explicit task-level items. Both plan-phase findings are already folded (TASK-SEC-001 = T012, TASK-SEC-002 = T022), so the refactor-generator is expected to report **"none"** — but the check is required per the governed-tasks orchestration flow.
+
+---
+
+## Memory Hub INDEX.md Row
+
+```text
+| docs/security-reviews/2026-08-16-069-mcp-quick-setup-wizard-tasks.md | tasks | 2026-08-16 | LOW | C:0 H:0 M:1 L:3 I:0 | A01,A03,A05,A07 |
+```
+
+Save location: this tasks-phase review is appended to `specs/069-mcp-quick-setup-wizard/security-constraints.md` (same file as the plan-phase review) so the architecture-guard's downstream reading finds both in one place. Copy to `docs/security-reviews/` if you want the standalone audit-trail entry — matches historical convention per `docs/memory/INDEX.md` §Security Reviews.
+
