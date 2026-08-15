@@ -62,6 +62,19 @@ function acrossai_mcp_manager_activate() {
 	require_once __DIR__ . '/vendor/autoload_packages.php';
 	require_once plugin_dir_path( __FILE__ ) . 'includes/Activator.php';
 	Includes\Activator::activate();
+
+	// F069 T014 — Set the one-shot redirect signal so the very next admin
+	// page load lands the activating admin on the Quick Setup wizard step 1.
+	// Consumed by ActivationRedirect::maybe_redirect() on `admin_init` @ 5.
+	// Short TTL (30s) so a WP-CLI activation without a subsequent admin
+	// request lets the signal expire naturally instead of ambushing the
+	// operator on their next unrelated admin visit hours later.
+	// function_exists() guard is defensive: WordPress guarantees set_transient
+	// is loaded here (we're running under the WP activation lifecycle), but a
+	// broken WP core install would fatal before this — cheap belt-and-suspenders.
+	if ( function_exists( 'set_transient' ) ) {
+		set_transient( 'acrossai_mcp_manager_quick_setup_do_redirect', '1', 30 );
+	}
 }
 
 /**

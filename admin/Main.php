@@ -137,6 +137,66 @@ class Main {
 		// F037 Embeds — enqueue is self-registered by the tab class itself
 		// (EmbedsTab::register() wires it on admin_enqueue_scripts). Nothing
 		// to do here. See AbstractReactMountServerTab for the pattern.
+
+		// F069 Quick Setup Wizard — enqueue only on ?quick-setup=1.
+		// SC-007: the ~200KB React bundle MUST NOT load on the list-table
+		// view or any per-server-edit tab.
+		$this->maybe_enqueue_quick_setup_app();
+	}
+
+	/**
+	 * F069 T018 — Enqueue the Quick Setup wizard React app.
+	 *
+	 * Gated on `?quick-setup=1` — bundle never loads on any other admin
+	 * page (SC-007). Mirrors the F017 / F020 enqueue shape (asset.php
+	 * manifest → wp_enqueue_script → wp_localize_script for bootstrap
+	 * payload → optional CSS enqueue via file_exists guard).
+	 *
+	 * @since 0.2.11
+	 * @return void
+	 */
+	private function maybe_enqueue_quick_setup_app(): void {
+		// phpcs:disable WordPress.Security.NonceVerification.Recommended -- Read-only routing check.
+		if ( empty( $_GET['quick-setup'] ) || '1' !== (string) $_GET['quick-setup'] ) {
+			return;
+		}
+		// phpcs:enable WordPress.Security.NonceVerification.Recommended
+
+		$asset = $this->read_asset_manifest( 'build/js/quick-setup.asset.php' );
+		if ( null === $asset ) {
+			return;
+		}
+
+		wp_enqueue_script(
+			'acrossai-mcp-manager-quick-setup',
+			esc_url( \ACROSSAI_MCP_MANAGER_PLUGIN_URL . 'build/js/quick-setup.js' ),
+			$asset['dependencies'],
+			$asset['version'],
+			true // load in footer.
+		);
+		wp_set_script_translations( 'acrossai-mcp-manager-quick-setup', 'acrossai-mcp-manager' );
+
+		$css_path = \ACROSSAI_MCP_MANAGER_PLUGIN_PATH . 'build/js/quick-setup.css';
+		if ( file_exists( $css_path ) ) {
+			wp_enqueue_style(
+				'acrossai-mcp-manager-quick-setup',
+				esc_url( \ACROSSAI_MCP_MANAGER_PLUGIN_URL . 'build/js/quick-setup.css' ),
+				array(),
+				$asset['version']
+			);
+		}
+
+		wp_localize_script(
+			'acrossai-mcp-manager-quick-setup',
+			'acrossaiMcpQuickSetup',
+			array(
+				'restUrl'   => esc_url_raw( rest_url( 'acrossai-mcp-manager/v1/quick-setup' ) ),
+				'restNonce' => wp_create_nonce( 'wp_rest' ),
+				'adminUrl'  => esc_url_raw( admin_url( 'admin.php?page=acrossai_mcp_manager' ) ),
+				'siteUrl'   => esc_url_raw( untrailingslashit( home_url() ) ),
+				'logoUrl'   => esc_url_raw( \ACROSSAI_MCP_MANAGER_PLUGIN_URL . 'assets/quick-setup/acrossai-logo.svg' ),
+			)
+		);
 	}
 
 	/**

@@ -380,6 +380,14 @@ final class Main {
 		$this->loader->add_action( 'admin_init', $settings, 'maybe_seed_default_server', 4 );
 		$this->loader->add_action( 'admin_init', $settings, 'handle_actions', 5 );
 
+		// F069 T015/T024 — Quick Setup Wizard activation redirect. Fires at
+		// admin_init @ 5 (same slot as handle_actions but different handler);
+		// on the very next admin page load after plugin activation, the
+		// transient set inside acrossai_mcp_manager_activate() (T014) is
+		// consumed here and the activating admin is redirected to step 1.
+		$quick_setup_redirect = \AcrossAI_MCP_Manager\Admin\Partials\QuickSetup\ActivationRedirect::instance();
+		$this->loader->add_action( 'admin_init', $quick_setup_redirect, 'maybe_redirect', 5 );
+
 		/**
 		 * Shared AcrossAI Settings page — MCP tab (Feature 012).
 		 *
@@ -548,6 +556,22 @@ final class Main {
 		 */
 		$tools_rest = \AcrossAI_MCP_Manager\Includes\REST\ToolsController::instance();
 		$this->loader->add_action( 'rest_api_init', $tools_rest, 'register_routes' );
+
+		/**
+		 * F069 T019/T024 — Quick Setup Wizard REST controller.
+		 *
+		 * Registers 3 routes under `/acrossai-mcp-manager/v1/quick-setup/*`:
+		 *   GET  /state    — snapshot for the React app (servers, abilities,
+		 *                    plugin states, connection methods, scratchpad)
+		 *   POST /step     — persist per-step scratchpad + delegate authoritative
+		 *                    writes to MCPServerQuery + MCPServerAbilityQuery
+		 *   POST /complete — clear scratchpad, 204 No Content
+		 *
+		 * All routes gated on manage_options (S2). POSTs additionally require
+		 * X-WP-Nonce for wp_rest (S1). See contracts/quick-setup-rest.md.
+		 */
+		$quick_setup_rest = \AcrossAI_MCP_Manager\Includes\REST\QuickSetupController::instance();
+		$this->loader->add_action( 'rest_api_init', $quick_setup_rest, 'register_routes' );
 
 		/**
 		 * Feature 037 — Embeds tab self-registration is SKIPPED in 0.2.10+.

@@ -519,15 +519,28 @@ class Settings {
 	// ─────────────────────────────────────────────────────────────────────────
 
 	/**
-	 * Dispatcher: route to list / create / edit based on the `action` query var.
+	 * Dispatcher: route to list / create / edit / quick-setup based on
+	 * the `action` + `quick-setup` query vars.
+	 *
+	 * F069 T017 — When `?quick-setup=1` is present, hijack the render BEFORE
+	 * any list-table or edit-page logic runs and hand off to QuickSetupPage.
+	 * The check lives here (not in a filter) because the parent-menu render
+	 * callback is registered via `add_menu_page`; intercepting at any later
+	 * point risks partial-render bleed-through.
 	 */
 	public function render_list_page(): void {
 		if ( ! current_user_can( 'manage_options' ) ) {
 			wp_die( esc_html__( 'You do not have permission to access this page.', 'acrossai-mcp-manager' ) );
 		}
 
-		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		// phpcs:disable WordPress.Security.NonceVerification.Recommended
+		if ( ! empty( $_GET['quick-setup'] ) && '1' === (string) $_GET['quick-setup'] ) {
+			QuickSetup\QuickSetupPage::instance()->render();
+			return;
+		}
+
 		$action = isset( $_GET['action'] ) ? sanitize_key( wp_unslash( $_GET['action'] ) ) : '';
+		// phpcs:enable WordPress.Security.NonceVerification.Recommended
 
 		if ( 'create' === $action ) {
 			$this->render_create_form();
