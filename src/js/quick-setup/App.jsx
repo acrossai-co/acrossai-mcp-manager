@@ -10,20 +10,26 @@
  *     whose precondition is unmet (no server_id for step 2+), silently
  *     redirects to the furthest legitimate step.
  *   - Renders <StepLayout>{stepComponent}</StepLayout>.
- *
- * MVP note (Phase 3B): Step 1-5 + Completion components are stubs today
- * (Phase 3C lands them). The shell renders + navigates correctly; each
- * step body shows a placeholder.
+ *   - Provides WizardGuardContext so per-step `useAdvanceGuard()` calls
+ *     can lift their `canAdvance` state up to the Continue button.
  *
  * @package AcrossAI_MCP_Manager
  */
 
-import { useEffect, useMemo } from '@wordpress/element';
+import { useEffect, useMemo, useState, useCallback } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import Notice from './components/Notice.jsx';
 import StepLayout from './StepLayout.jsx';
 import useWizardRouter from './hooks/useWizardRouter.js';
 import useWizardState from './hooks/useWizardState.js';
+import { WizardGuardContext } from './hooks/useAdvanceGuard.js';
+
+import Step1_ServerPick from './steps/Step1_ServerPick.jsx';
+import Step2_AccessControl from './steps/Step2_AccessControl.jsx';
+import Step3_Abilities from './steps/Step3_Abilities.jsx';
+import Step4_EnableServer from './steps/Step4_EnableServer.jsx';
+import Step5_MethodGrid from './steps/Step5_MethodGrid.jsx';
+import Completion from './steps/Completion.jsx';
 
 /**
  * Return the furthest step the current wizardState legitimately supports.
@@ -37,54 +43,19 @@ const furthestLegitimateStep = ( wizardState ) => {
 	return null; // null → no forced redirect.
 };
 
-/**
- * Placeholder step body (Phase 3B stub — real step components ship in Phase 3C).
- */
-const StepPlaceholder = ( { step } ) => (
-	<div>
-		<h2 className="qs__step-title">
-			{ __( 'Step', 'acrossai-mcp-manager' ) } { step }
-		</h2>
-		<p className="qs__step-subtitle">
-			{ __(
-				'This step will render its content once Phase 3C ships the individual step components.',
-				'acrossai-mcp-manager'
-			) }
-		</p>
-	</div>
-);
-
-const CompletionPlaceholder = () => (
-	<div>
-		<h2 className="qs__step-title">
-			{ __( "You're all set!", 'acrossai-mcp-manager' ) }
-		</h2>
-		<p className="qs__step-subtitle">
-			{ __(
-				'Completion screen ships in Phase 3C.',
-				'acrossai-mcp-manager'
-			) }
-		</p>
-	</div>
-);
-
-/**
- * Step-registry — maps URL step value to the component to render.
- * Phase 3C will swap StepPlaceholder for the real Step1_ServerPick,
- * Step2_AccessControl, etc.
- */
 const stepRegistry = {
-	'1': ( props ) => <StepPlaceholder step="1" { ...props } />,
-	'2': ( props ) => <StepPlaceholder step="2" { ...props } />,
-	'3': ( props ) => <StepPlaceholder step="3" { ...props } />,
-	'4': ( props ) => <StepPlaceholder step="4" { ...props } />,
-	'5': ( props ) => <StepPlaceholder step="5" { ...props } />,
-	'done': () => <CompletionPlaceholder />,
+	'1': () => <Step1_ServerPick />,
+	'2': () => <Step2_AccessControl />,
+	'3': () => <Step3_Abilities />,
+	'4': () => <Step4_EnableServer />,
+	'5': () => <Step5_MethodGrid />,
+	'done': () => <Completion />,
 };
 
 const App = () => {
 	const router = useWizardRouter();
 	const { state, isLoading, error, refetch, clearError } = useWizardState();
+	const [ canAdvance, setCanAdvance ] = useState( true );
 
 	// Hydrate on mount.
 	useEffect( () => {
@@ -93,19 +64,17 @@ const App = () => {
 		}
 	}, [] ); // eslint-disable-line react-hooks/exhaustive-deps
 
-	// Step 4 auto-skip (US4) — jump 3→5 forward, 5→3 back when the
-	// selected server is already enabled.
+	// Step 4 auto-skip (US4).
 	useEffect( () => {
 		if ( state.status !== 'ready' ) {
 			return;
 		}
 		if ( router.step === '4' && state.wizardState.enabled === true ) {
-			// User is on step 4 but the server is already enabled — skip.
 			router.goTo( '5' );
 		}
 	}, [ router.step, state.status, state.wizardState.enabled, router ] );
 
-	// US5 deep-link precondition guard — silent redirect to furthest legit step.
+	// US5 deep-link precondition guard.
 	useEffect( () => {
 		if ( state.status !== 'ready' ) {
 			return;
@@ -119,26 +88,24 @@ const App = () => {
 		}
 	}, [ router.step, state.status, state.wizardState, router ] );
 
-	// Total steps for progress bar — 4 when Step 4 is auto-skipped.
 	const totalSteps = useMemo( () => {
 		return state.wizardState.enabled === true ? 4 : 5;
 	}, [ state.wizardState.enabled ] );
 
-	// Which step index within the reduced total to display.
 	const displayIndex = useMemo( () => {
 		if ( router.step === 'done' ) {
 			return totalSteps;
 		}
 		let idx = parseInt( router.step, 10 );
 		if ( state.wizardState.enabled === true && idx > 4 ) {
-			idx -= 1; // account for skipped step 4.
+			idx -= 1;
 		}
 		return idx;
 	}, [ router.step, totalSteps, state.wizardState.enabled ] );
 
 	const renderCurrentStep = () => {
 		const factory = stepRegistry[ router.step ] || stepRegistry[ '1' ];
-		return factory( { state, router } );
+		return factory();
 	};
 
 	// Loading screen (initial hydrate).
@@ -152,36 +119,51 @@ const App = () => {
 		);
 	}
 
+	// Memoize the context value so consumers don't rebuild on every parent render.
+	const guardContext = useMemo(
+		() => ( { setCanAdvance } ),
+		[ setCanAdvance ]
+	);
+
+	const handleContinue = useCallback( async () => {
+		if ( router.step === '5' ) {
+			// Finish button — /complete + navigate to done.
+			router.goTo( 'done' );
+			return;
+		}
+		router.advance( { skipStep4: state.wizardState.enabled === true } );
+	}, [ router, state.wizardState.enabled ] );
+
 	return (
-		<StepLayout
-			step={ router.step }
-			displayIndex={ displayIndex }
-			totalSteps={ totalSteps }
-			isLoading={ isLoading }
-			canAdvance={ true /* Phase 3C: per-step guards via context */ }
-			onBack={ () =>
-				router.back( { skipStep4: state.wizardState.enabled === true } )
-			}
-			onAdvance={ () =>
-				router.advance( { skipStep4: state.wizardState.enabled === true } )
-			}
-			onExit={ router.exit }
-		>
-			{ error && (
-				<Notice status="error">
-					{ error.message }
-					{ ' ' }
-					<button
-						type="button"
-						className="qs-btn qs-btn--link"
-						onClick={ clearError }
-					>
-						{ __( 'Dismiss', 'acrossai-mcp-manager' ) }
-					</button>
-				</Notice>
-			) }
-			{ renderCurrentStep() }
-		</StepLayout>
+		<WizardGuardContext.Provider value={ guardContext }>
+			<StepLayout
+				step={ router.step }
+				displayIndex={ displayIndex }
+				totalSteps={ totalSteps }
+				isLoading={ isLoading }
+				canAdvance={ canAdvance }
+				onBack={ () =>
+					router.back( { skipStep4: state.wizardState.enabled === true } )
+				}
+				onAdvance={ handleContinue }
+				onExit={ router.exit }
+			>
+				{ error && (
+					<Notice status="error">
+						{ error.message }
+						{ ' ' }
+						<button
+							type="button"
+							className="qs-btn qs-btn--link"
+							onClick={ clearError }
+						>
+							{ __( 'Dismiss', 'acrossai-mcp-manager' ) }
+						</button>
+					</Notice>
+				) }
+				{ renderCurrentStep() }
+			</StepLayout>
+		</WizardGuardContext.Provider>
 	);
 };
 
