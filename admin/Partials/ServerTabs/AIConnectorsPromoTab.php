@@ -1,7 +1,7 @@
 <?php
 /**
  * AI Connectors promo tab — fallback placeholder when the
- * acrossai-ai-connectors companion add-on is not installed / not active.
+ * acrossai-pro companion add-on is not installed / not active.
  *
  * Post-Feature 040, the real AI Connectors admin surface lives in the
  * companion plugin. When the companion is active, it registers its real
@@ -42,18 +42,21 @@ final class AIConnectorsPromoTab extends AbstractServerTab {
 
 	/**
 	 * Companion plugin slug — the folder name under wp-content/plugins/.
+	 * Renamed from `acrossai-ai-connectors` to `acrossai-pro`; matches the
+	 * vendor addons-registry slug the shared Add-ons page installs.
 	 */
-	private const SIBLING_SLUG = 'acrossai-ai-connectors';
-
-	/**
-	 * Shared Add-ons page slug — matches `\AcrossAI_Main_Menu\SettingsPage::ADDONS_SLUG`.
-	 */
-	private const ADDONS_PAGE_SLUG = 'acrossai-addons';
+	private const SIBLING_SLUG = 'acrossai-pro';
 
 	/**
 	 * External landing page for the AI Connectors add-on.
 	 */
 	private const LANDING_URL = 'https://acrossai.co/ai-connectors/';
+
+	/**
+	 * Public pricing page — destination for the "Start free trial" CTA shown
+	 * when the companion add-on is not installed on this site.
+	 */
+	private const PRICING_URL = 'https://acrossai.co/pricing/';
 
 	/**
 	 * Public docs — "Extending connector profiles" guide.
@@ -151,13 +154,20 @@ final class AIConnectorsPromoTab extends AbstractServerTab {
 	 * @return void
 	 */
 	private function render_hero( string $state ): void {
-		$cta_label = 'inactive' === $state
+		$is_inactive = 'inactive' === $state;
+		$cta_label   = $is_inactive
 			? __( 'Activate add-on', 'acrossai-mcp-manager' )
-			: __( 'Install add-on', 'acrossai-mcp-manager' );
-		$cta_url   = $this->resolve_cta_url( $state );
+			: __( 'Start free trial', 'acrossai-mcp-manager' );
+		$cta_url     = $this->resolve_cta_url( $state );
+
+		// The not-installed CTA leaves wp-admin for the public pricing page —
+		// open it in a new tab so the operator keeps their server-edit screen.
+		$cta_target = $is_inactive ? '' : ' target="_blank" rel="noopener noreferrer"';
 		?>
 <div class="acai-aic-promo">
 	<div class="acai-aic-promo__card">
+
+		<?php $this->render_trial_banner(); ?>
 
 		<img class="acai-aic-promo__logo" src="<?php echo esc_url( self::LOGO_URL ); ?>" alt="<?php esc_attr_e( 'AcrossAI', 'acrossai-mcp-manager' ); ?>" />
 
@@ -169,7 +179,7 @@ final class AIConnectorsPromoTab extends AbstractServerTab {
 		</div>
 
 		<h2 class="acai-aic-promo__title">
-			<?php esc_html_e( 'Connect WordPress to Claude, ChatGPT & Grok in one click', 'acrossai-mcp-manager' ); ?>
+			<?php esc_html_e( 'Connect WordPress to Claude, ChatGPT, Grok, Gemini & Cursor in one click', 'acrossai-mcp-manager' ); ?>
 		</h2>
 
 		<p class="acai-aic-promo__lede">
@@ -180,6 +190,8 @@ final class AIConnectorsPromoTab extends AbstractServerTab {
 			<span class="acai-aic-promo__client-pill">Claude</span>
 			<span class="acai-aic-promo__client-pill">ChatGPT</span>
 			<span class="acai-aic-promo__client-pill">Grok</span>
+			<span class="acai-aic-promo__client-pill">Gemini</span>
+			<span class="acai-aic-promo__client-pill">Cursor</span>
 		</div>
 
 		<ul class="acai-aic-promo__features">
@@ -202,7 +214,7 @@ final class AIConnectorsPromoTab extends AbstractServerTab {
 		</ul>
 
 		<div class="acai-aic-promo__actions">
-			<a class="acai-aic-promo__cta" href="<?php echo esc_url( $cta_url ); ?>">
+			<a class="acai-aic-promo__cta" href="<?php echo esc_url( $cta_url ); ?>"<?php echo $cta_target; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Static literal, no user input. ?>>
 				<?php echo esc_html( $cta_label ); ?>
 			</a>
 			<a class="acai-aic-promo__link" href="<?php echo esc_url( self::LANDING_URL ); ?>" target="_blank" rel="noopener noreferrer">
@@ -220,12 +232,39 @@ final class AIConnectorsPromoTab extends AbstractServerTab {
 	}
 
 	/**
+	 * Emits the launch-offer banner that sits full-bleed across the top of
+	 * the promo card. Rendered for both promo states — 'missing' (stage 1)
+	 * and 'inactive' (stage 2) — since the trial is what unlocks the add-on
+	 * in either case. Never reached in the 'active' state because the whole
+	 * card is skipped there.
+	 *
+	 * Copy is evergreen (no fixed end date), so the banner has no expiry
+	 * condition — it shows whenever the promo card itself shows.
+	 *
+	 * @return void
+	 */
+	private function render_trial_banner(): void {
+		printf(
+			'<div class="acai-aic-promo__banner">
+				<p class="acai-aic-promo__banner-text">
+					<strong>%1$s</strong>
+					<span>%2$s</span>
+				</p>
+				<a class="acai-aic-promo__banner-cta" href="%3$s" target="_blank" rel="noopener noreferrer">%4$s</a>
+			</div>',
+			esc_html__( 'Start today — free for 30 days.', 'acrossai-mcp-manager' ),
+			esc_html__( 'No credit card required.', 'acrossai-mcp-manager' ),
+			esc_url( self::PRICING_URL ),
+			esc_html__( 'Start free trial', 'acrossai-mcp-manager' )
+		);
+	}
+
+	/**
 	 * Resolves the destination URL for the primary CTA. Depends on state:
 	 *
 	 * - inactive : link to plugins.php with a nonce'd activate action.
-	 * - missing  : link to the shared Add-ons page, falling back to the
-	 *              external landing page when the Add-ons submenu hasn't
-	 *              been registered yet (main-menu vendor bootstrap race).
+	 * - missing  : link to the public pricing page, where the operator starts
+	 *              the free trial before the add-on can be installed.
 	 *
 	 * @param string $state Companion state — 'inactive' or 'missing'.
 	 * @return string
@@ -234,8 +273,8 @@ final class AIConnectorsPromoTab extends AbstractServerTab {
 		if ( 'inactive' === $state ) {
 			$plugin_file = $this->find_sibling_plugin_file();
 			if ( null === $plugin_file ) {
-				// Race: deleted between resolve_state() and here — fall through to install path.
-				return $this->resolve_install_url();
+				// Race: deleted between resolve_state() and here — fall through to the trial path.
+				return self::PRICING_URL;
 			}
 			return wp_nonce_url(
 				add_query_arg(
@@ -248,17 +287,7 @@ final class AIConnectorsPromoTab extends AbstractServerTab {
 				'activate-plugin_' . $plugin_file
 			);
 		}
-		return $this->resolve_install_url();
-	}
-
-	/**
-	 * Add-ons page URL with landing-page fallback.
-	 *
-	 * @return string
-	 */
-	private function resolve_install_url(): string {
-		$url = menu_page_url( self::ADDONS_PAGE_SLUG, false );
-		return empty( $url ) ? self::LANDING_URL : (string) $url;
+		return self::PRICING_URL;
 	}
 
 	/**
@@ -290,9 +319,9 @@ final class AIConnectorsPromoTab extends AbstractServerTab {
 	 * Prefers `\AcrossAI_Main_Menu\AddonsInstaller::find_plugin_file()` when
 	 * the vendor helper is loaded (handles edge cases where the plugin folder
 	 * name differs from the slug). Falls back to a `get_plugins()` scan
-	 * matching entries whose path starts with `acrossai-ai-connectors/`.
+	 * matching entries whose path starts with `acrossai-pro/`.
 	 *
-	 * @return string|null Plugin file path (e.g. `acrossai-ai-connectors/acrossai-ai-connectors.php`) or null when missing.
+	 * @return string|null Plugin file path (e.g. `acrossai-pro/acrossai-pro.php`) or null when missing.
 	 */
 	private function find_sibling_plugin_file(): ?string {
 		if ( class_exists( '\\AcrossAI_Main_Menu\\AddonsInstaller' ) ) {
@@ -356,9 +385,65 @@ final class AIConnectorsPromoTab extends AbstractServerTab {
 	border-radius: 14px;
 	padding: 32px 36px 28px;
 	text-align: center;
+	overflow: hidden; /* Clips the full-bleed banner to the card's rounded top. */
 	box-shadow: 0 2px 8px -4px rgba(85,56,238,0.12), 0 1px 3px rgba(0,0,0,.05);
 }
 .acai-aic-promo__card-glow { display: none; }
+/* Launch-offer banner — full-bleed across the card's top edge. The negative
+   margins cancel the card's 32px/36px padding; the radius is the card's 14px
+   minus its 1px border so the corners sit flush inside it. */
+.acai-aic-promo__banner {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 16px;
+	flex-wrap: wrap;
+	margin: -32px -36px 24px;
+	padding: 12px 20px;
+	background: linear-gradient(90deg, #312e81 0%, #4338ca 55%, #4f46e5 100%);
+	border-radius: 13px 13px 0 0;
+	text-align: center;
+}
+/* Two stacked lines: bold offer on top, the no-card reassurance beneath. */
+.acai-aic-promo__banner-text {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	margin: 0;
+	padding: 0;
+	color: #dbeafe;
+	font-size: 13px;
+	line-height: 1.4;
+}
+.acai-aic-promo__banner-text strong {
+	color: #ffffff;
+	font-weight: 700;
+	font-size: 13.5px;
+}
+.acai-aic-promo__banner-cta {
+	flex: 0 0 auto;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	background: #ffffff;
+	color: #3730a3 !important;
+	font-size: 13px;
+	font-weight: 600;
+	text-decoration: none;
+	padding: 7px 16px;
+	border-radius: 999px;
+	transition: background .15s ease, color .15s ease;
+}
+.acai-aic-promo__banner-cta:hover,
+.acai-aic-promo__banner-cta:focus {
+	background: #eef2ff;
+	color: #312e81 !important;
+	text-decoration: none;
+}
+.acai-aic-promo__banner-cta:focus-visible {
+	outline: 2px solid #ffffff;
+	outline-offset: 2px;
+}
 .acai-aic-promo__logo {
 	display: block;
 	width: auto;

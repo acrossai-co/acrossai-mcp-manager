@@ -23,7 +23,7 @@
  * built-in placeholder tabs. This matches WP-native filter-override
  * semantics and enables the "built-in placeholder → companion overrides
  * when active" pattern used by AIConnectorsPromoTab (F040 promo card falls
- * back when the acrossai-ai-connectors add-on is not installed).
+ * back when the acrossai-pro add-on is not installed).
  *
  * Normalization + dedup mirrors vendor `\AcrossAI_Main_Menu\Tabs::get_tabs()`
  * (extracted from `TabbedPageRenderer::resolve_tabs()` in 0.0.13 into a
@@ -110,7 +110,7 @@ final class Registry {
 	 *
 	 * Post-0.2.10 the built-in tab count is 11 (was 12 pre-0.2.10 before the
 	 * F037 Embeds tab was hidden). The `AIConnectorsPromoTab` entry at
-	 * priority 35 is a PLACEHOLDER — when the acrossai-ai-connectors companion
+	 * priority 35 is a PLACEHOLDER — when the acrossai-pro companion
 	 * plugin is active, it registers its real `AIConnectorsTab` via the
 	 * `acrossai_mcp_manager_server_tabs` filter (also priority 35), and
 	 * Registry's last-wins dedup (F040 follow-up) replaces the placeholder
