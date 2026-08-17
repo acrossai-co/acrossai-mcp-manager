@@ -45,7 +45,7 @@ MCP Manager ships with three connection styles out of the box, plus one optional
 * **MCP Client (npx bridge)** — the default. Paste a JSON config into Claude Desktop, VS Code, Cursor, etc. Uses `@automattic/mcp-wordpress-remote@latest` with a WordPress Application Password. → [Docs](https://acrossai.co/docs/mcp-connect-a-client/)
 * **CLI Connections (browser approval)** — one command in the terminal, one click in the browser, zero password copying. → [Docs](https://acrossai.co/docs/mcp-cli-connections/)
 * **WP-CLI (STDIO)** — local subprocess, no network credential transmission. Best for CI or local dev boxes. → [Docs](https://acrossai.co/docs/mcp-wp-cli-stdio/)
-* **AI Connectors (paid add-on)** — one-click Claude, ChatGPT, and Grok hosted-OAuth connectors. Requires the separate [AcrossAI AI Connectors plugin](https://acrossai.co/ai-connectors/) (14-day money-back). → [Docs](https://acrossai.co/docs/mcp-ai-connectors/)
+* **AI Connectors (paid add-on)** — one-click Claude, ChatGPT, Grok, Gemini, and Cursor hosted-OAuth connectors. Requires the separate [AcrossAI Pro plugin](https://acrossai.co/pricing/) (14-day money-back). → [Docs](https://acrossai.co/docs/mcp-ai-connectors/)
 
 = Requirements =
 
@@ -87,7 +87,7 @@ Yes — each site in the network configures independently.
 
 = Do I need the paid AI Connectors add-on? =
 
-Only if you want the one-click hosted-OAuth flow for Claude, ChatGPT, or Grok. All other connection styles (MCP Client, CLI, WP-CLI STDIO) are free and shipped with this plugin. See [AI Connectors add-on](https://acrossai.co/ai-connectors/).
+Only if you want the one-click hosted-OAuth flow for Claude, ChatGPT, Grok, Gemini, or Cursor. All other connection styles (MCP Client, CLI, WP-CLI STDIO) are free and shipped with this plugin. See [AcrossAI Pro](https://acrossai.co/pricing/).
 
 == Support ==
 
@@ -103,6 +103,12 @@ Only if you want the one-click hosted-OAuth flow for Claude, ChatGPT, or Grok. A
 4. Per-provider configuration file locations and top-level keys
 
 == Changelog ==
+
+= Unreleased =
+* **Fix — Companion add-on slug updated `acrossai-ai-connectors` → `acrossai-pro`.** `AIConnectorsPromoTab::SIBLING_SLUG` now matches the renamed paid plugin (`acrossai-pro/acrossai-pro.php`), which is what the shared Add-ons page installs and what registers the real `AIConnectorsTab` via `acrossai_mcp_manager_server_tabs` at priority 35. Without this, `find_sibling_plugin_file()` never located the add-on: the installed-but-inactive state was misread as not-installed, and the "Activate add-on" CTA could not build its `plugins.php?action=activate` nonce URL. Docblock references in `admin/Partials/ServerTabs/Registry.php` refreshed to the new slug. Historical F040 migration comments elsewhere still name the old slug intentionally — they describe what happened at the time.
+* **UI — Connectors/Integrations promo card: trial-first CTA + launch-offer banner.** On the per-server-edit **Connectors/Integrations** tab (`?page=acrossai_mcp_manager&action=edit&server=<id>&tab=ai-connectors`), the promo card shown when AcrossAI Pro is missing or inactive gains: (1) a full-bleed gradient banner across the card's top edge — "Start today — free for 30 days." / "No credit card required." with a white pill **Start free trial** button linking to `https://acrossai.co/pricing/` in a new tab — rendered in both promo states (not-installed and installed-but-inactive); (2) the not-installed primary CTA relabelled **Install add-on** → **Start free trial**, pointing at the pricing page instead of the shared Add-ons page (new `PRICING_URL` constant; the `ADDONS_PAGE_SLUG` constant and `resolve_install_url()` helper are removed). The installed-but-inactive CTA is unchanged — still "Activate add-on" with its nonced same-tab activate link — and the active state still renders no card at all.
+* **Copy — Supported AI clients expanded to Claude, ChatGPT, Grok, Gemini, and Cursor.** Promo-card headline and client pills updated; `README.txt` Connection Types bullet and the "Do I need the paid AI Connectors add-on?" FAQ answer list all five and now link to the AcrossAI Pro pricing page rather than the retired `acrossai.co/ai-connectors/` plugin page.
+* **No version bump** — plugin header, `ACROSSAI_MCP_MANAGER_VERSION`, and `Stable tag` are untouched; these entries ship with the next tagged release.
 
 = 0.2.10 =
 * **Admin — Embeds tab hidden from the per-server-edit page.** The **Embeds** tab (formerly reached at `?page=acrossai_mcp_manager&action=edit&server=<id>&tab=embeds`) is no longer registered in `Registry::all_tabs()` and its self-registration in `Main::define_public_hooks()` (`EmbedsTab::register()`) is now commented out — so the tab's REST controller (`/acrossai-mcp-manager/v1/servers/{server_id}/embeds`) and its React bundle (`build/js/embeds.js` + `.css`, ~389 KiB) no longer enqueue on the server-edit screen. Direct URL access to `?tab=embeds` falls through to Registry's default (first surviving tab = Overview) rather than 404 — same graceful-fallback path any unknown slug takes. Built-in tab count: 12 → 11. The `admin/Partials/ServerTabs/EmbedsTab.php` class file, the underlying `[acrossai_mcp_embed]` shortcode, the block, and the `AbstractEmbedTransport` transports in `includes/Embeds/` are all retained — hiding is admin-UI-only; the frontend embed rendering pipeline is unaffected. Re-enabling the tab is a two-line change (re-add `EmbedsTab::instance()` to Registry + uncomment the `register()` call). Tests in `tests/phpunit/Admin/ServerTabs/RegistryTest.php` updated: expected counts adjusted (12 → 11 for canonical + database-source servers; 10 → 9 for plugin-source servers); ordering array + docblock counts refreshed; a new `assertNotContains( 'embeds', $slugs )` line locks in the invariant.
