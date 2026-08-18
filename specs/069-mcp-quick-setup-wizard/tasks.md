@@ -108,9 +108,9 @@ description: "Task list for Feature 069 — MCP Quick Setup Wizard"
 
 **Independent Test**: From any admin page (not the plugin page) as `manage_options`, click the "Quick Setup for MCP" chip in the top admin bar → wizard opens at step 1. As an Editor, chip is absent.
 
-- [ ] T044 [US2] Implement `admin/Partials/QuickSetup/AdminBarEntry.php` — singleton; single public method `register_node(\WP_Admin_Bar $wp_admin_bar): void` per `plan.md` TASK-1 snippet. Cap check `current_user_can('manage_options')` first; then `$wp_admin_bar->add_node(['id' => 'acrossai-mcp-quick-setup', 'title' => '<span class="ab-icon dashicons dashicons-admin-tools" style="top:3px;"></span>' . esc_html__('Quick Setup for MCP', 'acrossai-mcp-manager'), 'href' => admin_url('admin.php?page=acrossai_mcp_manager&quick-setup=1&step=1'), 'meta' => ['title' => __('Guided 5-step MCP configuration', 'acrossai-mcp-manager')]])`.
-- [ ] T045 [US2] Wire `AdminBarEntry` in `includes/Main.php::define_admin_hooks()`: `$admin_bar = AdminBarEntry::instance(); $this->loader->add_action('admin_bar_menu', $admin_bar, 'register_node', 100);` per Constitution §Boot Flow named-variable pattern.
-- [ ] T046 [P] [US2] `tests/phpunit/Admin/QuickSetup/AdminBarEntryTest.php` — test node presence for admin (`current_user_can('manage_options')` mocked true) + absence for non-admin (Editor role); assert node id, title text, href match spec.
+- [x] T044 [US2] Implement `admin/Partials/QuickSetup/AdminBarEntry.php` — singleton; single public method `register_node(\WP_Admin_Bar $wp_admin_bar): void` per `plan.md` TASK-1 snippet. Cap check `current_user_can('manage_options')` first; then `$wp_admin_bar->add_node(['id' => 'acrossai-mcp-quick-setup', 'title' => '<span class="ab-icon dashicons dashicons-admin-tools" style="top:3px;"></span>' . esc_html__('Quick Setup for MCP', 'acrossai-mcp-manager'), 'href' => admin_url('admin.php?page=acrossai_mcp_manager&quick-setup=1&step=1'), 'meta' => ['title' => __('Guided 5-step MCP configuration', 'acrossai-mcp-manager')]])`.
+- [x] T045 [US2] Wire `AdminBarEntry` in `includes/Main.php::define_admin_hooks()`: `$admin_bar = AdminBarEntry::instance(); $this->loader->add_action('admin_bar_menu', $admin_bar, 'register_node', 100);` per Constitution §Boot Flow named-variable pattern.
+- [x] T046 [P] [US2] `tests/phpunit/Admin/QuickSetup/AdminBarEntryTest.php` — test node presence for admin (`current_user_can('manage_options')` mocked true) + absence for non-admin (Editor role); assert node id, title text, href match spec.
 
 **Checkpoint (US2)**: Wizard reachable from anywhere in wp-admin as long as user is `manage_options`.
 
@@ -124,7 +124,7 @@ description: "Task list for Feature 069 — MCP Quick Setup Wizard"
 
 **Rationale for tiny phase**: Persistence is already implemented in Phase 3 (scratchpad + REST). US3 adds only explicit hardening + one integration test.
 
-- [ ] T047 [US3] Verify `useWizardState.js` (T011) hydrates from `GET /state` on mount + writes on every step advance. Add a defensive re-fetch on `focus` event (browser tab regains focus) so scratchpad state from another tab syncs. Idempotent by design — no server-state changes on re-fetch.
+- [x] T047 [US3] Verify `useWizardState.js` (T011) hydrates from `GET /state` on mount + writes on every step advance. Add a defensive re-fetch on `focus` event (browser tab regains focus) so scratchpad state from another tab syncs. Idempotent by design — no server-state changes on re-fetch.
 - [ ] T048 [P] [US3] `tests/phpunit/REST/QuickSetupControllerTest.php` (extend the file from T041) — add a scenario: POST step 1 with server_id, POST step 2 with access_saved, then GET state → assert wizardState reflects both writes. Also assert TTL refresh: sleep 29 minutes (mocked), POST step 3, sleep 29 more minutes, GET state → data still present (server-side TTL refresh on every write per FR-026).
 
 **Checkpoint (US3)**: Reload/tab-restore/focus-refocus all restore position.
@@ -139,7 +139,7 @@ description: "Task list for Feature 069 — MCP Quick Setup Wizard"
 
 **Rationale for tiny phase**: Auto-skip logic sits in `App.jsx` (T027) already. US4 adds test hardening + progress-bar math confirmation.
 
-- [ ] T049 [US4] Confirm `App.jsx` auto-skip logic in T027 handles BOTH directions: `useEffect` on `[step, wizardState.enabled]` — if `step === '4' && wizardState.enabled`, `goTo('5')` (matches whether user came from step 3 forward or step 5 backward). Also confirm `StepLayout` progress bar's `totalSteps` calculation short-circuits to 4 when `wizardState.enabled === true` on entry.
+- [x] T049 [US4] Confirm `App.jsx` auto-skip logic in T027 handles BOTH directions: `useEffect` on `[step, wizardState.enabled]` — if `step === '4' && wizardState.enabled`, `goTo('5')` (matches whether user came from step 3 forward or step 5 backward). Also confirm `StepLayout` progress bar's `totalSteps` calculation short-circuits to 4 when `wizardState.enabled === true` on entry.
 - [ ] T050 [P] [US4] Manual QA per `quickstart.md` § "US4 auto-skip step 4" — enable a server, walk the wizard, observe progress bar (4 total), observe Back-from-5 lands on 3. Document result in the release-QA log.
 
 **Checkpoint (US4)**: Already-enabled servers get a shorter wizard, correctly.
@@ -152,7 +152,7 @@ description: "Task list for Feature 069 — MCP Quick Setup Wizard"
 
 **Independent Test**: Open `?page=acrossai_mcp_manager&quick-setup=1&step=5&method=client` in a fresh session (no scratchpad, no server picked) → wizard silently redirects to `?step=1`. After completing step 1, reload the original deep-link URL → wizard lands on step 5 with the MCP Client panel expanded.
 
-- [ ] T051 [US5] Implement deep-link precondition check in `App.jsx` (T027) — on mount + on router-state change, evaluate the target step's precondition against `wizardState`: step 2+ requires `server_id`; step 5 no additional requirement beyond step-2's; step 'done' requires `method` set. If unmet, call `useWizardRouter().goTo(furthestLegitimateStep)` silently (no user-visible error, per FR User Story 5 Acceptance Scenario 2).
+- [x] T051 [US5] Implement deep-link precondition check in `App.jsx` (T027) — on mount + on router-state change, evaluate the target step's precondition against `wizardState`: step 2+ requires `server_id`; step 5 no additional requirement beyond step-2's; step 'done' requires `method` set. If unmet, call `useWizardRouter().goTo(furthestLegitimateStep)` silently (no user-visible error, per FR User Story 5 Acceptance Scenario 2).
 - [ ] T052 [P] [US5] Manual QA per `quickstart.md` § "US5 deep link" — verify fresh-session redirect + post-hydration deep-link honor.
 
 **Checkpoint (US5)**: Agency handoff URLs work; broken deep-links fall back gracefully.

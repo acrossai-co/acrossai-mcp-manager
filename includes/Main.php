@@ -331,6 +331,12 @@ final class Main {
 
 		$this->loader->add_action( 'admin_enqueue_scripts', $plugin_admin, 'enqueue_scripts' );
 
+		// F069 — Full-page takeover when the wizard URL is active. Appends a
+		// body class the SCSS keys off to hide WP admin chrome, and suppresses
+		// core / plugin admin notices for the wizard render.
+		$this->loader->add_filter( 'admin_body_class', $plugin_admin, 'full_page_body_class' );
+		$this->loader->add_action( 'in_admin_header', $plugin_admin, 'suppress_admin_notices_on_quick_setup', 1000 );
+
 		/**
 		 * Add the Plugin Submenus under the shared `acrossai` parent (Feature 010 — FR-021).
 		 *
@@ -387,6 +393,12 @@ final class Main {
 		// consumed here and the activating admin is redirected to step 1.
 		$quick_setup_redirect = \AcrossAI_MCP_Manager\Admin\Partials\QuickSetup\ActivationRedirect::instance();
 		$this->loader->add_action( 'admin_init', $quick_setup_redirect, 'maybe_redirect', 5 );
+
+		// F069 T044/T045 — Quick Setup admin-bar chip (US2). Persistent
+		// re-launch affordance from any admin page. Priority 100 lands it
+		// past most core / plugin nodes so it renders at the right side.
+		$quick_setup_admin_bar = \AcrossAI_MCP_Manager\Admin\Partials\QuickSetup\AdminBarEntry::instance();
+		$this->loader->add_action( 'admin_bar_menu', $quick_setup_admin_bar, 'register_node', 100 );
 
 		/**
 		 * Shared AcrossAI Settings page — MCP tab (Feature 012).

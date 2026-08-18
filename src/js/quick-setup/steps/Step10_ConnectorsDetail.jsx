@@ -1,5 +1,9 @@
 /**
- * F069 T036 — Step 5 Connectors panel (provider tabs).
+ * F069 — Step 10: Connectors detail (provider tabs).
+ *
+ * Only shown when user picked Connectors on Step 7 AND acrossai-pro is
+ * active. When pro is missing → Step 8 (pitch); when pro is inactive →
+ * Step 9 (activate gate). Skip flags in App.jsx enforce that.
  *
  * Reads state.methods.ai_connectors (populated by T020 from
  * ConnectionMethodRegistry::get_all()). Provider count derived from array
@@ -18,7 +22,7 @@ import CodeBlock from '../components/CodeBlock.jsx';
 import Notice from '../components/Notice.jsx';
 import useWizardState from '../hooks/useWizardState.js';
 
-const Step5_ConnectorsPanel = () => {
+const Step10_ConnectorsDetail = () => {
 	const { state } = useWizardState();
 	const bootstrap = window.acrossaiMcpQuickSetup || {};
 	const connectors = state.methods.ai_connectors || [];
@@ -102,4 +106,4 @@ const Step5_ConnectorsPanel = () => {
 	);
 };
 
-export default Step5_ConnectorsPanel;
+export default Step10_ConnectorsDetail;

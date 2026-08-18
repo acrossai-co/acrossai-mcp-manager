@@ -36,6 +36,7 @@ const initialState = {
 	servers: [],
 	abilities: {
 		total: 0,
+		enabledForServer: null,
 		hasManagerPlugin: false,
 	},
 	plugins: {
@@ -114,6 +115,12 @@ const reducer = ( state, action ) => {
 				status: 'ready',
 				error: null,
 				servers: Array.isArray( p.servers ) ? p.servers : state.servers,
+				// Merge abilities when the controller shipped a fresh count —
+				// happens whenever the scratchpad has a server_id. Keeps
+				// enabledForServer authoritative right after any /step call,
+				// so App.jsx's skipAbilities predicate can fire without
+				// waiting for a follow-up /state refetch.
+				abilities: p.abilities || state.abilities,
 				wizardState: { ...state.wizardState, ...( p.wizardState || {} ) },
 			};
 		}
@@ -130,12 +137,17 @@ const reducer = ( state, action ) => {
 			return { ...state, status: 'saving', error: null };
 
 		case ACTION.COMPLETE_SUCCESS:
-			return {
-				...state,
-				status: 'ready',
-				error: null,
-				wizardState: initialState.wizardState,
-			};
+			// Deliberately DO NOT reset wizardState here. The Completion
+			// screen fires complete() on mount to clear the server-side
+			// scratchpad, but it still needs the local wizardState to
+			// render the summary rows (server name, method, etc.) and
+			// enable the "Go to server dashboard" button (which reads
+			// server_id).
+			//
+			// Client-side reset happens naturally when the user clicks
+			// "Set up another server" → refetch() pulls the now-empty
+			// scratchpad and the reducer merges defaults in.
+			return { ...state, status: 'ready', error: null };
 
 		case ACTION.CLEAR_ERROR:
 			return { ...state, status: 'ready', error: null };
@@ -247,15 +259,43 @@ export const WizardStateProvider = ( { children } ) => {
 
 	const clearError = useCallback( () => dispatch( { type: ACTION.CLEAR_ERROR } ), [] );
 
-	// Focus-refetch (US3) — pull fresh state when the tab regains focus.
+	// Auto-refetch (US3) — pull fresh state whenever the wizard tab
+	// becomes user-visible again or the user navigates the browser
+	// history. This covers three real-world staleness cases:
+	//
+	//   1. User switches to another tab, mutates state via a different
+	//      wizard admin screen (e.g. disables the server on the list
+	//      page), and returns — visibilitychange fires reliably here,
+	//      the `focus` event is flaky across Cmd+Tab / click-tab / etc.
+	//   2. User clicks browser Back/Forward — popstate fires; without
+	//      the refetch, `state.servers` (and derived skips like
+	//      skipEnable) can be stale relative to the DB and the wizard
+	//      auto-skips a step the user meant to visit again.
+	//   3. Same-tab navigation away and back is handled by React
+	//      remount (whole store re-hydrates from scratch) — no listener
+	//      needed.
+	//
+	// The plain `focus` listener stays as a belt-and-braces fallback for
+	// old browsers where visibilitychange is unreliable.
 	useEffect( () => {
-		const onFocus = () => {
+		const maybeRefetch = () => {
 			if ( state.status === 'ready' ) {
 				refetch();
 			}
 		};
-		window.addEventListener( 'focus', onFocus );
-		return () => window.removeEventListener( 'focus', onFocus );
+		const onVisibility = () => {
+			if ( document.visibilityState === 'visible' ) {
+				maybeRefetch();
+			}
+		};
+		window.addEventListener( 'focus', maybeRefetch );
+		document.addEventListener( 'visibilitychange', onVisibility );
+		window.addEventListener( 'popstate', maybeRefetch );
+		return () => {
+			window.removeEventListener( 'focus', maybeRefetch );
+			document.removeEventListener( 'visibilitychange', onVisibility );
+			window.removeEventListener( 'popstate', maybeRefetch );
+		};
 	}, [ refetch, state.status ] );
 
 	const value = {

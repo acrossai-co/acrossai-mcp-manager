@@ -1,50 +1,91 @@
 /**
- * F069 T030 — Step 1: server picker + inline create form.
+ * F069 — Step 1: server picker.
  *
- * Reads state.servers (populated by T020 handle_state). Renders RadioCard
- * per server. "+ Create a new server" flips local state to reveal
- * <Step1_ServerCreate /> inline (per-design brief: not a modal, not a new
- * URL — compact slide-over inside the content pane).
+ * Reads state.servers (populated by handle_state). Renders one RadioCard per
+ * existing server plus a "+ Create a new server" tile as the last option.
  *
- * Advance guard: canAdvance = wizardState.server_id !== null.
+ * Picking an existing server sets `wizardState.server_id` and clears
+ * `create_intent` — App.jsx's skip effect then jumps step 2 → 3 on Continue.
+ * Picking the create tile sets `create_intent: true` (and clears any prior
+ * server_id); Continue then advances to step 2 (the create form).
+ *
+ * When there are zero existing servers we auto-set create intent up front
+ * so the user isn't shown an empty radiogroup.
+ *
+ * When the user lands on Step 1 for the first time with no prior pick and
+ * the seeded "Default MCP Server" exists, we auto-select it so Continue is
+ * immediately usable — the common path (accept the default) doesn't need
+ * an extra click. Users can still change the pick by clicking any other card.
+ *
+ * Advance guard: canAdvance = server_id !== null OR create_intent === true.
  *
  * @package AcrossAI_MCP_Manager
  */
 
-import { useState, useMemo } from '@wordpress/element';
+import { useMemo, useEffect } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import RadioCard from '../components/RadioCard.jsx';
 import useWizardState from '../hooks/useWizardState.js';
 import useAdvanceGuard from '../hooks/useAdvanceGuard.js';
-import Step1_ServerCreate from './Step1_ServerCreate.jsx';
+
+const CREATE_TILE_VALUE = '__create__';
+
+// Kept in sync with DefaultServerSeeder::SLUG on the PHP side. This is the
+// slug we prefer when auto-selecting a first-load default; if the seeded
+// row is missing (dev environment, manual delete), we fall back to whatever
+// server sits at index 0 in the DB-ordered list.
+const DEFAULT_SERVER_SLUG = 'mcp-adapter-default-server';
 
 const Step1_ServerPick = () => {
 	const { state, saveStep } = useWizardState();
-	const [ showCreate, setShowCreate ] = useState( state.servers.length === 0 );
 	const selectedId = state.wizardState.server_id;
+	const createIntent = !! state.wizardState.create_intent;
 
-	useAdvanceGuard( selectedId !== null );
+	// Zero-server case → auto-set create intent so Continue is immediately
+	// available and the user isn't stuck staring at an empty picker.
+	useEffect( () => {
+		if (
+			state.status === 'ready' &&
+			state.servers.length === 0 &&
+			! createIntent
+		) {
+			saveStep( 1, { create_intent: true } );
+		}
+	}, [ state.status, state.servers.length, createIntent, saveStep ] );
 
-	const handleSelect = async ( serverId ) => {
+	// First-load auto-select — pick the seeded "Default MCP Server" when the
+	// user has no prior pick AND no explicit create intent. Runs once per
+	// mount; if the user actively picks a different card (which clears the
+	// scratchpad's server_id? no — sets it to the other id) the condition
+	// stops matching so this effect stops re-firing.
+	useEffect( () => {
+		if (
+			state.status !== 'ready' ||
+			selectedId !== null ||
+			createIntent ||
+			state.servers.length === 0
+		) {
+			return;
+		}
+		const preferred =
+			state.servers.find( ( s ) => s.slug === DEFAULT_SERVER_SLUG ) ||
+			state.servers[ 0 ];
+		if ( preferred ) {
+			saveStep( 1, { server_id: preferred.id } );
+		}
+	}, [ state.status, state.servers, selectedId, createIntent, saveStep ] );
+
+	useAdvanceGuard( selectedId !== null || createIntent );
+
+	const handleSelectExisting = async ( serverId ) => {
 		await saveStep( 1, { server_id: serverId } );
 	};
 
-	const handleCreated = async ( newServerId ) => {
-		setShowCreate( false );
-		// server_id auto-set inside saveStep call from Step1_ServerCreate,
-		// nothing else to do here.
+	const handleSelectCreate = async () => {
+		await saveStep( 1, { create_intent: true } );
 	};
 
 	const servers = useMemo( () => state.servers || [], [ state.servers ] );
-
-	if ( showCreate ) {
-		return (
-			<Step1_ServerCreate
-				onCreated={ handleCreated }
-				onCancel={ () => setShowCreate( servers.length === 0 ) }
-			/>
-		);
-	}
 
 	return (
 		<div>
@@ -58,23 +99,17 @@ const Step1_ServerPick = () => {
 				) }
 			</p>
 
-			{ servers.length === 0 && (
-				<p>
-					{ __(
-						'No MCP servers found — let\'s create your first one below.',
-						'acrossai-mcp-manager'
-					) }
-				</p>
-			) }
-
-			<div role="radiogroup" aria-label={ __( 'MCP servers', 'acrossai-mcp-manager' ) }>
+			<div
+				role="radiogroup"
+				aria-label={ __( 'MCP servers', 'acrossai-mcp-manager' ) }
+			>
 				{ servers.map( ( server ) => (
 					<RadioCard
 						key={ server.id }
 						name="qs-server-pick"
 						value={ String( server.id ) }
-						selected={ selectedId === server.id }
-						onSelect={ () => handleSelect( server.id ) }
+						selected={ ! createIntent && selectedId === server.id }
+						onSelect={ () => handleSelectExisting( server.id ) }
 						title={ server.name }
 						subtitle={ <code>{ server.route_full }</code> }
 						badge={
@@ -86,16 +121,19 @@ const Step1_ServerPick = () => {
 						}
 					/>
 				) ) }
-			</div>
 
-			<button
-				type="button"
-				className="qs-btn qs-btn--link"
-				onClick={ () => setShowCreate( true ) }
-				style={ { marginTop: 12 } }
-			>
-				{ __( '+ Create a new server', 'acrossai-mcp-manager' ) }
-			</button>
+				<RadioCard
+					name="qs-server-pick"
+					value={ CREATE_TILE_VALUE }
+					selected={ createIntent }
+					onSelect={ handleSelectCreate }
+					title={ __( '+ Create a new server', 'acrossai-mcp-manager' ) }
+					subtitle={ __(
+						'Set up a brand-new MCP server for this wizard.',
+						'acrossai-mcp-manager'
+					) }
+				/>
+			</div>
 		</div>
 	);
 };

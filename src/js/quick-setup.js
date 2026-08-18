@@ -23,6 +23,12 @@ import apiFetch from '@wordpress/api-fetch';
 import './quick-setup/App.jsx';
 import '../scss/quick-setup.scss';
 
+// Vendor Access Control stylesheet — required by <AccessControlEditor>
+// (mounted from Step 2). The vendor package deliberately does NOT import
+// its own SCSS so consumers control CSS delivery; mirror what
+// src/js/access-control.js does for the per-server-edit tab.
+import '../../vendor/wpboilerplate/wpb-access-control/js/AccessControl.scss';
+
 import App from './quick-setup/App.jsx';
 import { WizardStateProvider } from './quick-setup/hooks/useWizardState.js';
 

@@ -20,10 +20,18 @@ import { __ } from '@wordpress/i18n';
 
 const STEP_TITLES = {
 	'1': 'Choose a server',
-	'2': 'Choose access',
-	'3': 'Enable abilities',
-	'4': 'Enable server',
-	'5': 'Pick a connection method',
+	'2': 'Create a new server',
+	'3': 'Choose access',
+	'4': 'Enable Abilities Manager',
+	'5': 'Enable abilities',
+	'6': 'Enable server',
+	'7': 'Pick a connection method',
+	'8': 'Get AcrossAI Pro',
+	'9': 'Activate AcrossAI Pro',
+	'10': 'One-click OAuth setup',
+	'11': 'MCP Client setup',
+	'12': 'npm setup',
+	'13': 'WP-CLI setup',
 	'done': "You're all set!",
 };
 
@@ -33,6 +41,8 @@ const StepLayout = ( {
 	totalSteps,
 	isLoading,
 	canAdvance,
+	footerAction,
+	hideContinue,
 	onBack,
 	onAdvance,
 	onExit,
@@ -89,14 +99,47 @@ const StepLayout = ( {
 
 	const backDisabled = step === '1' || step === 'done';
 	const isDone = step === 'done';
-	const isLast = step === '5';
+	// Terminal detail steps — after these, Continue → Finish → done.
+	const isLast = [ '10', '11', '12', '13' ].includes( step );
 
 	const continueLabel = isLast
 		? __( 'Finish', 'acrossai-mcp-manager' )
 		: __( 'Continue', 'acrossai-mcp-manager' );
 
+	// Any async in flight (wizard-level saveStep/refetch/complete OR the
+	// current step's registered footerAction). Drives BOTH the full-screen
+	// pulsing-logo overlay AND the disabled state of all three footer
+	// buttons. Consolidating loading UI into one full-screen overlay means:
+	//   - Continue / Back / footerAction all share the same "please wait"
+	//     signal — no more three-way inconsistency between inline spinners
+	//   - The pulsing brand icon is more legible than a tiny button spinner
+	//   - Overlay blocks all interaction, preventing the double-fire and
+	//     mid-request-back-click races we used to defend against per-button
+	const busy = isLoading || !! footerAction?.isLoading;
+
 	return (
 		<>
+			{ busy && bootstrap.iconUrl && (
+				<div
+					className="qs__initial-loading qs__initial-loading--overlay"
+					role="alert"
+					aria-live="assertive"
+					aria-busy="true"
+				>
+					<img
+						className="qs__initial-loading-icon"
+						src={ bootstrap.iconUrl }
+						alt=""
+						aria-hidden="true"
+					/>
+					<span className="qs__sr-only">
+						{ footerAction?.isLoading && footerAction?.label
+							? footerAction.label
+							: __( 'Saving…', 'acrossai-mcp-manager' ) }
+					</span>
+				</div>
+			) }
+
 			<div
 				className="qs__progress"
 				role="progressbar"
@@ -122,27 +165,93 @@ const StepLayout = ( {
 				<span className="qs__header-title">
 					{ __( 'Quick Setup', 'acrossai-mcp-manager' ) }
 				</span>
-				<a
-					className="qs__header-exit"
-					href="#"
-					onClick={ ( e ) => {
-						e.preventDefault();
-						onExit?.();
-					} }
-				>
-					{ __( 'Exit setup', 'acrossai-mcp-manager' ) }
-				</a>
+				{ ! isDone && (
+					<a
+						className="qs__header-exit"
+						href="#"
+						onClick={ ( e ) => {
+							e.preventDefault();
+							onExit?.();
+						} }
+					>
+						{ __( 'Exit setup', 'acrossai-mcp-manager' ) }
+					</a>
+				) }
 			</header>
 
-			{ ! isDone && (
-				<div className="qs__step-counter">
-					{ __( 'Step', 'acrossai-mcp-manager' ) } { displayIndex }{ ' ' }
-					{ __( 'of', 'acrossai-mcp-manager' ) } { totalSteps }
-				</div>
-			) }
-
 			<div className="qs__content" ref={ contentRef }>
+				{ /* Step counter intentionally not rendered — the progress bar
+				     above already communicates position; a redundant
+				     "STEP X OF Y" line above every heading crowded the layout.
+				     The counter is still emitted into the ARIA live region
+				     below (unchanged) so screen readers announce it on
+				     navigation. */ }
 				{ children }
+
+				{ ! isDone && ( () => {
+					// Loading UI is the full-screen overlay above the wrap.
+					// All three footer buttons stay locked while `busy` so
+					// the user can't double-fire an install, click Back
+					// mid-request and orphan the in-flight write, or click
+					// Continue and race the auto-skip effect.
+					const backLocked = backDisabled || busy;
+					const continueLocked =
+						! canAdvance || busy || !! footerAction?.disabled;
+					const footerActionLocked =
+						!! footerAction?.disabled || !! footerAction?.isLoading;
+
+					return (
+						<footer className="qs__footer">
+							<button
+								type="button"
+								className="qs-btn qs-btn--secondary"
+								disabled={ backLocked }
+								aria-disabled={ backLocked }
+								onClick={ backLocked ? undefined : onBack }
+							>
+								{ __( 'Back', 'acrossai-mcp-manager' ) }
+							</button>
+							{ /* When a step registers a footerAction (Step 5's
+							     "Enable all and continue"), Continue collapses
+							     to secondary so the primary blue button is the
+							     recommended combined action. Otherwise Continue
+							     stays primary.
+							     Step 6 hides Continue entirely via
+							     useHideContinue(true) — the only legitimate
+							     forward path there is "Enable & Continue", and
+							     a disabled Continue would just invite confused
+							     clicking. */ }
+							{ ! hideContinue && (
+								<button
+									type="button"
+									className={
+										footerAction
+											? 'qs-btn qs-btn--secondary'
+											: 'qs-btn'
+									}
+									aria-disabled={ continueLocked }
+									onClick={ continueLocked ? undefined : onAdvance }
+								>
+									{ continueLabel }
+								</button>
+							) }
+							{ footerAction && (
+								<button
+									type="button"
+									className="qs-btn"
+									aria-disabled={ footerActionLocked }
+									onClick={
+										footerActionLocked
+											? undefined
+											: footerAction.onClick
+									}
+								>
+									{ footerAction.label }
+								</button>
+							) }
+						</footer>
+					);
+				} )() }
 			</div>
 
 			{ /* ARIA live region — visually hidden, screen-reader announces on update */ }
@@ -152,32 +261,6 @@ const StepLayout = ( {
 				aria-live="polite"
 				aria-atomic="true"
 			/>
-
-			{ ! isDone && (
-				<footer className="qs__footer">
-					<button
-						type="button"
-						className="qs-btn qs-btn--secondary"
-						disabled={ backDisabled }
-						aria-disabled={ backDisabled }
-						onClick={ backDisabled ? undefined : onBack }
-					>
-						{ __( 'Back', 'acrossai-mcp-manager' ) }
-					</button>
-					<button
-						type="button"
-						className="qs-btn"
-						aria-disabled={ ! canAdvance || isLoading }
-						onClick={
-							! canAdvance || isLoading ? undefined : onAdvance
-						}
-					>
-						{ isLoading
-							? __( 'Saving…', 'acrossai-mcp-manager' )
-							: continueLabel }
-					</button>
-				</footer>
-			) }
 		</>
 	);
 };

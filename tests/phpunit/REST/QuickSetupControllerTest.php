@@ -170,11 +170,25 @@ final class QuickSetupControllerTest extends WP_UnitTestCase {
 		$this->assertSame( 'acrossai_mcp_quick_setup_server_gone', $response->get_data()['code'] );
 	}
 
-	public function test_post_step_1_create_new_server_via_new_server_key(): void {
+	public function test_post_step_1_create_intent_sets_flag_and_clears_server_id(): void {
 		wp_set_current_user( $this->admin_id );
 
 		$req = new WP_REST_Request( 'POST', '/acrossai-mcp-manager/v1/quick-setup/step' );
 		$req->set_param( 'step', 1 );
+		$req->set_param( 'data', array( 'create_intent' => true ) );
+		$response = rest_get_server()->dispatch( $req );
+
+		$this->assertSame( 200, $response->get_status() );
+		$data = $response->get_data();
+		$this->assertTrue( $data['wizardState']['create_intent'] );
+		$this->assertNull( $data['wizardState']['server_id'] );
+	}
+
+	public function test_post_step_2_create_new_server_via_new_server_key(): void {
+		wp_set_current_user( $this->admin_id );
+
+		$req = new WP_REST_Request( 'POST', '/acrossai-mcp-manager/v1/quick-setup/step' );
+		$req->set_param( 'step', 2 );
 		$req->set_param(
 			'data',
 			array(
@@ -197,11 +211,11 @@ final class QuickSetupControllerTest extends WP_UnitTestCase {
 		$this->assertSame( 'Wizard-Created Server', $rows[0]->server_name );
 	}
 
-	public function test_post_step_1_create_rejects_missing_name_400(): void {
+	public function test_post_step_2_rejects_missing_name_400(): void {
 		wp_set_current_user( $this->admin_id );
 
 		$req = new WP_REST_Request( 'POST', '/acrossai-mcp-manager/v1/quick-setup/step' );
-		$req->set_param( 'step', 1 );
+		$req->set_param( 'step', 2 );
 		$req->set_param( 'data', array( 'new_server' => array( 'description' => 'no name' ) ) );
 		$response = rest_get_server()->dispatch( $req );
 
@@ -209,12 +223,12 @@ final class QuickSetupControllerTest extends WP_UnitTestCase {
 		$this->assertSame( 'acrossai_mcp_quick_setup_invalid_data', $response->get_data()['code'] );
 	}
 
-	public function test_post_step_1_create_forged_keys_dropped_by_sanitizer_whitelist(): void {
+	public function test_post_step_2_create_forged_keys_dropped_by_sanitizer_whitelist(): void {
 		wp_set_current_user( $this->admin_id );
 
 		// TASK-SEC-T-001 mass-assignment negative-test at the REST layer.
 		$req = new WP_REST_Request( 'POST', '/acrossai-mcp-manager/v1/quick-setup/step' );
-		$req->set_param( 'step', 1 );
+		$req->set_param( 'step', 2 );
 		$req->set_param(
 			'data',
 			array(
@@ -236,11 +250,52 @@ final class QuickSetupControllerTest extends WP_UnitTestCase {
 		$this->assertEmpty( (int) $rows[0]->is_enabled, 'Server must not be enabled — forged is_enabled=1 must be dropped by whitelist.' );
 	}
 
-	public function test_post_step_5_rejects_invalid_method_400(): void {
+	public function test_post_step_4_abilities_gate_no_op_returns_200(): void {
 		wp_set_current_user( $this->admin_id );
 
 		$req = new WP_REST_Request( 'POST', '/acrossai-mcp-manager/v1/quick-setup/step' );
-		$req->set_param( 'step', 5 );
+		$req->set_param( 'step', 4 );
+		$req->set_param( 'data', array() );
+		$response = rest_get_server()->dispatch( $req );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 4, $response->get_data()['wizardState']['current_step'] );
+	}
+
+	/**
+	 * @dataProvider provide_no_op_terminal_steps
+	 */
+	public function test_post_terminal_step_no_op_returns_200( int $step ): void {
+		wp_set_current_user( $this->admin_id );
+
+		$req = new WP_REST_Request( 'POST', '/acrossai-mcp-manager/v1/quick-setup/step' );
+		$req->set_param( 'step', $step );
+		$req->set_param( 'data', array() );
+		$response = rest_get_server()->dispatch( $req );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( $step, $response->get_data()['wizardState']['current_step'] );
+	}
+
+	public function provide_no_op_terminal_steps(): array {
+		// Steps 8-13 are the Pro-pitch / activate gate + four method-specific
+		// detail screens. None mutate the scratchpad beyond recording
+		// current_step; all must return 200 with the step echoed back.
+		return array(
+			array( 8 ),
+			array( 9 ),
+			array( 10 ),
+			array( 11 ),
+			array( 12 ),
+			array( 13 ),
+		);
+	}
+
+	public function test_post_step_7_rejects_invalid_method_400(): void {
+		wp_set_current_user( $this->admin_id );
+
+		$req = new WP_REST_Request( 'POST', '/acrossai-mcp-manager/v1/quick-setup/step' );
+		$req->set_param( 'step', 7 );
 		$req->set_param( 'data', array( 'method' => 'bogus' ) );
 		$response = rest_get_server()->dispatch( $req );
 
@@ -248,16 +303,106 @@ final class QuickSetupControllerTest extends WP_UnitTestCase {
 		$this->assertSame( 'acrossai_mcp_quick_setup_invalid_method', $response->get_data()['code'] );
 	}
 
-	public function test_post_step_5_accepts_valid_method(): void {
+	public function test_post_step_7_accepts_valid_method(): void {
 		wp_set_current_user( $this->admin_id );
 
 		$req = new WP_REST_Request( 'POST', '/acrossai-mcp-manager/v1/quick-setup/step' );
-		$req->set_param( 'step', 5 );
+		$req->set_param( 'step', 7 );
 		$req->set_param( 'data', array( 'method' => 'client' ) );
 		$response = rest_get_server()->dispatch( $req );
 
 		$this->assertSame( 200, $response->get_status() );
 		$this->assertSame( 'client', $response->get_data()['wizardState']['method'] );
+	}
+
+	// ─────────────────────────────────────────────────────────────────────
+	// POST /install-plugin
+	// ─────────────────────────────────────────────────────────────────────
+
+	public function test_install_plugin_permission_check_requires_install_and_activate_caps(): void {
+		wp_set_current_user( $this->admin_id );
+		$this->assertTrue( QuickSetupController::instance()->install_plugin_permission_check() );
+
+		wp_set_current_user( $this->subscriber_id );
+		$this->assertFalse( QuickSetupController::instance()->install_plugin_permission_check() );
+	}
+
+	public function test_install_plugin_rejects_slug_not_on_whitelist_400(): void {
+		wp_set_current_user( $this->admin_id );
+
+		$req = new WP_REST_Request( 'POST', '/acrossai-mcp-manager/v1/quick-setup/install-plugin' );
+		$req->set_param( 'slug', 'hello-dolly' );
+		$response = rest_get_server()->dispatch( $req );
+
+		$this->assertSame( 400, $response->get_status() );
+		$this->assertSame( 'acrossai_mcp_quick_setup_invalid_plugin', $response->get_data()['code'] );
+	}
+
+	public function test_install_plugin_rejects_missing_slug_400(): void {
+		wp_set_current_user( $this->admin_id );
+
+		$req = new WP_REST_Request( 'POST', '/acrossai-mcp-manager/v1/quick-setup/install-plugin' );
+		$response = rest_get_server()->dispatch( $req );
+
+		$this->assertSame( 400, $response->get_status() );
+	}
+
+	// ─────────────────────────────────────────────────────────────────────
+	// write_scratchpad — false-negative regression
+	// ─────────────────────────────────────────────────────────────────────
+
+	/**
+	 * Regression: WP core `set_transient()` returns false when the stored
+	 * value hasn't changed (via `update_option`'s "no change" branch).
+	 * Naively surfacing that as failure caused the "Failed to save your
+	 * progress" error when a user re-clicked "Enable all and continue"
+	 * after all abilities were already enabled — the scratchpad payload
+	 * was identical to what was already stored.
+	 */
+	public function test_post_step_succeeds_when_scratchpad_payload_unchanged(): void {
+		wp_set_current_user( $this->admin_id );
+
+		$req_a = new WP_REST_Request( 'POST', '/acrossai-mcp-manager/v1/quick-setup/step' );
+		$req_a->set_param( 'step', 7 );
+		$req_a->set_param( 'data', array( 'method' => 'client' ) );
+		$response_a = rest_get_server()->dispatch( $req_a );
+		$this->assertSame( 200, $response_a->get_status() );
+
+		// Second identical POST — scratchpad already stores { method: 'client' },
+		// so set_transient hits the "no change" branch and returns false.
+		// The controller must treat this as success by verifying read-back.
+		$req_b = new WP_REST_Request( 'POST', '/acrossai-mcp-manager/v1/quick-setup/step' );
+		$req_b->set_param( 'step', 7 );
+		$req_b->set_param( 'data', array( 'method' => 'client' ) );
+		$response_b = rest_get_server()->dispatch( $req_b );
+
+		$this->assertSame(
+			200,
+			$response_b->get_status(),
+			'Re-posting the same step payload must not surface a spurious persist_failed error.'
+		);
+		$this->assertSame( 'client', $response_b->get_data()['wizardState']['method'] );
+	}
+
+	// ─────────────────────────────────────────────────────────────────────
+	// GET /state — trialEndDate field
+	// ─────────────────────────────────────────────────────────────────────
+
+	public function test_get_state_includes_trial_end_date(): void {
+		wp_set_current_user( $this->admin_id );
+		$req = new WP_REST_Request( 'GET', '/acrossai-mcp-manager/v1/quick-setup/state' );
+		$response = rest_get_server()->dispatch( $req );
+
+		$this->assertSame( 200, $response->get_status() );
+		$plugins = $response->get_data()['plugins'];
+		$this->assertArrayHasKey( 'trialEndDate', $plugins );
+		$this->assertNotEmpty( $plugins['trialEndDate'] );
+		// Date format: "F j, Y" → e.g. "September 16, 2026". Sanity-check the
+		// shape without pinning to an exact date (test would break tomorrow).
+		$this->assertMatchesRegularExpression(
+			'/^[A-Z][a-z]+ \d{1,2}, \d{4}$/',
+			$plugins['trialEndDate']
+		);
 	}
 
 	// ─────────────────────────────────────────────────────────────────────
@@ -270,7 +415,7 @@ final class QuickSetupControllerTest extends WP_UnitTestCase {
 		// Prime the scratchpad.
 		set_transient(
 			'acrossai_mcp_manager_quick_setup_state_' . $this->admin_id,
-			array( 'current_step' => 5, 'server_id' => 1 ),
+			array( 'current_step' => 7, 'server_id' => 1 ),
 			1800
 		);
 
@@ -304,7 +449,7 @@ final class QuickSetupControllerTest extends WP_UnitTestCase {
 		wp_set_current_user( $this->admin_id );
 
 		$req1 = new WP_REST_Request( 'POST', '/acrossai-mcp-manager/v1/quick-setup/step' );
-		$req1->set_param( 'step', 5 );
+		$req1->set_param( 'step', 7 );
 		$req1->set_param( 'data', array( 'method' => 'npm' ) );
 		rest_get_server()->dispatch( $req1 );
 

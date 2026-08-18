@@ -1,5 +1,7 @@
 /**
- * F069 T037 — Step 5 MCP Client panel (pill row + JSON config).
+ * F069 — Step 11: MCP Client detail (pill row + JSON config).
+ *
+ * Only shown when user picked "MCP Client" on Step 7.
  *
  * Reads state.methods.clients (populated by T020 from
  * ConnectionMethodRegistry::get_all()). Client count derived from DTO
@@ -21,7 +23,7 @@ import CodeBlock from '../components/CodeBlock.jsx';
 import Notice from '../components/Notice.jsx';
 import useWizardState from '../hooks/useWizardState.js';
 
-const Step5_ClientPanel = () => {
+const Step11_ClientDetail = () => {
 	const { state } = useWizardState();
 	const clients = state.methods.clients || [];
 	const [ activeSlug, setActiveSlug ] = useState(
@@ -123,4 +125,4 @@ const Step5_ClientPanel = () => {
 	);
 };
 
-export default Step5_ClientPanel;
+export default Step11_ClientDetail;

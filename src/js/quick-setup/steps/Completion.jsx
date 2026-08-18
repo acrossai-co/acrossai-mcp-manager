@@ -53,13 +53,18 @@ const Completion = () => {
 		},
 		{
 			label: __( 'Abilities', 'acrossai-mcp-manager' ),
-			value: state.wizardState.abilities_saved
-				? /* translators: %d: ability count */
-				  __( '%d enabled', 'acrossai-mcp-manager' ).replace(
-						'%d',
-						String( state.abilities.total )
-				  )
-				: __( 'None enabled', 'acrossai-mcp-manager' ),
+			// Prefer the DB-authoritative enabledForServer count over the
+			// scratchpad flag — the user may have enabled abilities from
+			// the "Configure abilities one-by-one" tab (which bypasses
+			// abilities_saved), and either way the count reflects reality.
+			value:
+				state.abilities.enabledForServer !== null &&
+				state.abilities.enabledForServer > 0
+					? /* translators: 1: enabled ability count, 2: total available */
+					  __( '%1$d of %2$d enabled', 'acrossai-mcp-manager' )
+							.replace( '%1$d', String( state.abilities.enabledForServer ) )
+							.replace( '%2$d', String( state.abilities.total ) )
+					: __( 'None enabled', 'acrossai-mcp-manager' ),
 		},
 		{
 			label: __( 'Connected via', 'acrossai-mcp-manager' ),

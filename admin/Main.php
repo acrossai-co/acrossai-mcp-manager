@@ -190,13 +190,74 @@ class Main {
 			'acrossai-mcp-manager-quick-setup',
 			'acrossaiMcpQuickSetup',
 			array(
-				'restUrl'   => esc_url_raw( rest_url( 'acrossai-mcp-manager/v1/quick-setup' ) ),
-				'restNonce' => wp_create_nonce( 'wp_rest' ),
-				'adminUrl'  => esc_url_raw( admin_url( 'admin.php?page=acrossai_mcp_manager' ) ),
-				'siteUrl'   => esc_url_raw( untrailingslashit( home_url() ) ),
-				'logoUrl'   => esc_url_raw( \ACROSSAI_MCP_MANAGER_PLUGIN_URL . 'assets/quick-setup/acrossai-logo.svg' ),
+				'restUrl'      => esc_url_raw( rest_url( 'acrossai-mcp-manager/v1/quick-setup' ) ),
+				'restNonce'    => wp_create_nonce( 'wp_rest' ),
+				'adminUrl'     => esc_url_raw( admin_url( 'admin.php?page=acrossai_mcp_manager' ) ),
+				// F069 Step 9 — landing page for activating AcrossAI Pro.
+				// The wizard's Pro-activation gate links here so the user
+				// ends up on the AcrossAI Add-ons page rather than the raw
+				// Plugins list.
+				'addonsUrl'    => esc_url_raw( admin_url( 'admin.php?page=acrossai-addons' ) ),
+				'siteUrl'      => esc_url_raw( untrailingslashit( home_url() ) ),
+				'logoUrl'      => esc_url_raw( \ACROSSAI_MCP_MANAGER_PLUGIN_URL . 'assets/quick-setup/acrossai-logo.svg' ),
+				// F069 — square brand icon shown on the initial-hydrate
+				// loading screen. Kept at assets/quick-setup/icon.svg (a
+				// direct copy of .wordpress-org/icon.svg — that dotfile
+				// directory is routinely blocked at the host / Apache level,
+				// so pointing the browser there 404s on real installs).
+				// When updating the icon, replace BOTH files so the WP.org
+				// plugin listing and the wizard stay in sync.
+				'iconUrl'      => esc_url_raw( \ACROSSAI_MCP_MANAGER_PLUGIN_URL . 'assets/quick-setup/icon.svg' ),
+				// Access Control wiring — MUST mirror the values passed to
+				// the per-server-edit tab bootstrap (see the AC-tab enqueue
+				// block above) so the wizard's Step 2 uses the same slug +
+				// REST root the server tab does.
+				'acPluginSlug' => \AcrossAI_MCP_Manager\Includes\AccessControl\AcrossAI_MCP_Access_Control::TABLE_SLUG,
+				'acNamespace'  => 'acrossai-mcp-manager',
+				'restApiRoot'  => esc_url_raw( untrailingslashit( rest_url() ) ),
 			)
 		);
+	}
+
+	/**
+	 * F069 — Full-page mode body class.
+	 *
+	 * Appends `acrossai-mcp-quick-setup-fullpage` to `<body>` when the wizard
+	 * URL is active (`?quick-setup=1`). The CSS scoped under that class hides
+	 * the WP admin sidebar + admin bar + footer so the wizard fills the entire
+	 * viewport (WooCommerce setup-wizard pattern).
+	 *
+	 * @since 0.2.11
+	 * @param string $classes Space-separated body class string.
+	 * @return string Amended class string.
+	 */
+	public function full_page_body_class( $classes ): string {
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Read-only routing check.
+		if ( empty( $_GET['quick-setup'] ) || '1' !== (string) $_GET['quick-setup'] ) {
+			return (string) $classes;
+		}
+		return trim( $classes . ' acrossai-mcp-quick-setup-fullpage' );
+	}
+
+	/**
+	 * F069 — Suppress core admin notices while the wizard is active.
+	 *
+	 * Notices from other plugins (update prompts, promo banners) break the
+	 * wizard's focused-attention layout. Fires on `in_admin_header` — after
+	 * WordPress has set up its notice queue but before it's rendered.
+	 *
+	 * @since 0.2.11
+	 * @return void
+	 */
+	public function suppress_admin_notices_on_quick_setup(): void {
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Read-only routing check.
+		if ( empty( $_GET['quick-setup'] ) || '1' !== (string) $_GET['quick-setup'] ) {
+			return;
+		}
+		remove_all_actions( 'admin_notices' );
+		remove_all_actions( 'all_admin_notices' );
+		remove_all_actions( 'user_admin_notices' );
+		remove_all_actions( 'network_admin_notices' );
 	}
 
 	/**

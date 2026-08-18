@@ -35,6 +35,7 @@ declare( strict_types = 1 );
 namespace AcrossAI_MCP_Manager\Includes\REST;
 
 use AcrossAI_MCP_Manager\Includes\Database\MCPServer\Query as MCPServerQuery;
+use AcrossAI_MCP_Manager\Includes\Database\MCPServerAbility\ExposureResolver as MCPServerAbilityExposureResolver;
 use AcrossAI_MCP_Manager\Includes\Database\MCPServerAbility\Query as MCPServerAbilityQuery;
 use AcrossAI_MCP_Manager\Includes\Utilities\MCPServerFieldSanitizer;
 use AcrossAI_MCP_Manager\Public\Discovery\ConnectionMethodRegistry;
@@ -75,13 +76,40 @@ final class QuickSetupController {
 
 	/**
 	 * Valid step values accepted on POST /step.
+	 *
+	 * The wizard is a dynamic flow that surfaces between ~5 and ~10 steps
+	 * to any given user depending on state. Steps 2, 4, 5, 6, 8-13 are
+	 * conditional and skipped at the routing layer when their precondition
+	 * is (or isn't) met:
+	 *   - Step 2  (server create) — skipped when Step 1 picked an existing server
+	 *   - Step 4  (abilities-manager gate) — skipped when the plugin is active
+	 *   - Step 5  (abilities picker) — skipped when all abilities are enabled
+	 *   - Step 6  (enable endpoint) — skipped when the server is already enabled
+	 *   - Step 8  (Pro pitch) — only shown when method=connectors AND pro is missing
+	 *   - Step 9  (Pro activate) — only shown when method=connectors AND pro is inactive
+	 *   - Step 10 (Connectors detail) — only shown when method=connectors AND pro is active
+	 *   - Step 11 (MCP Client detail) — only shown when method=client
+	 *   - Step 12 (npm detail) — only shown when method=npm
+	 *   - Step 13 (WP-CLI detail) — only shown when method=wpcli
+	 * Every step still has a valid backend handler; skipping is purely a
+	 * routing-layer optimization.
 	 */
-	private const VALID_STEPS = array( 1, 2, 3, 4, 5 );
+	private const VALID_STEPS = array( 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13 );
 
 	/**
-	 * Valid method values accepted on step 5.
+	 * Valid method values accepted on step 7 (connection method).
 	 */
 	private const VALID_METHODS = array( 'connectors', 'client', 'npm', 'wpcli' );
+
+	/**
+	 * Plugin slugs the /install-plugin route is allowed to install from wp.org.
+	 * Any slug not on this whitelist is rejected 400 (defense in depth on top
+	 * of the install_plugins/activate_plugins capability check).
+	 */
+	private const INSTALLABLE_PLUGIN_SLUGS = array(
+		'acrossai-abilities-manager',
+		'acrossai-pro',
+	);
 
 	/**
 	 * Singleton instance.
@@ -150,6 +178,27 @@ final class QuickSetupController {
 				'permission_callback' => array( $this, 'permission_check' ),
 			)
 		);
+		register_rest_route(
+			self::REST_NAMESPACE,
+			self::ROUTE_PREFIX . '/install-plugin',
+			array(
+				'methods'             => WP_REST_Server::CREATABLE,
+				'callback'            => array( $this, 'handle_install_plugin' ),
+				'permission_callback' => array( $this, 'install_plugin_permission_check' ),
+			)
+		);
+	}
+
+	/**
+	 * Permission callback for /install-plugin. Requires BOTH capabilities so
+	 * a user who can install but not activate (or vice versa) gets rejected
+	 * up front rather than half-way through the pipeline.
+	 *
+	 * @since 0.2.11
+	 * @return bool
+	 */
+	public function install_plugin_permission_check(): bool {
+		return current_user_can( 'install_plugins' ) && current_user_can( 'activate_plugins' );
 	}
 
 	/**
@@ -177,11 +226,13 @@ final class QuickSetupController {
 	 * @return WP_REST_Response|WP_Error
 	 */
 	public function handle_state() {
-		$servers      = $this->collect_servers();
-		$abilities    = $this->collect_abilities_summary();
-		$plugins      = $this->collect_plugin_states();
-		$methods      = ConnectionMethodRegistry::instance()->get_all();
 		$wizard_state = $this->read_scratchpad();
+		$server_id    = isset( $wizard_state['server_id'] ) ? (int) $wizard_state['server_id'] : 0;
+
+		$servers   = $this->collect_servers();
+		$abilities = $this->collect_abilities_summary( $server_id > 0 ? $server_id : null );
+		$plugins   = $this->collect_plugin_states();
+		$methods   = ConnectionMethodRegistry::instance()->get_all();
 
 		return rest_ensure_response(
 			array(
@@ -234,24 +285,11 @@ final class QuickSetupController {
 				if ( is_wp_error( $result ) ) {
 					return $result;
 				}
-				$scratchpad      = $result;
-				$refresh_servers = isset( $data['new_server'] );
-				break;
-
-			case 2:
-				$scratchpad['access_saved'] = ! empty( $data['access_saved'] );
-				break;
-
-			case 3:
-				$result = $this->apply_step_3( $data, $scratchpad );
-				if ( is_wp_error( $result ) ) {
-					return $result;
-				}
 				$scratchpad = $result;
 				break;
 
-			case 4:
-				$result = $this->apply_step_4( $data, $scratchpad );
+			case 2:
+				$result = $this->apply_step_2( $data, $scratchpad );
 				if ( is_wp_error( $result ) ) {
 					return $result;
 				}
@@ -259,7 +297,36 @@ final class QuickSetupController {
 				$refresh_servers = true;
 				break;
 
+			case 3:
+				$scratchpad['access_saved'] = ! empty( $data['access_saved'] );
+				break;
+
+			case 4:
+				// Abilities Manager gate — nothing to persist in the scratchpad.
+				// Plugin activation state is authoritative and read from
+				// state.plugins on GET /state. The step exists in the flow so
+				// clients can POST /step 4 as a "we've been here" ack for
+				// analytics / progress tracking, but no field is required.
+				break;
+
 			case 5:
+				$result = $this->apply_step_5( $data, $scratchpad );
+				if ( is_wp_error( $result ) ) {
+					return $result;
+				}
+				$scratchpad = $result;
+				break;
+
+			case 6:
+				$result = $this->apply_step_6( $data, $scratchpad );
+				if ( is_wp_error( $result ) ) {
+					return $result;
+				}
+				$scratchpad      = $result;
+				$refresh_servers = true;
+				break;
+
+			case 7:
 				$method = isset( $data['method'] ) ? (string) $data['method'] : '';
 				if ( ! in_array( $method, self::VALID_METHODS, true ) ) {
 					return new WP_Error(
@@ -269,6 +336,20 @@ final class QuickSetupController {
 					);
 				}
 				$scratchpad['method'] = $method;
+				break;
+
+			case 8:
+			case 9:
+			case 10:
+			case 11:
+			case 12:
+			case 13:
+				// Terminal detail / gate steps — nothing to persist beyond
+				// current_step. Plugin activation state (steps 8, 9) is read
+				// from state.plugins on GET /state; connection details
+				// (steps 10-13) are pure-read display and don't mutate the
+				// scratchpad. Handlers exist so clients can POST /step {N}
+				// as a "we've been here" ack for analytics / progress.
 				break;
 		}
 
@@ -284,6 +365,19 @@ final class QuickSetupController {
 		$response = array( 'wizardState' => $scratchpad );
 		if ( $refresh_servers ) {
 			$response['servers'] = $this->collect_servers();
+		}
+
+		// Always ship a fresh abilities summary when the scratchpad has a
+		// server. The `enabledForServer` count is only computed from a
+		// server_id, and it's used by the frontend's skipAbilities skip
+		// predicate (auto-skip Step 5 when everything is enabled). Without
+		// this piggyback, `enabledForServer` would only be refreshed on
+		// GET /state — meaning after a user picks a server on Step 1, the
+		// count would stay null until a manual focus-refetch, and Step 5
+		// would fail to auto-skip even when it should.
+		$server_id = isset( $scratchpad['server_id'] ) ? (int) $scratchpad['server_id'] : 0;
+		if ( $server_id > 0 ) {
+			$response['abilities'] = $this->collect_abilities_summary( $server_id );
 		}
 
 		return rest_ensure_response( $response );
@@ -307,99 +401,219 @@ final class QuickSetupController {
 	}
 
 	// ─────────────────────────────────────────────────────────────────────
+	// Route: POST /quick-setup/install-plugin
+	// ─────────────────────────────────────────────────────────────────────
+
+	/**
+	 * Install (if missing) and activate a whitelisted plugin from WordPress.org.
+	 *
+	 * Only accepts slugs on `INSTALLABLE_PLUGIN_SLUGS`. If the plugin is
+	 * already installed, skips the download step and only activates. If it's
+	 * already active, returns success (idempotent).
+	 *
+	 * Inherits TASK-SEC-003 error-hygiene constraint from the class docblock —
+	 * upgrader / activate errors are logged but never surfaced verbatim.
+	 *
+	 * @since 0.2.11
+	 * @param WP_REST_Request $request Incoming request.
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public function handle_install_plugin( WP_REST_Request $request ) {
+		$slug = isset( $request['slug'] ) ? sanitize_key( (string) $request['slug'] ) : '';
+		if ( ! in_array( $slug, self::INSTALLABLE_PLUGIN_SLUGS, true ) ) {
+			return new WP_Error(
+				'acrossai_mcp_quick_setup_invalid_plugin',
+				esc_html__( 'That plugin cannot be installed from here.', 'acrossai-mcp-manager' ),
+				array( 'status' => 400 )
+			);
+		}
+
+		require_once ABSPATH . 'wp-admin/includes/plugin.php';
+		require_once ABSPATH . 'wp-admin/includes/plugin-install.php';
+		require_once ABSPATH . 'wp-admin/includes/file.php';
+		require_once ABSPATH . 'wp-admin/includes/misc.php';
+		require_once ABSPATH . 'wp-admin/includes/class-wp-upgrader.php';
+
+		$plugin_file = $slug . '/' . $slug . '.php';
+		$installed   = get_plugins();
+
+		if ( ! isset( $installed[ $plugin_file ] ) ) {
+			$api = plugins_api(
+				'plugin_information',
+				array(
+					'slug'   => $slug,
+					'fields' => array( 'sections' => false ),
+				)
+			);
+			if ( is_wp_error( $api ) ) {
+				error_log( sprintf( '[acrossai-mcp-manager] plugins_api failed for %s: %s', $slug, $api->get_error_message() ) );
+				return new WP_Error(
+					'acrossai_mcp_quick_setup_install_failed',
+					esc_html__( 'Could not find that plugin on WordPress.org. Try installing it manually from Plugins → Add New.', 'acrossai-mcp-manager' ),
+					array( 'status' => 502 )
+				);
+			}
+
+			$upgrader = new \Plugin_Upgrader( new \WP_Ajax_Upgrader_Skin() );
+			$result   = $upgrader->install( $api->download_link );
+			if ( is_wp_error( $result ) ) {
+				error_log( sprintf( '[acrossai-mcp-manager] Plugin_Upgrader::install failed for %s: %s', $slug, $result->get_error_message() ) );
+				return new WP_Error(
+					'acrossai_mcp_quick_setup_install_failed',
+					esc_html__( 'Installation failed. Try installing manually from Plugins → Add New.', 'acrossai-mcp-manager' ),
+					array( 'status' => 500 )
+				);
+			}
+			if ( false === $result || null === $result ) {
+				return new WP_Error(
+					'acrossai_mcp_quick_setup_install_failed',
+					esc_html__( 'Installation failed. Try installing manually from Plugins → Add New.', 'acrossai-mcp-manager' ),
+					array( 'status' => 500 )
+				);
+			}
+		}
+
+		if ( ! is_plugin_active( $plugin_file ) ) {
+			$activate = activate_plugin( $plugin_file );
+			if ( is_wp_error( $activate ) ) {
+				error_log( sprintf( '[acrossai-mcp-manager] activate_plugin failed for %s: %s', $plugin_file, $activate->get_error_message() ) );
+				return new WP_Error(
+					'acrossai_mcp_quick_setup_activate_failed',
+					esc_html__( 'Activation failed. Try activating from Plugins.', 'acrossai-mcp-manager' ),
+					array( 'status' => 500 )
+				);
+			}
+		}
+
+		return rest_ensure_response(
+			array(
+				'installed' => true,
+				'active'    => true,
+				'plugin'    => $plugin_file,
+			)
+		);
+	}
+
+	// ─────────────────────────────────────────────────────────────────────
 	// Per-step apply helpers
 	// ─────────────────────────────────────────────────────────────────────
 
 	/**
-	 * Step 1 — select existing server OR create new server.
+	 * Step 1 — pick an existing server or signal "create new" intent.
+	 *
+	 * Accepts either:
+	 *   - `server_id`: int  → picks an existing row (Step 2 will be skipped)
+	 *   - `create_intent`: true → user chose "+ Create a new server"; Step 2
+	 *     will render the create form and POST /step 2 with `new_server`.
 	 *
 	 * @param array $data       Step payload.
 	 * @param array $scratchpad Current scratchpad.
 	 * @return array|WP_Error Updated scratchpad or error.
 	 */
 	private function apply_step_1( array $data, array $scratchpad ) {
-		// Existing-server selection path.
-		if ( isset( $data['server_id'] ) ) {
-			$server_id = (int) $data['server_id'];
-			if ( $server_id <= 0 ) {
-				return new WP_Error(
-					'acrossai_mcp_quick_setup_invalid_data',
-					esc_html__( 'Choose a server to continue.', 'acrossai-mcp-manager' ),
-					array( 'status' => 400 )
-				);
-			}
-			if ( ! $this->server_exists( $server_id ) ) {
-				return new WP_Error(
-					'acrossai_mcp_quick_setup_server_gone',
-					esc_html__( 'That server no longer exists. Restart the wizard.', 'acrossai-mcp-manager' ),
-					array( 'status' => 410 )
-				);
-			}
-			$scratchpad['server_id'] = $server_id;
+		if ( ! empty( $data['create_intent'] ) ) {
+			$scratchpad['create_intent'] = true;
+			$scratchpad['server_id']     = null; // Clear any prior pick.
 			return $scratchpad;
 		}
 
-		// Create-new-server path.
-		if ( isset( $data['new_server'] ) && is_array( $data['new_server'] ) ) {
-			$sanitized = MCPServerFieldSanitizer::sanitize( $data['new_server'] );
-			if ( '' === $sanitized['server_name'] ) {
-				return new WP_Error(
-					'acrossai_mcp_quick_setup_invalid_data',
-					esc_html__( 'Server name is required.', 'acrossai-mcp-manager' ),
-					array( 'status' => 400 )
-				);
-			}
-
-			$query = MCPServerQuery::instance();
-
-			// Slug collision guard — matches existing admin form contract.
-			$existing = $query->query(
-				array(
-					'server_slug' => $sanitized['server_slug'],
-					'number'      => 1,
-				)
+		if ( ! isset( $data['server_id'] ) ) {
+			return new WP_Error(
+				'acrossai_mcp_quick_setup_invalid_data',
+				esc_html__( 'Choose a server to continue, or pick "Create a new server".', 'acrossai-mcp-manager' ),
+				array( 'status' => 400 )
 			);
-			if ( ! empty( $existing ) ) {
-				return new WP_Error(
-					'acrossai_mcp_quick_setup_invalid_data',
-					esc_html__( 'A server with that name already exists. Choose a different name.', 'acrossai-mcp-manager' ),
-					array( 'status' => 400 )
-				);
-			}
-
-			$new_id = $query->add_item(
-				array(
-					'server_name'            => $sanitized['server_name'],
-					'server_slug'            => $sanitized['server_slug'],
-					'description'            => $sanitized['description'],
-					'is_enabled'             => 0,
-					'registered_from'        => 'database',
-					'server_route_namespace' => $sanitized['server_route_namespace'],
-					'server_route'           => $sanitized['server_route'],
-					'server_version'         => $sanitized['server_version'],
-				)
-			);
-			if ( ! $new_id ) {
-				return new WP_Error(
-					'acrossai_mcp_quick_setup_persist_failed',
-					esc_html__( 'Failed to create the server. Try again.', 'acrossai-mcp-manager' ),
-					array( 'status' => 500 )
-				);
-			}
-
-			$scratchpad['server_id'] = (int) $new_id;
-			return $scratchpad;
 		}
 
-		return new WP_Error(
-			'acrossai_mcp_quick_setup_invalid_data',
-			esc_html__( 'Step 1 requires either a server_id or a new_server payload.', 'acrossai-mcp-manager' ),
-			array( 'status' => 400 )
-		);
+		$server_id = (int) $data['server_id'];
+		if ( $server_id <= 0 ) {
+			return new WP_Error(
+				'acrossai_mcp_quick_setup_invalid_data',
+				esc_html__( 'Choose a server to continue.', 'acrossai-mcp-manager' ),
+				array( 'status' => 400 )
+			);
+		}
+		if ( ! $this->server_exists( $server_id ) ) {
+			return new WP_Error(
+				'acrossai_mcp_quick_setup_server_gone',
+				esc_html__( 'That server no longer exists. Restart the wizard.', 'acrossai-mcp-manager' ),
+				array( 'status' => 410 )
+			);
+		}
+		$scratchpad['server_id']     = $server_id;
+		$scratchpad['create_intent'] = false;
+		return $scratchpad;
 	}
 
 	/**
-	 * Step 3 — optionally bulk-enable all abilities for the wizard's server.
+	 * Step 2 — create a new server row. Only reached when Step 1 signalled
+	 * `create_intent`. Requires `new_server` payload.
+	 *
+	 * @param array $data       Step payload.
+	 * @param array $scratchpad Current scratchpad.
+	 * @return array|WP_Error Updated scratchpad or error.
+	 */
+	private function apply_step_2( array $data, array $scratchpad ) {
+		if ( ! isset( $data['new_server'] ) || ! is_array( $data['new_server'] ) ) {
+			return new WP_Error(
+				'acrossai_mcp_quick_setup_invalid_data',
+				esc_html__( 'Fill in the new server form to continue.', 'acrossai-mcp-manager' ),
+				array( 'status' => 400 )
+			);
+		}
+
+		$sanitized = MCPServerFieldSanitizer::sanitize( $data['new_server'] );
+		if ( '' === $sanitized['server_name'] ) {
+			return new WP_Error(
+				'acrossai_mcp_quick_setup_invalid_data',
+				esc_html__( 'Server name is required.', 'acrossai-mcp-manager' ),
+				array( 'status' => 400 )
+			);
+		}
+
+		$query = MCPServerQuery::instance();
+
+		$existing = $query->query(
+			array(
+				'server_slug' => $sanitized['server_slug'],
+				'number'      => 1,
+			)
+		);
+		if ( ! empty( $existing ) ) {
+			return new WP_Error(
+				'acrossai_mcp_quick_setup_invalid_data',
+				esc_html__( 'A server with that name already exists. Choose a different name.', 'acrossai-mcp-manager' ),
+				array( 'status' => 400 )
+			);
+		}
+
+		$new_id = $query->add_item(
+			array(
+				'server_name'            => $sanitized['server_name'],
+				'server_slug'            => $sanitized['server_slug'],
+				'description'            => $sanitized['description'],
+				'is_enabled'             => 0,
+				'registered_from'        => 'database',
+				'server_route_namespace' => $sanitized['server_route_namespace'],
+				'server_route'           => $sanitized['server_route'],
+				'server_version'         => $sanitized['server_version'],
+			)
+		);
+		if ( ! $new_id ) {
+			return new WP_Error(
+				'acrossai_mcp_quick_setup_persist_failed',
+				esc_html__( 'Failed to create the server. Try again.', 'acrossai-mcp-manager' ),
+				array( 'status' => 500 )
+			);
+		}
+
+		$scratchpad['server_id']     = (int) $new_id;
+		$scratchpad['create_intent'] = false;
+		return $scratchpad;
+	}
+
+	/**
+	 * Step 5 — optionally bulk-enable all abilities for the wizard's server.
 	 *
 	 * TASK-SEC-002 remediation: calls MCPServerAbilityQuery::upsert() directly
 	 * — no internal REST-to-REST call to the F017 abilities controller.
@@ -408,7 +622,7 @@ final class QuickSetupController {
 	 * @param array $scratchpad Current scratchpad.
 	 * @return array|WP_Error Updated scratchpad or error.
 	 */
-	private function apply_step_3( array $data, array $scratchpad ) {
+	private function apply_step_5( array $data, array $scratchpad ) {
 		if ( empty( $data['enable_all_abilities'] ) ) {
 			$scratchpad['abilities_saved'] = true; // "explicit skip" is a valid completion.
 			return $scratchpad;
@@ -443,13 +657,13 @@ final class QuickSetupController {
 	}
 
 	/**
-	 * Step 4 — enable the wizard's server.
+	 * Step 6 — enable the wizard's server.
 	 *
 	 * @param array $data       Step payload.
 	 * @param array $scratchpad Current scratchpad.
 	 * @return array|WP_Error Updated scratchpad or error.
 	 */
-	private function apply_step_4( array $data, array $scratchpad ) {
+	private function apply_step_6( array $data, array $scratchpad ) {
 		$server_id = isset( $scratchpad['server_id'] ) ? (int) $scratchpad['server_id'] : 0;
 		if ( $server_id <= 0 ) {
 			return new WP_Error(
@@ -510,12 +724,41 @@ final class QuickSetupController {
 	/**
 	 * Abilities summary for GET /state.
 	 *
-	 * @return array{total:int,hasManagerPlugin:bool}
+	 * When a `$server_id` is passed, also returns `enabledForServer` — the
+	 * number of abilities currently exposed on that server per the F017
+	 * canonical resolver (row override → meta.mcp.public fallback). Null when
+	 * no server is chosen yet so the frontend can distinguish "not-computed"
+	 * from "zero enabled".
+	 *
+	 * @param int|null $server_id Server id from the wizard scratchpad, if any.
+	 * @return array{total:int,enabledForServer:int|null,hasManagerPlugin:bool}
 	 */
-	private function collect_abilities_summary(): array {
-		$total = function_exists( 'wp_get_abilities' ) ? count( \wp_get_abilities() ) : 0;
+	private function collect_abilities_summary( ?int $server_id = null ): array {
+		$has_abilities_api = function_exists( 'wp_get_abilities' );
+		$total             = $has_abilities_api ? count( \wp_get_abilities() ) : 0;
+
+		$enabled_for_server = null;
+		if ( $has_abilities_api && null !== $server_id && $server_id > 0 ) {
+			$enabled_for_server = 0;
+			foreach ( \wp_get_abilities() as $ability ) {
+				$slug = $ability->get_name();
+				if ( ! is_string( $slug ) || '' === $slug ) {
+					continue;
+				}
+				$meta = $ability->get_meta();
+				if ( MCPServerAbilityExposureResolver::resolve(
+					$server_id,
+					$slug,
+					is_array( $meta ) ? $meta : array()
+				) ) {
+					++$enabled_for_server;
+				}
+			}
+		}
+
 		return array(
 			'total'            => $total,
+			'enabledForServer' => $enabled_for_server,
 			'hasManagerPlugin' => 'active' === $this->plugin_activation_state( 'acrossai-abilities-manager/acrossai-abilities-manager.php' ),
 		);
 	}
@@ -523,13 +766,46 @@ final class QuickSetupController {
 	/**
 	 * Plugin activation state map for GET /state.
 	 *
-	 * @return array{acrossaiPro:string,abilitiesManager:string}
+	 * When a plugin is installed-but-inactive, an accompanying `*ActivateUrl`
+	 * field carries the nonced `plugins.php?action=activate&...` URL so the
+	 * frontend can render a one-click activate button. The URL is null (or
+	 * absent) for `missing` and `active` states.
+	 *
+	 * @return array<string,mixed>
 	 */
 	private function collect_plugin_states(): array {
+		$pro_file     = 'acrossai-pro/acrossai-pro.php';
+		$manager_file = 'acrossai-abilities-manager/acrossai-abilities-manager.php';
+
+		$pro_state     = $this->plugin_activation_state( $pro_file );
+		$manager_state = $this->plugin_activation_state( $manager_file );
+
 		return array(
-			'acrossaiPro'      => $this->plugin_activation_state( 'acrossai-pro/acrossai-pro.php' ),
-			'abilitiesManager' => $this->plugin_activation_state( 'acrossai-abilities-manager/acrossai-abilities-manager.php' ),
+			'acrossaiPro'                 => $pro_state,
+			'acrossaiProActivateUrl'      => 'inactive' === $pro_state
+				? $this->plugin_activate_url( $pro_file )
+				: null,
+			'abilitiesManager'            => $manager_state,
+			'abilitiesManagerActivateUrl' => 'inactive' === $manager_state
+				? $this->plugin_activate_url( $manager_file )
+				: null,
+			// F069 Step 7 promo bar — computed each request so the "free
+			// through" date always shows today + 30 days without needing a
+			// cron / cache-invalidation dance. wp_date() respects the site
+			// timezone (unlike raw date()).
+			'trialEndDate'                => wp_date( 'F j, Y', strtotime( '+30 days' ) ),
 		);
+	}
+
+	/**
+	 * Build a nonced `plugins.php?action=activate&plugin=...` URL.
+	 *
+	 * @param string $plugin_file Relative plugin file (e.g. `foo/foo.php`).
+	 * @return string Absolute admin URL with the activate-plugin nonce.
+	 */
+	private function plugin_activate_url( string $plugin_file ): string {
+		$url = admin_url( 'plugins.php?action=activate&plugin=' . rawurlencode( $plugin_file ) );
+		return wp_nonce_url( $url, 'activate-plugin_' . $plugin_file );
 	}
 
 	/**
@@ -568,6 +844,7 @@ final class QuickSetupController {
 		return array(
 			'current_step'    => 1,
 			'server_id'       => null,
+			'create_intent'   => false,
 			'access_saved'    => false,
 			'abilities_saved' => false,
 			'enabled'         => false,
@@ -592,15 +869,33 @@ final class QuickSetupController {
 	/**
 	 * Persist the current user's scratchpad with a fresh TTL.
 	 *
+	 * WP core caveat: `set_transient()` delegates to `update_option()` when
+	 * no external object cache is configured, and `update_option()` returns
+	 * false when the new value is identical to the stored value — even
+	 * though the write conceptually succeeded (the store already holds what
+	 * we wanted). Naively returning that false would surface a spurious
+	 * "Failed to save your progress" error to the user any time a wizard
+	 * step's payload doesn't alter the scratchpad (e.g. re-clicking
+	 * "Enable all and continue" after all abilities are already enabled).
+	 *
+	 * Fix: when the raw call returns false, read the transient back and
+	 * treat "stored value already matches what we tried to write" as
+	 * success. Real store failures (disk full, memcached down) will fail
+	 * both the write AND the read-back and correctly return false.
+	 *
 	 * @param array<string,mixed> $data Full scratchpad shape.
 	 * @return bool True on success, false on failure.
 	 */
 	private function write_scratchpad( array $data ): bool {
-		return (bool) set_transient(
-			self::SCRATCHPAD_KEY_PREFIX . get_current_user_id(),
-			$data,
-			self::SCRATCHPAD_TTL
-		);
+		$key = self::SCRATCHPAD_KEY_PREFIX . get_current_user_id();
+		if ( set_transient( $key, $data, self::SCRATCHPAD_TTL ) ) {
+			return true;
+		}
+		$stored = get_transient( $key );
+		// Strict === on arrays checks type + key order + values. Transient
+		// serialization (PHP serialize/unserialize) preserves key order, so
+		// stored === data holds when the payload is truly identical.
+		return is_array( $stored ) && $stored === $data;
 	}
 
 	/**

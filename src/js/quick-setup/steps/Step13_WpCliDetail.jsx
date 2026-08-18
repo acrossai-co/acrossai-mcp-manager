@@ -1,5 +1,7 @@
 /**
- * F069 T039 — Step 5 WP-CLI panel.
+ * F069 — Step 13: WP-CLI detail.
+ *
+ * Only shown when user picked "WP-CLI" on Step 7.
  *
  * WP-CLI commands are NOT sourced from ConnectionMethodRegistry (it doesn't
  * expose a WP-CLI category — WP-CLI is a static command, not a DTO). The
@@ -15,7 +17,7 @@ import CodeBlock from '../components/CodeBlock.jsx';
 import Notice from '../components/Notice.jsx';
 import useWizardState from '../hooks/useWizardState.js';
 
-const Step5_WpCliPanel = () => {
+const Step13_WpCliDetail = () => {
 	const { state } = useWizardState();
 
 	const server = useMemo(
@@ -76,4 +78,4 @@ const Step5_WpCliPanel = () => {
 	);
 };
 
-export default Step5_WpCliPanel;
+export default Step13_WpCliDetail;

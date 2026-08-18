@@ -1,5 +1,7 @@
 /**
- * F069 T038 — Step 5 npm panel (npx command).
+ * F069 — Step 12: npm detail (npx command).
+ *
+ * Only shown when user picked "npm" on Step 7.
  *
  * Reads state.methods.npm (populated by T020). Iterates over the DTO
  * list — currently 1 built-in method (`npx -y @acrossai/mcp-manager
@@ -15,7 +17,7 @@ import CodeBlock from '../components/CodeBlock.jsx';
 import Notice from '../components/Notice.jsx';
 import useWizardState from '../hooks/useWizardState.js';
 
-const Step5_NpmPanel = () => {
+const Step12_NpmDetail = () => {
 	const { state } = useWizardState();
 	const bootstrap = window.acrossaiMcpQuickSetup || {};
 	const npmMethods = state.methods.npm || [];
@@ -121,4 +123,4 @@ const Step5_NpmPanel = () => {
 	);
 };
 
-export default Step5_NpmPanel;
+export default Step12_NpmDetail;
