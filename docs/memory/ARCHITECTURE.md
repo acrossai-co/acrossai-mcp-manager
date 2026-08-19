@@ -640,3 +640,31 @@ Every future subsystem extraction from mcp-manager to a companion plugin MUST au
 - `DEC-UNINSTALL-OPT-IN-GATE` (operator-opt-in gate for the destructive teardown itself).
 - F040 § FR-003 (the concrete application of this pattern for `acrossai_mcp_connector_%`).
 - B44 (companion pattern for BerlinDB tables — same "own your namespace, don't touch other plugins' namespace" principle applied to tables instead of options).
+
+---
+
+### 2026-08-19 - A21 / A-MCP-ADAPTER-NO-ENABLED-CONCEPT-PLUGIN-ADDS-LAYER
+
+**Status**
+Active (F069)
+
+**Constraint**
+The MCP Adapter framework (`wordpress/mcp-adapter`, consumed via Composer) has NO `is_enabled` concept for MCP servers — anything registered via `mcp_adapter_init` responds to requests immediately. The `is_enabled BIGINT` column on `wp_acrossai_mcp_servers`, its default `0` in `Row.php` + `DefaultServerSeeder.php`, and the request-time gate that checks it before responding are an **admin safety layer OWNED BY THIS PLUGIN**, not inherited from the framework. Purpose: prevent a half-configured server from accidentally accepting requests before an admin has reviewed its access rules and abilities.
+
+**Why this is durable**
+Verified by direct source read of `wordpress/mcp-adapter` trunk (`includes/Core/McpAdapter.php`, `includes/Core/McpServer.php`, README). The only `enabled` references in the framework relate to `mcp_validation_enabled` (a per-server MCP-protocol-validation toggle for stricter development-time checking), NOT to a live/dead server switch. Any future contributor looking at the `is_enabled` column and thinking "the framework should handle this, we can drop the column" would break the safety invariant AND silently start accepting requests to servers that admins expected to be disabled.
+
+**Boundary rule**
+- Do NOT remove the `is_enabled` column, its default-zero seeding, or the request-time gate that reads it.
+- Do NOT push enable-gating down into the MCP Adapter framework (upstreaming this would require an RFC to `wordpress/mcp-adapter`; even then, this plugin should keep its own gate for defense in depth until the upstream ships stable).
+- New wizards / admin flows that touch server creation MUST preserve the disabled-by-default default. Anywhere `MCPServerQuery::add_item()` is called with `'is_enabled' => 1` at creation time needs review and explicit justification.
+- Copy explaining this behavior to end-users MUST correctly attribute the safety layer to the plugin (not to the framework). Reference: `Step6_EnableServer.jsx` info notice — "AcrossAI MCP Manager runs on top of the MCP Adapter framework and adds an admin safety layer: every server starts disabled…".
+
+**Evidence**
+- Source read: `github.com/WordPress/mcp-adapter/blob/trunk/includes/Core/McpAdapter.php` (`create_server()` signature has no enable-state parameter; no gate on request handling).
+- Plugin's own layer: `includes/Database/MCPServer/Row.php:26` (`public $is_enabled = 0`), `includes/Database/MCPServer/DefaultServerSeeder.php:54` (`'is_enabled' => 0`), request-time gate at MCP request handling.
+- Copy fix: `Step6_EnableServer.jsx` — earlier draft incorrectly blamed the MCP Adapter for the disabled-default; corrected 2026-08-19 to attribute the safety layer to this plugin.
+
+**Related**
+- Companion request-time enforcement patterns: D18 (`mcp_adapter_pre_tool_call` for ability-level gating), F015 access control.
+- The framework does its own request-handling; this plugin's `is_enabled` gate sits BEFORE that (at the plugin's own MCP endpoint layer).

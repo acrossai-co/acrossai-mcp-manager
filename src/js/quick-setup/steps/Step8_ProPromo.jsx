@@ -20,7 +20,7 @@ import Notice from '../components/Notice.jsx';
 import useWizardState from '../hooks/useWizardState.js';
 import useAdvanceGuard from '../hooks/useAdvanceGuard.js';
 
-const TRIAL_URL = 'https://acrossai.co/pricing/';
+const TRIAL_URL = 'https://acrossai.co/pricing/#pricing';
 
 const Step8_ProPromo = () => {
 	const { state } = useWizardState();
@@ -100,12 +100,6 @@ const Step8_ProPromo = () => {
 					<li>
 						{ __(
 							'One-click connectors for Claude, ChatGPT, Grok, Gemini & Cursor.',
-							'acrossai-mcp-manager'
-						) }
-					</li>
-					<li>
-						{ __(
-							'1 production site.',
 							'acrossai-mcp-manager'
 						) }
 					</li>

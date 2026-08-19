@@ -248,3 +248,81 @@ Every task above follows `- [ ] TXXX [P?] [USN?] Description with file path`:
 - Every task cites a concrete file path or shell command target ✅
 
 Total: **63 tasks** across 8 phases. MVP = Tasks T001–T043 (Phase 1 + 2 + 3). Independent story tests present for every user story (US1–US5).
+
+---
+
+## Phase 9: Post-MVP polish + 13-step dynamic flow (delivered 2026-08-19)
+
+**Purpose**: Reshape the shipped MVP into a fully-branching wizard driven by 10 skip predicates. Not a "user story" in the original sense — this phase is a design evolution from user feedback after MVP acceptance. All tasks land on branch `069-quick-setup-13-step-flow` off `069-mcp-quick-setup-wizard`.
+
+**Scope**: 6 new steps (4, 8, 9, 10, 11, 12, 13), dynamic skip logic, gate-card visual grammar, full-screen loading overlay, WP `<Spinner />` adoption, URL server_id mirror, backend fresh-abilities on every /step response.
+
+**Notes on original tasks**: Phase 3-8 tasks (T014–T063) remain the canonical acceptance criteria for the 5-step MVP. Phase 9 does not retroactively invalidate them — each was a valid acceptance gate at MVP ship. The renaming that landed in Phase 9 (Step5_MethodGrid → Step7_MethodGrid, etc.) preserved git history via `git mv` where possible; content-heavy rewrites show as delete+add pairs (see git log --follow).
+
+### Backend (PHP)
+
+- [x] T064 **`QuickSetupController::VALID_STEPS`** bumped from `[1..5]` to `[1..13]`. New step handlers 4/8/9/10/11/12/13 are scratchpad-only acks (record `current_step`, no persistent state).
+- [x] T065 New route `POST /quick-setup/install-plugin` with slug whitelist (`acrossai-abilities-manager`, `acrossai-pro`). Uses WP core `Plugin_Upgrader` to download from WP.org + activate. Idempotent — skips install if plugin is already installed.
+- [x] T066 New `install_plugin_permission_check()` — requires BOTH `install_plugins` AND `activate_plugins` capabilities.
+- [x] T067 `collect_abilities_summary()` extended to accept `?int $server_id` and compute `enabledForServer` via `MCPServerAbilityExposureResolver::resolve()`. Returned in `abilities.enabledForServer` (int when known, null when no server chosen).
+- [x] T068 `handle_step()` piggybacks fresh `abilities` payload onto every /step response when scratchpad has server_id — eliminates need for follow-up /state refetch to keep the Step 5 `X/Y enabled` count fresh.
+- [x] T069 `write_scratchpad()` tolerates `set_transient()`'s "no change → false" return by reading the transient back and comparing. Fixes the spurious `acrossai_mcp_quick_setup_persist_failed` error when re-clicking a step's primary action with identical payload.
+- [x] T070 `default_scratchpad()` gains `create_intent` flag for step 1's "Create new server" branch.
+- [x] T071 `collect_plugin_states()` returns `trialEndDate` = `wp_date('F j, Y', strtotime('+30 days'))` for Step 7 promo bar + Step 8 pitch.
+- [x] T072 `handle_state()` now reads scratchpad `server_id` first so `collect_abilities_summary($server_id)` runs with authoritative context on cold hydrate.
+
+### Frontend routing
+
+- [x] T073 `useWizardRouter.STEP_ORDER` grew to 13. `shouldSkip()` handles 10 skip predicates: `skipCreate`, `skipAbilitiesGate`, `skipAbilities`, `skipEnable`, `skipProPromo`, `skipProActivate`, `skipConnectorsDetail`, `skipClient`, `skipNpm`, `skipWpcli`. `advance`/`back` walk past chained skips in one call.
+- [x] T074 Router API extended: `readParams()` parses `?server=<id>`, `buildUrl()` writes/strips it, new `setServer(id)` uses `replaceState` (not `pushState`) so mirroring server_id doesn't pollute browser history.
+
+### Frontend orchestration
+
+- [x] T075 `App.jsx` step registry covers 1-13 + done. Auto-skip effect covers 2/4/5/6/8/9/10/11/12/13. New `stepVisibilityTable` centralizes step ↔ skip mapping; `totalSteps` and `displayIndex` derive from it.
+- [x] T076 `App.jsx` computes `selectedServer` from `state.servers` (DB truth) — `skipEnable` reads `selectedServer.enabled` NOT the scratchpad flag. Correctly recognizes servers enabled outside the wizard.
+- [x] T077 `App.jsx` `hasHydratedOnceRef` — initial-loading gate now only fires on `state.status === 'idle'` OR first-ever `'loading'`. Subsequent refetches (visibilitychange / focus / popstate) leave the wizard mounted — StepLayout's `busy` overlay handles the loading UI. Prevents step unmount + local state loss on every tab return.
+- [x] T078 `App.jsx` `isTerminalStep = router.step ∈ {10,11,12,13}` → Finish → done.
+- [x] T079 `App.jsx` server_id sync effect: mirrors `state.wizardState.server_id` into URL as `?server=<id>` for shareable deep links.
+
+### Frontend hooks
+
+- [x] T080 `useAdvanceGuard` context extended with `setFooterAction`, `setHideContinue`, `advance` — plus new exported hooks `useFooterAction(action)`, `useHideContinue(hide)`, `useWizardAdvance()`.
+- [x] T081 `useWizardState` reducer for `SAVE_STEP_SUCCESS` merges `abilities` from payload (so T068 backend piggyback lands).
+- [x] T082 `useWizardState` reducer for `COMPLETE_SUCCESS` no longer resets `wizardState` — the Completion screen needs it to render the summary + wire the "Go to server dashboard" button. Reset happens naturally via refetch when user clicks "Set up another server".
+- [x] T083 `useWizardState` adds `visibilitychange` + `popstate` refetch listeners alongside the existing `focus` fallback. Catches state changes made in other tabs (e.g. server disabled from the server list).
+
+### Steps
+
+- [x] T084 Step 1: `Step1_ServerPick` — inline `?mode=create` removed; "+ Create a new server" is now a selectable card that sets `create_intent`. On first mount with no prior pick, auto-selects the seeded default server (slug `mcp-adapter-default-server`, kept in sync with `DefaultServerSeeder::SLUG`).
+- [x] T085 Step 2: `Step2_ServerCreate` (renamed from `Step1_ServerCreate` via git mv) — dedicated create-form step. Uses `useAdvanceGuard(canAdvance, beforeAdvance)` to submit-on-Continue.
+- [x] T086 Step 3: `Step3_AccessControl` — footer becomes Back · Continue · Save and Continue. Vendor "Save Access Control" button hidden via `hideSaveButton` prop; wizard fires the same PUT/DELETE from a footer action. Uses `useWizardAdvance()`.
+- [x] T087 Step 4 (NEW): `Step4_AbilitiesManager` — install/activate gate for `acrossai-abilities-manager`. Missing → "Install & Continue" (POST /install-plugin), Inactive → "Activate & Continue" (same endpoint). Continue always allowed (user can skip; Step 5 falls back to "WP core abilities only" variant).
+- [x] T088 Step 5: `Step5_Abilities` (renamed from `Step3_Abilities`) — headline flips from `total` to `X/Y enabled for this server`. Auto-skipped when `enabledForServer >= total`. Footer registers "Enable all and continue" via `useFooterAction`; auto-skip handles the post-enable jump (no manual `router.advance()` — avoids the double-jump race).
+- [x] T089 Step 6: `Step6_EnableServer` (renamed from `Step4_EnableServer`) — checkbox removed. Uses `useHideContinue(true)` so ONLY "Enable & Continue" advances (Back still works). Warning-variant gate card (`.qs__gate-card--warning`) + `createInterpolateElement`-composed info notice with link to `WordPress/mcp-adapter`.
+- [x] T090 Step 7: `Step7_MethodGrid` (renamed from `Step5_MethodGrid`) — inline expansion removed; clicking a card saves + selects (does NOT auto-advance). Continue uses App's `handleContinue` with fresh skips. PAID badge + trial promo bar rendered when `state.plugins.acrossaiPro !== 'active'`.
+- [x] T091 Step 8 (NEW): `Step8_ProPromo` — full-page trial pitch with 6 value bullets + "Start free trial" CTA to `https://acrossai.co/pricing/#pricing`. Continue disabled; auto-skip fires when Pro flips to inactive/active.
+- [x] T092 Step 9 (NEW): `Step9_ProActivate` — activation gate. "Go to Add-ons page" link to `admin.php?page=acrossai-addons` (new bootstrap `addonsUrl`) + "I've activated it — re-check" refetch button. Continue disabled.
+- [x] T093 Step 10-13 (renamed from Step5_ConnectorsPanel/ClientPanel/NpmPanel/WpCliPanel via git mv): terminal method-specific detail screens. Only ONE renders per run based on picked method.
+- [x] T094 `Completion.jsx`: Abilities summary row uses authoritative `state.abilities.enabledForServer` instead of the scratchpad's `abilities_saved` flag.
+
+### Chrome + shared UI
+
+- [x] T095 `StepLayout` — `STEP_TITLES` extended to 1-13. `isLast` matches `{10,11,12,13}` → "Finish". Step counter text removed (progress bar + ARIA live region communicate position without redundant text).
+- [x] T096 `StepLayout` — full-screen loading overlay owned here, driven by `busy = isLoading || footerAction?.isLoading`. Reuses `.qs__initial-loading` element + `--overlay` modifier (translucent backdrop, z-index above WP admin bar, fade-in). All three footer buttons locked during `busy`.
+- [x] T097 `StepLayout` — supports optional `footerAction` (third primary button after Continue) and `hideContinue` (Step 6 opt-out).
+- [x] T098 `qs__gate-card` reusable class (Step 4/8) + `--warning` modifier (Step 6). `qs__gate-stat` / `qs__gate-stat-icon` / `qs__gate-bullets` / `qs__gate-copy` sub-classes.
+- [x] T099 `qs__trial-bar` reusable class (Step 7 promo) + trial CTA copy pulls `trialEndDate` from state.
+- [x] T100 `qs__initial-loading` — full-viewport centered brand icon (`assets/quick-setup/icon.svg` = copy of `.wordpress-org/icon.svg` since dotfile dirs are commonly blocked at the host level). Soft pulse animation (opacity + scale, 1.6s cycle).
+- [x] T101 `.qs-notice` — `display: flex` → `display: block` fix so `createInterpolateElement` mixed inline content (text + `<a>` + text) flows as normal typographic text instead of fracturing into three flex columns.
+
+### Bootstrap + docs
+
+- [x] T102 `admin/Main.php` bootstrap payload gains `iconUrl` (initial-loading icon) and `addonsUrl` (Step 9 Pro activation destination).
+
+### Test coverage
+
+- [x] T103 `QuickSetupControllerTest`: bumped step numbers (1→2 for create, 5→7 for method), added `@dataProvider provide_no_op_terminal_steps` for 8-13 handler smoke, added `install_plugin` permission + slug-whitelist tests, added `test_post_step_succeeds_when_scratchpad_payload_unchanged` regression for T069, added `test_get_state_includes_trial_end_date` shape check.
+
+**Checkpoint (Phase 9)**: Wizard renders 5-10 visible steps per run depending on state; all 10 skip predicates + auto-skip effect verified via manual walkthrough; PHPCS clean; JS build clean; no regressions in MVP acceptance flow.
+
+Total after Phase 9: **63 MVP + 40 polish = 103 tasks**.

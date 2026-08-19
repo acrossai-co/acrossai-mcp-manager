@@ -30,7 +30,7 @@ import { LinkIcon, PuzzleIcon, TerminalIcon } from '../components/icons.jsx';
 import useWizardState from '../hooks/useWizardState.js';
 import useAdvanceGuard from '../hooks/useAdvanceGuard.js';
 
-const TRIAL_URL = 'https://acrossai.co/pricing/';
+const TRIAL_URL = 'https://acrossai.co/pricing/#pricing';
 
 const METHODS = [
 	{

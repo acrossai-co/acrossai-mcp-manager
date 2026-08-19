@@ -1930,3 +1930,125 @@ public function test_every_berlindb_table_is_in_uninstall_drop_list(): void {
 **Related**
 - B34 (BerlinDB silent write-loss on schema drift — same "add table but forget to reconcile" class of coverage gap).
 - PATTERN-COMPILE-TIME-COUPLING-MISSING generalizes both B34 and B44: when TWO artifacts must stay in sync, either enforce it at compile-time (a shared registry both consult), or enforce it via a test/grep gate. Never rely on PR reviewer memory.
+
+---
+
+### 2026-08-19 - B45 / B-WP-SET-TRANSIENT-FALSE-ON-UNCHANGED
+
+**Pattern**
+`set_transient( $key, $value, $ttl )` returns `false` when the new `$value` equals the currently-stored value — a "no change" signal, NOT a store-write failure. Caused by delegation to `update_option()` when no external object cache is configured (`wp-includes/option.php`). Callers that treat the bool return as "success/failed" surface spurious failure errors any time the payload happens to be identical to what's already stored.
+
+**Affected area**
+Any code writing to `wp_options` via `set_transient()`, `update_option()`, `update_user_meta()`, `update_post_meta()`, `update_term_meta()`, `update_site_option()` — every option/meta writer that treats identical-value writes as failures.
+
+**Symptom**
+User re-clicks a "save" or "advance" button in an admin surface; POST handler surfaces a generic `persist_failed` / 500 error even though side-effects earlier in the same handler (DB inserts, external API calls) succeeded. The failure only reproduces when the second write's payload matches the first — passes every "initial write" test.
+
+**Discovered in**
+F069 Phase 9 (2026-08-19). `QuickSetupController::write_scratchpad()` returned false on the wizard's second identical `POST /step` when the user re-clicked "Enable all and continue" after the abilities were already all enabled. Backend upserts had already run; only the scratchpad-write signal was spurious. Fixed with read-back verification.
+
+**Fix**
+```php
+private function write_scratchpad( array $data ): bool {
+    $key = self::SCRATCHPAD_KEY_PREFIX . get_current_user_id();
+    if ( set_transient( $key, $data, self::SCRATCHPAD_TTL ) ) {
+        return true;
+    }
+    // No-change branch — verify by read-back.
+    $stored = get_transient( $key );
+    return is_array( $stored ) && $stored === $data;
+}
+```
+
+**Prevention**
+- **Grep gate**: any `if ( ! set_transient(` OR `if ( false === set_transient(` OR `if ( ! update_option(` should be paired with a read-back fallback, OR justified with a comment (e.g., "value is a monotonically-increasing counter, no-change is impossible").
+- **Regression test**: for any handler that writes a per-user/per-entity scratchpad, add a test that POSTs the same payload twice — second call must return 200 (or the same success status as the first).
+
+**Related**
+- Similar silent-signal class: B18 (`$wpdb` returns TINYINT as string — `1 === $col` always false).
+- WP core issue tracking this behavior: https://core.trac.wordpress.org/ticket/22192 (no-change return semantic documented but "won't fix").
+
+---
+
+### 2026-08-19 - B46 / B-INITIAL-LOADING-GATE-UNMOUNTS-STEPS-ON-REFETCH
+
+**Pattern**
+A React admin-surface component with a global loading gate — `if ( state.status === 'loading' ) return <FullScreenSpinner />` — will unmount whatever step/screen the user is on EVERY time a refetch fires (visibility change, focus, popstate, or a step-level `useEffect(() => refetch(), [])`). The step remounts when the refetch resolves, losing local form state + scroll position + re-firing per-step mount effects. If the step's mount effect fires a refetch, this loops.
+
+**Affected area**
+Any React admin surface (wizard, DataViews screen, multi-tab editor) with (a) a global loading store shared across steps AND (b) a shell-level "full screen loading" gate that fires on ANY `loading` status. Especially dangerous when combined with `visibilitychange`/`focus`/`popstate` refetch listeners.
+
+**Symptom**
+- User tabs away from wizard and back → wizard "flashes" back to the loading icon → step content re-appears (scroll reset to top, in-progress form input lost).
+- OR: a specific step renders as a blank white page indefinitely (infinite unmount/remount loop between step + full-screen spinner).
+
+**Discovered in**
+F069 Phase 9 (2026-08-19). Step 8 (Pro promo pitch) and Step 9 (Pro activate gate) each had `useEffect(() => refetch(), [])`. Refetch → `state.status='loading'` → App.jsx early-returned to `<div class="qs__initial-loading">` → step 8 unmounted → refetch resolved → step 8 remounted → its mount effect fired refetch again → loop. User saw a blank white page with just the loading icon (or nothing depending on timing).
+
+**Fix**
+Distinguish "first-ever hydrate" from "subsequent refetch" via a ref-based flag; only early-return to the full-screen loader on the true cold start. Subsequent refetches leave the tree mounted — a shell-level "busy" overlay handles the loading UI without disturbing the current step.
+
+```jsx
+const hasHydratedOnceRef = useRef( false );
+if ( state.status === 'ready' ) {
+    hasHydratedOnceRef.current = true;
+}
+
+if (
+    state.status === 'idle' ||
+    ( state.status === 'loading' && ! hasHydratedOnceRef.current )
+) {
+    return <FullScreenLoadingIcon />;
+}
+```
+
+Reference impl: `src/js/quick-setup/App.jsx:hasHydratedOnceRef`.
+
+**Prevention**
+- Never early-return to a full-screen loader based on a global `loading` state alone. Always gate on `idle-or-first-load` semantics.
+- Global refetch listeners (visibilitychange/focus/popstate) MUST be paired with a "loading overlay renders ON TOP of current UI" pattern, not "loading state replaces current UI".
+- Per-step `useEffect(() => refetch(), [])` is a code smell — if the underlying store already has global refetch listeners, delete the per-step refetch. If it doesn't, add them.
+
+**Related**
+- Composition partner: full-screen overlay (`StepLayout`'s `busy` prop) that renders above but doesn't replace the current step.
+- General principle: React unmount is destructive; if a state transition should NOT lose in-progress work, don't gate rendering on that transition.
+
+---
+
+### 2026-08-19 - B47 / B-WORDPRESS-ORG-DOTFILE-ASSETS-NOT-HTTP-ACCESSIBLE
+
+**Pattern**
+Every WordPress plugin ships assets in `.wordpress-org/` (icon.svg, banner-*.png, screenshot-*.png) for the wp.org plugin directory listing. Common assumption: these files are HTTP-accessible via `PLUGIN_URL . '.wordpress-org/icon.svg'`. Wrong. Many hosts (Apache with default `AllowOverride`, most managed WP hosts, WP.com, WP-Engine) block dotfile directories at the web-server level. The files exist on disk (verified via `ls -la`) but 404 via HTTP.
+
+**Affected area**
+Any plugin runtime code (JS bootstrap, PHP admin renders, email templates, REST responses) that constructs an HTTP URL to a file in `.wordpress-org/`.
+
+**Symptom**
+- Broken-image icon rendered in place of the expected asset (browser DevTools shows 404).
+- Silent no-render for background-image CSS references.
+- Test on developer machine (LocalWP with default Nginx config) succeeds; production breaks.
+
+**Discovered in**
+F069 Phase 9 (2026-08-19). Wizard initial-loading screen referenced `.wordpress-org/icon.svg` via a new `iconUrl` in the `wp_localize_script` bootstrap. LocalWP dev showed the icon fine; production installs would have rendered a broken-image glyph.
+
+**Fix**
+- Copy the file into `assets/` (a served-by-default directory in every WP hosting configuration).
+- Update bootstrap URL to point to the served copy.
+- Add a comment on the served copy noting the `.wordpress-org/` source-of-truth so both stay in sync.
+
+```php
+// F069 — Kept at assets/quick-setup/icon.svg (a direct copy of
+// .wordpress-org/icon.svg — that dotfile directory is routinely blocked
+// at the host / Apache level, so pointing the browser there 404s on real
+// installs). When updating the icon, replace BOTH files so the WP.org
+// plugin listing and the wizard stay in sync.
+'iconUrl' => esc_url_raw( ACROSSAI_MCP_MANAGER_PLUGIN_URL . 'assets/quick-setup/icon.svg' ),
+```
+
+**Prevention**
+- **Grep gate**: `grep -rn "\.wordpress-org/" --include='*.php' --include='*.js'` — any hit that constructs an HTTP URL needs review.
+- **Rule of thumb**: `.wordpress-org/` files are for the plugin directory listing ONLY. Anything the runtime needs, ship in `assets/`.
+- **CI check candidate**: a smoke test that HTTP-GETs every image URL emitted from `wp_localize_script` payloads and asserts 200.
+
+**Related**
+- General principle: dotfile directories (`.git`, `.github`, `.wordpress-org`, `.ddev`, etc.) are convention-based and NOT part of the served surface. Runtime code must never depend on their HTTP accessibility.
