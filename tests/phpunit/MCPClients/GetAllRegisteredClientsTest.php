@@ -119,24 +119,51 @@ final class GetAllRegisteredClientsTest extends TestCase {
 
 	/**
 	 * F034 FR-006 default state — DEFAULT_CLIENT_CLASSES seed passes through
-	 * the filter untouched. Result: 8 built-in slugs in priority order.
+	 * the filter untouched. Result: 16 built-in slugs in priority order.
 	 *
-	 * Priority table (spec.md §Clarifications Q1 + FR-003):
-	 * claude-desktop=10, claude-code=20, vscode=30, github-copilot=40,
-	 * codex=50, cursor=60, gemini=70, custom=80.
+	 * Priority table:
+	 *   Original set (F034):
+	 *     claude-desktop=10, claude-code=20, vscode=30, github-copilot=40,
+	 *     codex=50, cursor=60, gemini=70
+	 *   Extended set (added post-F034 to close the gap against competing
+	 *   WordPress MCP plugins for free-tier IDE users; the 5 acrossai-pro
+	 *   OAuth connectors — Claude / ChatGPT / Grok / Gemini / Cursor — are
+	 *   NOT duplicated here since those ship as one-click OAuth in the paid
+	 *   companion, not as JSON-config generators):
+	 *     windsurf=72, zed=73, cline=74, roo-code=75, kilo-code=76,
+	 *     amazon-q=77, opencode=78, antigravity=79
+	 *   Fallback:
+	 *     custom=80
 	 */
-	public function testDefaultStateReturnsEightBuiltinsInPriorityOrder(): void {
+	public function testDefaultStateReturnsBuiltinsInPriorityOrder(): void {
 		$clients = AbstractMCPClient::get_all_registered_clients();
-		$this->assertCount( 8, $clients, 'MUST return exactly 8 built-in clients.' );
+		$this->assertCount( 16, $clients, 'MUST return exactly 16 built-in clients.' );
 
 		$slugs = array_map(
 			static fn( AbstractMCPClient $c ): string => $c->get_client_slug(),
 			$clients
 		);
 		$this->assertSame(
-			array( 'claude-desktop', 'claude-code', 'vscode', 'github-copilot', 'codex', 'cursor', 'gemini', 'custom' ),
+			array(
+				'claude-desktop',
+				'claude-code',
+				'vscode',
+				'github-copilot',
+				'codex',
+				'cursor',
+				'gemini',
+				'windsurf',
+				'zed',
+				'cline',
+				'roo-code',
+				'kilo-code',
+				'amazon-q',
+				'opencode',
+				'antigravity',
+				'custom',
+			),
 			$slugs,
-			'Built-in sub-nav order MUST be priority-sorted (10, 20, 30, ..., 80), byte-identical to pre-refactor state per FR-016.'
+			'Built-in sub-nav order MUST be priority-sorted (10, 20, 30, ..., 70, 72, 73, ..., 79, 80).'
 		);
 	}
 
@@ -214,7 +241,7 @@ final class GetAllRegisteredClientsTest extends TestCase {
 		);
 
 		$clients = AbstractMCPClient::get_all_registered_clients();
-		$this->assertCount( 8, $clients, 'Invalid FQNs MUST be silently skipped; result stays at 8 built-ins.' );
+		$this->assertCount( 16, $clients, 'Invalid FQNs MUST be silently skipped; result stays at the 16 built-ins.' );
 	}
 
 	/**
@@ -235,7 +262,7 @@ final class GetAllRegisteredClientsTest extends TestCase {
 			static fn( AbstractMCPClient $c ): string => $c->get_client_slug(),
 			AbstractMCPClient::get_all_registered_clients()
 		);
-		$this->assertCount( 8, $slugs, 'Bad slugs MUST be rejected; result stays at 8 built-ins.' );
+		$this->assertCount( 16, $slugs, 'Bad slugs MUST be rejected; result stays at the 16 built-ins.' );
 		$this->assertNotContains( 'BAD_SLUG', $slugs );
 		$this->assertNotContains( '', $slugs );
 	}
@@ -258,7 +285,7 @@ final class GetAllRegisteredClientsTest extends TestCase {
 		);
 
 		$clients = AbstractMCPClient::get_all_registered_clients();
-		$this->assertCount( 8, $clients, 'Dedup MUST keep count at 8, not 9.' );
+		$this->assertCount( 16, $clients, 'Dedup MUST keep count at 16 (the built-in seed), not 17 — the fake duplicate takes over the gemini slot rather than being appended.' );
 
 		// Find the 'gemini' entry — should now be the fake, not the built-in.
 		$gemini_entries = array_filter(
