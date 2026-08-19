@@ -170,6 +170,14 @@ abstract class AbstractMCPClient {
 		CodexClient::class,
 		CursorClient::class,
 		GeminiClient::class,
+		WindsurfClient::class,
+		ZedClient::class,
+		ClineClient::class,
+		RooCodeClient::class,
+		KiloCodeClient::class,
+		AmazonQClient::class,
+		OpenCodeClient::class,
+		AntigravityClient::class,
 		CustomClient::class,
 	);
 

@@ -2052,3 +2052,58 @@ F069 Phase 9 (2026-08-19). Wizard initial-loading screen referenced `.wordpress-
 
 **Related**
 - General principle: dotfile directories (`.git`, `.github`, `.wordpress-org`, `.ddev`, etc.) are convention-based and NOT part of the served surface. Runtime code must never depend on their HTTP accessibility.
+
+---
+
+### 2026-08-19 - B48 — Count-based test assertions drift from source-of-truth registries
+
+**Status**
+Active (F071)
+
+**Why this is durable**
+PHPUnit tests that hardcode a count against a plugin-owned source-of-truth constant array (e.g. `AbstractMCPClient::DEFAULT_CLIENT_CLASSES`) drift silently every time the constant grows or shrinks. F071 added 8 new MCP client classes; the registry grew from 8 → 16 and FOUR `assertCount( 8, ... )` calls broke across unrelated-sounding test methods, plus one test method name embedded the literal "Eight". The failure messages ("expected 8, got 16") don't point at the count-hardcoding as the root problem — the reader has to trace back to the registry edit. Same "two artifacts must stay in sync, enforced by PR reviewer memory" pattern as B44, applied to test assertions.
+
+**Pattern**
+Any test asserting a count of items produced from a plugin-owned constant array where the intent is "however many there are, they should all show up" (as opposed to "there must be exactly N of these, ever") is a drift hazard the moment the source registry gets modified.
+
+**Affected area**
+Registry-enumeration tests — `GetAllRegisteredClientsTest`, and any future `get_all_registered_profiles`, `get_all_registered_connectors`, etc. Especially dangerous when the count is asserted in MULTIPLE tests inside one file (dedup test, invalid-FQN-skip test, bad-slug-reject test all repeat the same hardcoded count).
+
+**Symptom**
+- Adding one entry to a `DEFAULT_*_CLASSES` array causes N test failures in test methods with names unrelated to what was added.
+- Failure message reads "expected N, got N+1" — no pointer at the hardcoding.
+- Test method names may embed the count in their name (e.g. `testDefaultStateReturnsEightBuiltins…`), requiring rename too.
+
+**Fix pattern**
+Derive the expected count from the source registry at run time:
+```php
+// Before
+public function testDefaultStateReturnsEightBuiltinsInPriorityOrder(): void {
+    $this->assertCount( 8, $clients, 'MUST return exactly 8 built-in clients.' );
+}
+
+// After
+public function testDefaultStateReturnsBuiltinsInPriorityOrder(): void {
+    $this->assertCount(
+        count( AbstractMCPClient::DEFAULT_CLIENT_CLASSES ),
+        $clients,
+        'MUST return every built-in client — count derived from the source registry.'
+    );
+}
+```
+
+**When NOT to apply**
+When the count IS the invariant under test — e.g. "there must be exactly 3 core clients regardless of what any filter injects" — the hardcoded count is CORRECT because the whole point of the test is to detect drift in the source registry. Add a comment explaining that intent so a future reader doesn't "helpfully" refactor it to the derived form.
+
+**Prevention grep gate**
+```
+grep -rEn 'assertCount\(\s*[0-9]+' tests/
+```
+For every match, PR review MUST ask "would this need updating if the source registry grew by one?". If yes, refactor to `count(SOURCE_ARRAY)`. If no (count IS the invariant), leave the hardcoded number and add a `// intentional: must fail if …` comment.
+
+**Reference impl** (post-fix): `tests/phpunit/MCPClients/GetAllRegisteredClientsTest.php` — F071 bumped 4 assertions from 8 → 16 (still hardcoded — captured as the anti-pattern; follow-up should derive from the constant).
+
+**Related**
+- **B44** (BerlinDB Table added but uninstall.php DROP list not updated) — same class of "two artifacts must stay in sync" bug, applied to BerlinDB tables + uninstall.php.
+- **PATTERN-COMPILE-TIME-COUPLING-MISSING** — when two artifacts must stay in sync, enforce it via a shared registry OR a test gate that reads the registry at run time. The `count(SOURCE_ARRAY)` fix IS the coupling.
+- **D35** (F034 self-contained subsystem contract) — F034 established that consumers of `get_all_registered_clients()` should not hardcode knowledge of specific clients. B48 generalizes: consumers should not hardcode knowledge of the CARDINALITY either.
