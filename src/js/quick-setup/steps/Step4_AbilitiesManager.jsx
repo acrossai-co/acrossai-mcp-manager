@@ -1,0 +1,193 @@
+/**
+ * F069 — Step 4: AcrossAI Abilities Manager plugin gate.
+ *
+ * Renders only when `state.plugins.abilitiesManager !== 'active'` — App.jsx
+ * auto-skips this step when the plugin is already active. Two branches:
+ *
+ *   - 'missing'  → footer "Install & Continue" primary. Click → POST
+ *                  /quick-setup/install-plugin with slug
+ *                  `acrossai-abilities-manager`; the backend uses
+ *                  Plugin_Upgrader to fetch from WP.org, extract, and
+ *                  activate. On success we refetch /state — the plugin
+ *                  becomes 'active' and App.jsx's skipAbilitiesGate flips
+ *                  to true, so the auto-skip effect walks the user past
+ *                  this step to Step 5 (or further if it's also skipped).
+ *
+ *   - 'inactive' → footer "Activate & Continue" primary. Same endpoint —
+ *                  backend detects the plugin is already installed and
+ *                  only runs activate_plugin(). Same code path so the
+ *                  user never leaves the wizard.
+ *
+ * Advance guard: TRUE — the user can Continue without installing/activating.
+ * Skipping means Step 5 renders its "manager inactive/missing" variant
+ * (the 3 WP core abilities + the promo card), which is a valid state.
+ *
+ * Visual pattern matches Step 8 (Pro pitch) — same "gate" grammar so both
+ * external-action screens feel consistent: centered layout, headline stat
+ * in the highlighted card, primary CTA in the wizard footer, info notice
+ * below the gate card.
+ *
+ * @package AcrossAI_MCP_Manager
+ */
+
+import { useState, useCallback, useMemo } from '@wordpress/element';
+import { __ } from '@wordpress/i18n';
+import apiFetch from '@wordpress/api-fetch';
+import Notice from '../components/Notice.jsx';
+import useWizardState from '../hooks/useWizardState.js';
+import { useFooterAction } from '../hooks/useAdvanceGuard.js';
+
+const ABILITIES_MANAGER_SLUG = 'acrossai-abilities-manager';
+const WP_ORG_URL = 'https://wordpress.org/plugins/acrossai-abilities-manager/';
+
+const Step4_AbilitiesManager = () => {
+	const { state, refetch } = useWizardState();
+	const [ working, setWorking ] = useState( false );
+	const [ error, setError ] = useState( null );
+
+	const managerState = state.plugins.abilitiesManager; // 'missing' | 'inactive' | 'active'
+	const isMissing = managerState === 'missing';
+
+	const handleInstallOrActivateAndContinue = useCallback( async () => {
+		setWorking( true );
+		setError( null );
+		try {
+			const bootstrap = window.acrossaiMcpQuickSetup || {};
+			const restRoot =
+				bootstrap.restUrl ||
+				'/wp-json/acrossai-mcp-manager/v1/quick-setup';
+			await apiFetch( {
+				url: `${ restRoot }/install-plugin`,
+				method: 'POST',
+				data: { slug: ABILITIES_MANAGER_SLUG },
+			} );
+			// After refetch, state.plugins.abilitiesManager flips to 'active'.
+			// App.jsx's skipAbilitiesGate predicate becomes true and the
+			// auto-skip effect forwards past this step. No manual
+			// router.advance() here to avoid the double-jump race Step 5
+			// hit before we consolidated on the auto-skip pattern.
+			await refetch();
+		} catch ( err ) {
+			setError(
+				( err && err.message ) ||
+					__(
+						'Something went wrong. Try again or install the plugin manually.',
+						'acrossai-mcp-manager'
+					)
+			);
+		} finally {
+			setWorking( false );
+		}
+	}, [ refetch ] );
+
+	const footerActionLabel = working
+		? isMissing
+			? __( 'Installing…', 'acrossai-mcp-manager' )
+			: __( 'Activating…', 'acrossai-mcp-manager' )
+		: isMissing
+		? __( 'Install & Continue', 'acrossai-mcp-manager' )
+		: __( 'Activate & Continue', 'acrossai-mcp-manager' );
+
+	const footerAction = useMemo(
+		() => ( {
+			label: footerActionLabel,
+			onClick: handleInstallOrActivateAndContinue,
+			isLoading: working,
+			disabled: working,
+		} ),
+		[ footerActionLabel, handleInstallOrActivateAndContinue, working ]
+	);
+	useFooterAction( footerAction );
+
+	const heading = isMissing
+		? __(
+				'Install AcrossAI Abilities Manager',
+				'acrossai-mcp-manager'
+		  )
+		: __(
+				'Activate AcrossAI Abilities Manager',
+				'acrossai-mcp-manager'
+		  );
+
+	const bodyCopy = isMissing
+		? __(
+				'The AcrossAI Abilities Manager plugin adds 300+ WordPress abilities your AI client can use — create pages, update content, install plugins, manage users, and more.',
+				'acrossai-mcp-manager'
+		  )
+		: __(
+				'The plugin is already installed on this site. Activate it now to unlock 300+ WordPress abilities for your MCP server.',
+				'acrossai-mcp-manager'
+		  );
+
+	// The full-screen loading overlay is rendered by <StepLayout> whenever
+	// footerAction.isLoading is true (see StepLayout's `busy` computation) —
+	// this step just needs to set `working` and the shared overlay takes
+	// over. Consistent look with every other saving action in the wizard.
+	return (
+		<div>
+			<h2 className="qs__step-title">{ heading }</h2>
+			<p className="qs__step-subtitle">{ bodyCopy }</p>
+
+			{ error && (
+				<div style={ { marginBottom: 20 } }>
+					<Notice status="error">{ error }</Notice>
+				</div>
+			) }
+
+			<div className="qs__gate-card">
+				<div className="qs__gate-stat">
+					<span className="qs__gate-stat-number">300+</span>
+					<span className="qs__gate-stat-label">
+						{ __(
+							'new WordPress abilities unlocked',
+							'acrossai-mcp-manager'
+						) }
+					</span>
+				</div>
+
+				<ul className="qs__gate-bullets">
+					<li>
+						{ __(
+							'Create and edit pages, posts, and custom content.',
+							'acrossai-mcp-manager'
+						) }
+					</li>
+					<li>
+						{ __(
+							'Manage users, roles, taxonomies, and media.',
+							'acrossai-mcp-manager'
+						) }
+					</li>
+					<li>
+						{ __(
+							'Install and update plugins, themes, and core.',
+							'acrossai-mcp-manager'
+						) }
+					</li>
+				</ul>
+
+				<div className="qs__gate-actions">
+					<a
+						className="qs-btn qs-btn--secondary"
+						href={ WP_ORG_URL }
+						target="_blank"
+						rel="noopener noreferrer"
+					>
+						{ __( 'View on WordPress.org ↗', 'acrossai-mcp-manager' ) }
+					</a>
+				</div>
+			</div>
+
+			<div style={ { marginTop: 24 } }>
+				<Notice status="info">
+					{ __(
+						'You can Continue without installing — the wizard will fall back to the 3 abilities WordPress ships with. Or install the plugin now to unlock the full 300+ set. You can broaden per-ability access in the next step.',
+						'acrossai-mcp-manager'
+					) }
+				</Notice>
+			</div>
+		</div>
+	);
+};
+
+export default Step4_AbilitiesManager;

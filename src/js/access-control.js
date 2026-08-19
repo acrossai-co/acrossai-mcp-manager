@@ -1,18 +1,20 @@
 /**
  * Feature 015 — Access Control tab React entry.
  *
- * Mounts the vendor `wpb-access-control` React component into the
- * per-server AccessControlTab. All UI (provider dropdown, role checkboxes,
- * user autocomplete search) is owned by the vendor component; this entry
- * file just reads the mount-div's data-* config and boots.
+ * Mounts the shared <AccessControlEditor> (extracted in F069 T032 so the
+ * Quick Setup wizard's Step 2 uses the same component) into the per-server
+ * AccessControlTab. All UI (provider dropdown, role checkboxes, user
+ * autocomplete search) is owned by the vendor component wrapped in
+ * <AccessControlEditor>; this entry file just reads the mount-div's
+ * data-* config, registers the REST nonce middleware, and mounts.
  *
  * Compiled to build/js/access-control.js by webpack.config.js. Enqueued by
  * admin/Main.php on the Access Control tab only.
  */
 
-import { render, createElement } from '@wordpress/element';
+import { render } from '@wordpress/element';
 import apiFetch from '@wordpress/api-fetch';
-import { AccessControl } from '@wpb/access-control';
+import AccessControlEditor from './access-control/AccessControlEditor.jsx';
 
 // Bundle the vendor stylesheet with this entry. The vendor's AccessControl.js
 // deliberately does NOT import its own SCSS so consumers can control CSS
@@ -32,22 +34,27 @@ import '../../vendor/wpboilerplate/wpb-access-control/js/AccessControl.scss';
 		return;
 	}
 
-	// Register the REST nonce middleware once so all vendor apiFetch calls carry it.
+	// Register the REST nonce middleware once so all vendor apiFetch calls
+	// carry it. F069 continuity: this stays in the bootstrap file (not in
+	// AccessControlEditor) because apiFetch.use is a global side-effect and
+	// the wizard mounts the same component in a context that has already
+	// wired createNonceMiddleware at src/js/quick-setup.js — double-wiring
+	// would send two identical nonces on every request.
 	if ( config.nonce ) {
 		apiFetch.use( apiFetch.createNonceMiddleware( config.nonce ) );
 	}
 
 	render(
-		createElement( AccessControl, {
-			pluginSlug: config.pluginSlug,
-			namespace: config.namespace || 'acrossai-mcp-manager',
-			resourceKey: config.resourceKey,
-			restApiRoot: config.restApiRoot || '/wp-json',
-			nonce: config.nonce || '',
-			title: config.title || undefined,
-			description: config.description || undefined,
-			saveLabel: config.saveLabel || undefined,
-		} ),
+		<AccessControlEditor
+			pluginSlug={ config.pluginSlug }
+			namespace={ config.namespace }
+			resourceKey={ config.resourceKey }
+			restApiRoot={ config.restApiRoot }
+			nonce={ config.nonce }
+			title={ config.title }
+			description={ config.description }
+			saveLabel={ config.saveLabel }
+		/>,
 		mount
 	);
 } )();
