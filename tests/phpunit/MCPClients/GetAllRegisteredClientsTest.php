@@ -187,9 +187,27 @@ final class GetAllRegisteredClientsTest extends TestCase {
 
 		$this->assertContains( 'fake-interleaved', $slugs );
 		$this->assertSame(
-			array( 'claude-desktop', 'claude-code', 'vscode', 'github-copilot', 'fake-interleaved', 'codex', 'cursor', 'gemini', 'custom' ),
+			array(
+				'claude-desktop',
+				'claude-code',
+				'vscode',
+				'github-copilot',
+				'fake-interleaved',
+				'codex',
+				'cursor',
+				'gemini',
+				'windsurf',
+				'zed',
+				'cline',
+				'roo-code',
+				'kilo-code',
+				'amazon-q',
+				'opencode',
+				'antigravity',
+				'custom',
+			),
 			$slugs,
-			'Priority 45 subclass MUST sort between github-copilot (40) and codex (50).'
+			'Priority 45 subclass MUST sort between github-copilot (40) and codex (50); all 16 built-ins retained.'
 		);
 	}
 
@@ -215,8 +233,22 @@ final class GetAllRegisteredClientsTest extends TestCase {
 		// Built-ins first (priorities 10-80), then defaults sorted alphabetically among themselves.
 		$this->assertSame(
 			array(
-				'claude-desktop', 'claude-code', 'vscode', 'github-copilot',
-				'codex', 'cursor', 'gemini', 'custom',
+				'claude-desktop',
+				'claude-code',
+				'vscode',
+				'github-copilot',
+				'codex',
+				'cursor',
+				'gemini',
+				'windsurf',
+				'zed',
+				'cline',
+				'roo-code',
+				'kilo-code',
+				'amazon-q',
+				'opencode',
+				'antigravity',
+				'custom',
 				'aaa-another-default',  // slug tiebreaker: 'aaa' < 'fake'
 				'fake-default-priority',
 			),
