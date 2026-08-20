@@ -311,6 +311,24 @@ class MCPServerListTable extends \WP_List_Table {
 			);
 		}
 
+		// F072 FR-005 — per-row Quick Setup pill, emitted outside the loop
+		// because Quick Setup is not a tab (no ?tab= param). Server id is
+		// deep-linked so Step 1 opens with this row preselected.
+		$quick_setup_url = add_query_arg(
+			array(
+				'page'        => AdminPageSlugs::PARENT,
+				'quick-setup' => '1',
+				'step'        => '1',
+				'server'      => (int) $item['id'],
+			),
+			admin_url( 'admin.php' )
+		);
+		$links_html     .= sprintf(
+			'<a href="%s" class="acrossai-quicklink"><span class="dashicons dashicons-admin-tools" aria-hidden="true"></span><span class="acrossai-quicklink-label">%s</span></a>',
+			esc_url( $quick_setup_url ),
+			esc_html__( 'Quick Setup', 'acrossai-mcp-manager' )
+		);
+
 		return sprintf(
 			'<div class="acrossai-actions-cell"><div class="acrossai-actions-primary">%s%s</div><div class="acrossai-actions-quicklinks">%s</div></div>',
 			$edit_html,

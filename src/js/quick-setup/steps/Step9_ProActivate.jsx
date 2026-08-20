@@ -15,14 +15,16 @@
  * @package AcrossAI_MCP_Manager
  */
 
+import { useState, useCallback, useMemo } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import Notice from '../components/Notice.jsx';
 import useWizardState from '../hooks/useWizardState.js';
-import useAdvanceGuard from '../hooks/useAdvanceGuard.js';
+import useAdvanceGuard, { useFooterAction } from '../hooks/useAdvanceGuard.js';
 
 const Step9_ProActivate = () => {
 	const { refetch } = useWizardState();
 	const bootstrap = window.acrossaiMcpQuickSetup || {};
+	const [ checking, setChecking ] = useState( false );
 
 	// URL to the AcrossAI Add-ons admin page — where the user goes to
 	// activate Pro. Falls back to the wp-admin root if the site URL is
@@ -41,9 +43,32 @@ const Step9_ProActivate = () => {
 	// early-return to the initial-loading icon → this step unmounts → the
 	// effect re-fires on remount → infinite loop / blank screen.
 
-	const handleReloadCheck = () => {
-		refetch();
-	};
+	const handleReloadCheck = useCallback( async () => {
+		setChecking( true );
+		try {
+			await refetch();
+		} finally {
+			setChecking( false );
+		}
+	}, [ refetch ] );
+
+	// Register the re-check button in the footer between Back and Continue.
+	// StepLayout auto-styles a footerAction as PRIMARY and collapses the
+	// built-in Continue to SECONDARY — matches the intent that re-check is
+	// the action that unlocks the wizard (Continue is dormant until Pro
+	// flips to active).
+	const footerAction = useMemo(
+		() => ( {
+			label: checking
+				? __( 'Checking…', 'acrossai-mcp-manager' )
+				: __( "I've activated it — re-check", 'acrossai-mcp-manager' ),
+			onClick: handleReloadCheck,
+			isLoading: checking,
+			disabled: checking,
+		} ),
+		[ checking, handleReloadCheck ]
+	);
+	useFooterAction( footerAction );
 
 	return (
 		<div>
@@ -69,18 +94,11 @@ const Step9_ProActivate = () => {
 				>
 					{ __( 'Go to Add-ons page ↗', 'acrossai-mcp-manager' ) }
 				</a>
-				<button
-					type="button"
-					className="qs-btn qs-btn--secondary"
-					onClick={ handleReloadCheck }
-				>
-					{ __( 'I\'ve activated it — re-check', 'acrossai-mcp-manager' ) }
-				</button>
 			</div>
 
 			<Notice status="info">
 				{ __(
-					'After activating AcrossAI Pro on the Add-ons page, come back to this wizard tab and reload it — or click "I\'ve activated it — re-check" above. Once the wizard detects the active plugin, Continue will unlock.',
+					'After activating AcrossAI Pro on the Add-ons page, come back to this wizard tab and click "I\'ve activated it — re-check" in the footer below. Once the wizard detects the active plugin, Continue will unlock.',
 					'acrossai-mcp-manager'
 				) }
 			</Notice>

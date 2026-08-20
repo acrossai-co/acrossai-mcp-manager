@@ -146,18 +146,18 @@ const Step5_Abilities = () => {
 					<h3 style={ { margin: '0 0 12px', fontSize: 15, fontWeight: 600, color: '#312e81' } }>
 						{ managerInactive
 							? __(
-									'Activate AcrossAI Abilities Manager to unlock 300+ abilities',
+									'Activate AcrossAI Abilities Manager to unlock 350+ abilities',
 									'acrossai-mcp-manager'
 							  )
 							: __(
-									'Unlock 300+ abilities with AcrossAI Abilities Manager',
+									'Unlock 350+ abilities with AcrossAI Abilities Manager',
 									'acrossai-mcp-manager'
 							  ) }
 					</h3>
 					<p style={ { fontSize: 13, lineHeight: 1.65, color: '#4c1d95', margin: '0 0 16px' } }>
 						{ managerInactive
 							? __(
-									'The plugin is already installed on this site. Activate it now to add 300+ new abilities your AI client can use.',
+									'The plugin is already installed on this site. Activate it now to add 350+ new abilities your AI client can use.',
 									'acrossai-mcp-manager'
 							  )
 							: __(

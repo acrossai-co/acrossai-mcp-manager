@@ -147,11 +147,11 @@ const Step3_AccessControl = () => {
 				{ __( 'Who can reach this server?', 'acrossai-mcp-manager' ) }
 			</h2>
 
-			{ /* F042 admin-only banner — EXACT copy from AccessControlTab.php,
-			     do not paraphrase */ }
+			{ /* F042 admin-only banner. Keep this string in sync with the
+			     one in admin/Partials/ServerTabs/AccessControlTab.php. */ }
 			<Notice status="info">
 				{ __(
-					'Default policy: administrators only. When the "Who can access" dropdown below reads "No user access added by admin" (no rule configured), only users with the manage_options capability (WordPress administrators) can reach this server\'s MCP endpoint. Set any rule below — Anyone / Authenticated users / a role / a user / a capability — to broaden access. Enforced at request time via a runtime filter; no database access-control rules are seeded automatically.',
+					'Only administrators can reach this server until you add an access rule below.',
 					'acrossai-mcp-manager'
 				) }
 			</Notice>

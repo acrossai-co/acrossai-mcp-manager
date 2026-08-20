@@ -103,7 +103,7 @@ final class ActivationRedirect {
 			return;
 		}
 
-		$target = admin_url( 'admin.php?page=acrossai_mcp_manager&quick-setup=1&step=1&first_run=1' );
+		$target = admin_url( 'admin.php?page=acrossai_mcp_manager&quick-setup=1&step=1&server=1' );
 		wp_safe_redirect( $target );
 		exit;
 	}

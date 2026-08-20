@@ -75,7 +75,7 @@ const readParams = () => {
 };
 
 const buildUrl = ( step, method, mode, server ) => {
-	// Preserve existing query params (page, quick-setup, first_run) — only
+	// Preserve existing query params (page, quick-setup, server) — only
 	// mutate step + method + mode + server.
 	//
 	// IMPORTANT: `addQueryArgs` writes empty strings as `key=` (visible noise

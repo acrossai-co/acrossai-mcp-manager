@@ -40,6 +40,29 @@ import { useFooterAction } from '../hooks/useAdvanceGuard.js';
 const ABILITIES_MANAGER_SLUG = 'acrossai-abilities-manager';
 const WP_ORG_URL = 'https://wordpress.org/plugins/acrossai-abilities-manager/';
 
+// Ability categories shipped by acrossai-abilities-manager. Rendered as a
+// compact 2-column grid inside the gate card so the operator can see the
+// breadth of what installing unlocks. Keep sorted alphabetically so scanning
+// is predictable; the array order is the render order.
+const ABILITY_CATEGORIES = [
+	'Blocks',
+	'Cache',
+	'Comments',
+	'Content Search',
+	'Core',
+	'Cron',
+	'Database',
+	'File Manager',
+	'Media',
+	'Plugins',
+	'Rank Math',
+	'Settings',
+	'Site Health',
+	'Themes',
+	'Users',
+	'Widgets',
+];
+
 const Step4_AbilitiesManager = () => {
 	const { state, refetch } = useWizardState();
 	const [ working, setWorking ] = useState( false );
@@ -109,25 +132,12 @@ const Step4_AbilitiesManager = () => {
 				'acrossai-mcp-manager'
 		  );
 
-	const bodyCopy = isMissing
-		? __(
-				'The AcrossAI Abilities Manager plugin adds 300+ WordPress abilities your AI client can use — create pages, update content, install plugins, manage users, and more.',
-				'acrossai-mcp-manager'
-		  )
-		: __(
-				'The plugin is already installed on this site. Activate it now to unlock 300+ WordPress abilities for your MCP server.',
-				'acrossai-mcp-manager'
-		  );
-
 	// The full-screen loading overlay is rendered by <StepLayout> whenever
 	// footerAction.isLoading is true (see StepLayout's `busy` computation) —
 	// this step just needs to set `working` and the shared overlay takes
 	// over. Consistent look with every other saving action in the wizard.
 	return (
 		<div>
-			<h2 className="qs__step-title">{ heading }</h2>
-			<p className="qs__step-subtitle">{ bodyCopy }</p>
-
 			{ error && (
 				<div style={ { marginBottom: 20 } }>
 					<Notice status="error">{ error }</Notice>
@@ -135,36 +145,18 @@ const Step4_AbilitiesManager = () => {
 			) }
 
 			<div className="qs__gate-card">
-				<div className="qs__gate-stat">
-					<span className="qs__gate-stat-number">300+</span>
-					<span className="qs__gate-stat-label">
-						{ __(
-							'new WordPress abilities unlocked',
-							'acrossai-mcp-manager'
-						) }
-					</span>
-				</div>
+				<h2 className="qs__step-title">{ heading }</h2>
 
-				<ul className="qs__gate-bullets">
-					<li>
-						{ __(
-							'Create and edit pages, posts, and custom content.',
-							'acrossai-mcp-manager'
-						) }
-					</li>
-					<li>
-						{ __(
-							'Manage users, roles, taxonomies, and media.',
-							'acrossai-mcp-manager'
-						) }
-					</li>
-					<li>
-						{ __(
-							'Install and update plugins, themes, and core.',
-							'acrossai-mcp-manager'
-						) }
-					</li>
-				</ul>
+				<div className="qs__gate-categories">
+					<p className="qs__gate-categories-label">
+						{ __( 'Includes 350+ abilities for:', 'acrossai-mcp-manager' ) }
+					</p>
+					<ul className="qs__gate-bullets qs__gate-bullets--grid">
+						{ ABILITY_CATEGORIES.map( ( name ) => (
+							<li key={ name }>{ name }</li>
+						) ) }
+					</ul>
+				</div>
 
 				<div className="qs__gate-actions">
 					<a
@@ -181,7 +173,7 @@ const Step4_AbilitiesManager = () => {
 			<div style={ { marginTop: 24 } }>
 				<Notice status="info">
 					{ __(
-						'You can Continue without installing — the wizard will fall back to the 3 abilities WordPress ships with. Or install the plugin now to unlock the full 300+ set. You can broaden per-ability access in the next step.',
+						'You can Continue without installing — the wizard will fall back to the 3 abilities WordPress ships with. Or install the plugin now to unlock the full 350+ set. You can broaden per-ability access in the next step.',
 						'acrossai-mcp-manager'
 					) }
 				</Notice>
