@@ -120,15 +120,8 @@ final class AccessControlTab extends AbstractServerTab {
 	 * @return void
 	 */
 	private function render_default_policy_notice(): void {
-		echo '<div class="notice notice-info inline" style="margin:0 0 12px;"><p><strong>';
-		echo esc_html__( 'Default policy: administrators only.', 'acrossai-mcp-manager' );
-		echo '</strong> ';
-		printf(
-			/* translators: 1: dropdown label, 2: <code>manage_options</code>. */
-			esc_html__( 'When the %1$s dropdown below reads "No user access added by admin" (no rule configured), only users with the %2$s capability (WordPress administrators) can reach this server\'s MCP endpoint. Set any rule below — Anyone / Authenticated users / a role / a user / a capability — to broaden access. Enforced at request time via a runtime filter; no database access-control rules are seeded automatically.', 'acrossai-mcp-manager' ),
-			'<code>' . esc_html__( 'Who can access', 'acrossai-mcp-manager' ) . '</code>',
-			'<code>manage_options</code>'
-		);
+		echo '<div class="notice notice-info inline" style="margin:0 0 12px;"><p>';
+		esc_html_e( 'Only administrators can reach this server until you add an access rule below.', 'acrossai-mcp-manager' );
 		echo '</p></div>';
 	}
 

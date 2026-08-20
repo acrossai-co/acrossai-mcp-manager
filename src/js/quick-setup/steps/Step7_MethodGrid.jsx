@@ -77,7 +77,7 @@ const Step7_MethodGrid = () => {
 	const trialEndDate = state.plugins.trialEndDate || '';
 	const chosenMethod = state.wizardState.method;
 	const showTrialPromo = proState !== 'active';
-	const showPaidBadge = proState !== 'active';
+	const showRecommendedBadge = proState !== 'active';
 	const [ picking, setPicking ] = useState( null );
 
 	useAdvanceGuard( chosenMethod !== null );
@@ -178,9 +178,9 @@ const Step7_MethodGrid = () => {
 								<>
 									<Icon size={ 18 } />{ ' ' }
 									{ m.title }
-									{ isConnectors && showPaidBadge && (
+									{ isConnectors && showRecommendedBadge && (
 										<span className="qs-card__badge">
-											{ __( 'PAID', 'acrossai-mcp-manager' ) }
+											{ __( 'RECOMMENDED', 'acrossai-mcp-manager' ) }
 										</span>
 									) }
 								</>

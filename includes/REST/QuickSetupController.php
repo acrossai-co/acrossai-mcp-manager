@@ -234,6 +234,25 @@ final class QuickSetupController {
 		$plugins   = $this->collect_plugin_states();
 		$methods   = ConnectionMethodRegistry::instance()->get_all();
 
+		// F073 — override the generic (server-less) client list with the
+		// server-scoped variant so each DTO carries the real Configuration
+		// JSON for the wizard's active server. Mirrors the Clients tab, which
+		// resolves the same URL in MCPClientsBlock:224-226. Falls back to the
+		// generic list (no `config` field) when no server is selected yet.
+		if ( $server_id > 0 ) {
+			$rows = MCPServerQuery::instance()->query(
+				array(
+					'id'     => $server_id,
+					'number' => 1,
+				)
+			);
+			if ( ! empty( $rows ) ) {
+				$methods['clients'] = ConnectionMethodRegistry::instance()->get_clients(
+					$rows[0]->to_array()
+				);
+			}
+		}
+
 		return rest_ensure_response(
 			array(
 				'servers'     => $servers,

@@ -82,6 +82,21 @@ class Menu {
 			array( $settings, 'render_list_page' ),
 			2
 		);
+
+		// 2) Quick Setup — position 3, right after MCP (F072 FR-003).
+		// URL-literal menu_slug + empty render callback = WP renders this
+		// submenu item as a direct link to the wizard URL; no dedicated
+		// page is created because ?quick-setup=1 is handled by the MCP
+		// page's own dispatcher (Settings::render_list_page).
+		add_submenu_page(
+			SettingsPage::PARENT_SLUG,
+			__( 'Quick Setup', 'acrossai-mcp-manager' ),
+			__( 'Quick Setup', 'acrossai-mcp-manager' ),
+			'manage_options',
+			'admin.php?page=' . AdminPageSlugs::PARENT . '&quick-setup=1&step=1',
+			'',
+			3
+		);
 	}
 
 	/**
@@ -102,7 +117,18 @@ class Menu {
 			esc_html__( 'Settings', 'acrossai-mcp-manager' )
 		);
 
-		// Prepend the Settings link so it appears first.
+		$quick_setup_url  = esc_url(
+			admin_url( 'admin.php?page=' . AdminPageSlugs::PARENT . '&quick-setup=1&step=1&server=1' )
+		);
+		$quick_setup_link = sprintf(
+			'<a href="%s">%s</a>',
+			$quick_setup_url,
+			esc_html__( 'Quick Setup', 'acrossai-mcp-manager' )
+		);
+
+		// Prepend Quick Setup first, then Settings, so the final row order
+		// reads Settings | Quick Setup | Deactivate | Download (F072 FR-002).
+		array_unshift( $links, $quick_setup_link );
 		array_unshift( $links, $settings_link );
 
 		return $links;

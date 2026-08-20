@@ -568,12 +568,25 @@ class Settings {
 			)
 		);
 
+		$quick_setup_url = esc_url(
+			add_query_arg(
+				array(
+					'page'        => AdminPageSlugs::PARENT,
+					'quick-setup' => '1',
+					'step'        => '1',
+				),
+				admin_url( 'admin.php' )
+			)
+		);
+
 		echo '<div class="wrap">';
 		printf(
-			'<h1 class="wp-heading-inline">%s</h1> <a href="%s" class="page-title-action">%s</a><hr class="wp-header-end" />',
+			'<h1 class="wp-heading-inline">%s</h1> <a href="%s" class="page-title-action">%s</a> <a href="%s" class="page-title-action">%s</a><hr class="wp-header-end" />',
 			esc_html__( 'MCP Servers', 'acrossai-mcp-manager' ),
 			esc_url( $create_url ), // SEC-S2: defense in depth — esc_url is idempotent.
-			esc_html__( 'Add New', 'acrossai-mcp-manager' )
+			esc_html__( 'Add New', 'acrossai-mcp-manager' ),
+			esc_url( $quick_setup_url ),
+			esc_html__( 'Quick Setup', 'acrossai-mcp-manager' )
 		);
 
 		echo '<form method="post">';
