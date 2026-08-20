@@ -178,25 +178,65 @@ final class ConnectionMethodRegistry {
 	 * Delegates to F034 canonical enumeration; NEVER re-fires
 	 * `acrossai_mcp_client_classes` (enforced by SC-005 grep gate).
 	 *
+	 * F073 — when `$server` is provided (raw MCPServer row array with
+	 * `server_route_namespace` + `server_route` keys), each DTO carries a
+	 * pre-encoded `config` string produced by `get_config_snippet()` using
+	 * identical JSON flags to `MCPClientsBlock` so the wizard's Step 11 and
+	 * the per-server Clients tab render byte-identical Configuration JSON.
+	 * When `$server` is null, DTOs omit the `config` field entirely.
+	 *
+	 * @param array<string, mixed>|null $server Optional MCPServer raw row (as
+	 *                                          returned by
+	 *                                          `MCPServerQuery::query()[0]->to_array()`).
+	 *                                          Null yields the server-less
+	 *                                          discovery DTOs (backwards-compatible).
 	 * @return array<int, array<string, mixed>>
 	 */
-	public function get_clients(): array {
+	public function get_clients( ?array $server = null ): array {
 		$clients = AbstractMCPClient::get_all_registered_clients();
-		$dtos    = array();
 
+		// F073 — resolve server URL identically to MCPClientsBlock:224-226 so
+		// the wizard's Step 11 and the per-server Clients tab produce
+		// byte-identical Configuration JSON for every client.
+		$server_url = null;
+		if ( null !== $server
+			&& isset( $server['server_route_namespace'], $server['server_route'] )
+		) {
+			$server_url = rest_url(
+				trailingslashit( (string) $server['server_route_namespace'] )
+				. (string) $server['server_route']
+			);
+		}
+
+		$dtos = array();
 		foreach ( $clients as $client ) {
-			$dtos[] = array(
-				'category'    => 'client',
-				'slug'        => $client->get_client_slug(),
-				'name'        => $client->get_client_name(),
-				'description' => $client->get_description(),
-				'icon'        => $client->get_icon(),
-				'meta'        => array(
+			$dto = array(
+				'category'     => 'client',
+				'slug'         => $client->get_client_slug(),
+				'name'         => $client->get_client_name(),
+				'description'  => $client->get_description(),
+				'icon'         => $client->get_icon(),
+				// F073 — surfaced so Step 11 can render the same instructions
+				// callout the Clients tab shows (MCPClientsBlock:252-258).
+				'instructions' => $client->get_instructions(),
+				'meta'         => array(
 					'config_file'   => $client->get_config_file(),
 					'top_level_key' => $client->get_top_level_key(),
 					'class'         => get_class( $client ),
 				),
 			);
+
+			if ( null !== $server_url ) {
+				$snippet       = $client->get_config_snippet( $server_url, '' );
+				$dto['config'] = is_array( $snippet )
+					? (string) wp_json_encode(
+						$snippet,
+						JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES
+					)
+					: (string) $snippet;
+			}
+
+			$dtos[] = $dto;
 		}
 
 		return $dtos;

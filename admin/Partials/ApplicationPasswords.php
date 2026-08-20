@@ -68,6 +68,15 @@ class ApplicationPasswords {
 						'default'           => 0,
 						'sanitize_callback' => 'absint',
 					),
+					// F073+ — optional caller-supplied app-password name so the
+					// wizard can label wizard-generated tokens (e.g. "Quick Edit -
+					// Claude Desktop") distinct from tab-generated ones. Sanitised
+					// to text; empty falls back to build_app_name(server_id).
+					'name'      => array(
+						'required'          => false,
+						'default'           => '',
+						'sanitize_callback' => 'sanitize_text_field',
+					),
 				),
 			)
 		);
@@ -101,7 +110,14 @@ class ApplicationPasswords {
 
 		$server_id    = (int) $request->get_param( 'server_id' );
 		$current_user = wp_get_current_user();
-		$app_name     = $this->build_app_name( $server_id );
+
+		// F073+ — honour caller-supplied name when non-empty; otherwise fall
+		// back to the deterministic per-server name so the Tokens tab keeps
+		// its historical labelling.
+		$custom_name = (string) $request->get_param( 'name' );
+		$app_name    = '' !== trim( $custom_name )
+			? $custom_name
+			: $this->build_app_name( $server_id );
 
 		$result = \WP_Application_Passwords::create_new_application_password(
 			$current_user->ID,

@@ -550,6 +550,178 @@ html.wp-toolbar:has(body.acrossai-mcp-quick-setup-fullpage) {
 	}
 }
 
+// F073 — Config File / Top-Level Key metadata rows on Step 11. Mirrors the
+// per-server Clients tab (public/Renderers/MCPClientsBlock.php:205-221) so
+// operators see the same layout regardless of which surface they entered
+// through. Label is fixed-width so keys and paths line up between rows;
+// value renders as a bordered readonly input (WP-native look) to match the
+// tab exactly.
+.qs-meta-row {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	font-size: 13px;
+	line-height: 1.5;
+	padding: 6px 0;
+}
+
+.qs-meta-label {
+	font-weight: 600;
+	color: $qs-text;
+	flex: 0 0 120px;
+}
+
+.qs-meta-input {
+	flex: 1 1 auto;
+	min-width: 0;
+	font-family: SFMono-Regular, Consolas, monospace;
+	font-size: 12px;
+	padding: 6px 10px;
+	background: #f6f7f7;
+	border: 1px solid #dcdcde;
+	border-radius: 3px;
+	color: $qs-text;
+	cursor: text;
+}
+
+// Full-width variant — used inside .qs-step-body where the input has no
+// sibling label pill next to it (the step-heading already labels it).
+.qs-meta-input--full {
+	display: block;
+	width: 100%;
+	box-sizing: border-box;
+}
+
+// F073 — Numbered-step scaffolding for Step 11's Generate → Config File →
+// Top-Level Key → Copy walkthrough. Each step gets a small pill-style number
+// badge + a plain-language title above the actual UI element (button, input,
+// or CodeBlock). Reads as a visual how-to instead of a form dump.
+.qs-step {
+	margin-bottom: 20px;
+
+	&:last-of-type { margin-bottom: 0; }
+}
+
+.qs-step-heading {
+	margin: 0 0 10px;
+	font-size: 15px;
+	font-weight: 600;
+	color: $qs-text;
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	line-height: 1.4;
+}
+
+.qs-step-heading__num {
+	font-size: 10px;
+	font-weight: 700;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: $qs-primary;
+	padding: 3px 8px;
+	background: #eef1ff; // light tint of $qs-primary
+	border-radius: 3px;
+	flex: 0 0 auto;
+	line-height: 1.4;
+}
+
+.qs-step-body {
+	// Container for whatever the step needs: a button, an input, a CodeBlock.
+	// No forced alignment — the child element controls its own width.
+}
+
+// F073 — Generate section now lives inside a .qs-step-body. Drop the earlier
+// standalone framing (top border, padding-left offset) since the step scaffold
+// provides that structure.
+.qs-generate-section {
+	margin: 0;
+	padding: 0;
+	border: none;
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
+.qs-generate-section__btn {
+	// Auto-shrink so the button hugs its label instead of stretching to the
+	// full container width like Step footer buttons do.
+	align-self: flex-start;
+	min-width: auto;
+}
+
+.qs-generate-section__desc {
+	margin: 0;
+	font-size: 12px;
+	color: $qs-text-muted;
+	line-height: 1.5;
+	max-width: 560px;
+}
+
+.qs-generate-section__reveal {
+	margin-top: 10px;
+	padding: 12px 14px;
+	background: #f0f6fc;
+	border: 1px solid #c3d9ec;
+	border-radius: 4px;
+	max-width: 560px;
+}
+
+.qs-generate-section__reveal-row {
+	display: flex;
+	gap: 8px;
+	align-items: center;
+}
+
+.qs-generate-section__reveal-input {
+	flex: 1 1 auto;
+	min-width: 0;
+	font-family: SFMono-Regular, Consolas, monospace;
+	font-size: 13px;
+	padding: 6px 10px;
+	background: #ffffff;
+	border: 1px solid #c3d9ec;
+	border-radius: 3px;
+	color: $qs-text;
+}
+
+.qs-generate-section__reveal-warning {
+	margin: 8px 0 0;
+	font-size: 12px;
+	color: #7a4a00;
+	line-height: 1.5;
+}
+
+// Modifier: 2-column grid used by Step 4 to render the 16 ability categories
+// compactly inside the gate card. Falls back to a single column below 480px
+// so the checkmarks and labels never wrap mid-word on narrow admin viewports.
+.qs__gate-bullets--grid {
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	column-gap: 24px;
+
+	@media (max-width: 480px) {
+		grid-template-columns: 1fr;
+	}
+}
+
+// Small labelled block that wraps the category grid so the "Includes abilities
+// for:" caption stays visually tied to the list it introduces.
+.qs__gate-categories {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	text-align: left;
+}
+
+.qs__gate-categories-label {
+	margin: 0;
+	font-size: 12px;
+	font-weight: 600;
+	color: #4c1d95;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+}
+
 // Initial hydrate screen — shown between mount and the first successful
 // GET /state. Full-viewport centered brand icon with a soft pulse so it
 // reads as "warming up" rather than "hung". No text (the alt is

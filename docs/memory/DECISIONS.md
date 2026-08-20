@@ -2267,3 +2267,74 @@ Establishes the "built-in placeholder → filter-contributor override" pattern f
 - F034 `ClientsRegistry` (same pattern, older — established the precedent this decision generalizes).
 - F040 `AIConnectorsPromoTab` (first consumer of the placeholder → override pattern, 2026-08-01).
 - `DEC-CONNECTOR-PROFILE-*` (superseded by F040 — the OAuth registry patterns this replaces).
+
+
+---
+
+
+### 2026-08-21 — D42 / DEC-SUBMENU-URL-LITERAL-NO-CALLBACK — Submenu items may deep-link via URL-literal `menu_slug`
+
+**Status**
+Active
+
+**Why this is durable**
+Every future wizard, dashboard, tool, or action-launcher that needs its own AcrossAI-menu entry pointing at an EXISTING page + query args will otherwise duplicate a full render callback or fabricate a fake page slug and route through a redirect. Non-obvious WP `admin_menu` behaviour (undocumented in the wp.org docs, discovered by reading core's `admin.php` dispatcher) — reviewers will ask "where's the render callback?" without this pin. First application: F072 Quick Setup submenu.
+
+**Decision**
+`add_submenu_page( $parent, $title, $label, $cap, $menu_slug, $callback = '', $position = null )` accepts a URL-like string as `$menu_slug` — WP core's `admin.php` inspects the slug and, if it looks like an admin URL, renders the menu item as a direct link rather than routing through a callback page. This lets a submenu entry deep-link into an existing page with `?…&quick-setup=1&step=1&…` without inventing a new page.
+
+Requirements when using this pattern:
+- Menu slug MUST be a full `admin.php?page=…` string (or an absolute admin URL); relative paths won't route.
+- Render callback MUST be an empty string `''` (NOT a closure returning nothing — WP still tries to dispatch on non-empty callables).
+- Capability check on the linked page still enforces access — the URL-literal item bypasses no security.
+- Position may still be passed as the 7th arg for ordering under the parent.
+- Add a one-line comment at the call site so a future maintainer doesn't mistake the empty `''` callback for a broken registration.
+
+Reference impl: `admin/Partials/Menu.php::register_submenu()` shipped in F072 — adds a "Quick Setup" submenu at position 3 linking to `admin.php?page=acrossai_mcp_manager&quick-setup=1&step=1`.
+
+**Tradeoffs**
+- Gained: zero-callback dashboard/wizard entries; no throwaway "landing" pages; no cost of a full sub-page render just to link to another URL.
+- Made harder: linter/IDE won't flag a typo'd URL in the slug; grep for the submenu render callback returns empty (a future maintainer might mistake this for a broken registration). Mitigation: one-line comment above the call — "URL-literal slug → linked page renders it".
+- Reconsider: if the target page needs its own dedicated URL (bookmarkable, permalink-stable), promote it to a real page with a callback. If the destination will become plugin-agnostic (moves to a companion plugin), route through a filter instead of a URL string.
+
+**Related**
+- F072 planning doc `docs/planings-tasks/072-quick-setup-entry-points.md` — application in wizard entry points.
+- A1 hook-registration rule — Menu::register_submenu() is still wired via Includes\Main::define_admin_hooks(); the URL-literal is inside the singleton, not a new hook.
+
+
+---
+
+
+### 2026-08-21 — D43 / DEC-CROSS-SURFACE-PARITY-UNIFY-AT-DATA-LAYER — Two renderers, one DTO producer
+
+**Status**
+Active
+
+**Why this is durable**
+When a PHP-rendered admin surface and a React admin surface must show the same domain object (client config, connector card, ability row, etc.), the tempting fix is to hand-port the PHP renderer into React — silently drifts the moment either side adds a field. Codifying "share the DATA, not the component" up front prevents the re-implementation trap and the resulting drift bugs. Companion to D35 (F034 self-contained subsystem contract — one canonical enumeration for subclass discovery) — D43 covers the complementary "two renderers, one DTO" case D35 doesn't.
+
+**Decision**
+Two renderers (PHP admin, React admin, WP-CLI table, REST response, etc.) that must show the same domain object MUST share a single DTO producer (registry method, resolver, model accessor) — NEVER share a component. When one renderer already exists and a new one is added, extend the DTO with the fields the new renderer needs (optional params / additive fields); do NOT re-derive them in the new renderer.
+
+Requirements:
+- Encoding decisions (JSON flags, date formats, escaping) MUST live in the DTO producer, not per-renderer — otherwise byte-identity is impossible.
+- New DTO fields must be additive (present-or-absent), never rename or remove existing keys — protects consumers of the shared producer.
+- Server-scoped or context-scoped enrichment must be opt-in via param (e.g. `get_clients( ?array $server = null )`) — memoized generic consumers stay byte-stable.
+- Translation keys for shared user-facing strings MUST be identical across renderers — translators shouldn't key the same sentence twice.
+
+Reference impl: F073 `public/Discovery/ConnectionMethodRegistry::get_clients( ?array $server = null )` shipped as one DTO producer consumed by both:
+- Per-server-edit Clients tab (PHP, `public/Renderers/MCPClientsBlock.php` — reads `meta.config_file`, `meta.top_level_key`, computes snippet inline).
+- Quick Setup wizard Step 11 (React, `src/js/quick-setup/steps/Step11_ClientDetail.jsx` — reads `meta.config_file`, `meta.top_level_key`, `config`, `instructions` from the DTO).
+
+Same `JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES` encoding on both sides; shared Access Control paragraph uses one `__()` translation key.
+
+**Tradeoffs**
+- Gained: byte-identity impossible to break by editing one renderer only; new fields land in both surfaces on the same commit; new subclasses (F034 extensibility) auto-appear everywhere; no drift bug class between PHP and React admin surfaces.
+- Made harder: DTO producer grows optional params over time. Mitigation: split into a dedicated method per broadly-different shape (e.g. `get_clients_admin()` vs `get_clients_public()`) once the optional-param list exceeds ~3.
+- Reconsider: when the two renderers legitimately need to diverge (e.g. one strips secrets, one adds them), split the producer into two callers and cite this DEC in both call sites so the drift is intentional and reviewable.
+
+**Related**
+- D35 / DEC-F034-SELF-CONTAINED-SUBSYSTEM-CONTRACT — the sibling rule for subclass ENUMERATION; D43 is the same "one canonical source" instinct applied to DTO SHAPE + ENCODING.
+- D36 / DEC-F035-PUBLIC-API-FINAL-CLASS-FILTER-ONLY-EXTENSION — reinforces that the DTO producer is a public / stable surface; contracts (final class + additive-only DTO) apply.
+- B32 — "filter defaults must be the canonical resolver's output" is the runtime-behaviour equivalent of D43's structural rule.
+- F073 planning doc `docs/planings-tasks/073-wizard-client-snippet-parity.md`.
