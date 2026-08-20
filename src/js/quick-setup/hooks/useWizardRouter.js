@@ -18,7 +18,7 @@
  * @package AcrossAI_MCP_Manager
  */
 
-import { useState, useEffect, useCallback } from '@wordpress/element';
+import { useState, useEffect, useCallback, useMemo } from '@wordpress/element';
 import { getQueryArg, addQueryArgs, removeQueryArgs } from '@wordpress/url';
 
 const STEP_ORDER = [
@@ -94,39 +94,74 @@ const buildUrl = ( step, method, mode, server ) => {
 	return url;
 };
 
+// Custom navigation event fired after any `pushState` / `replaceState` inside
+// this hook. Every mounted instance re-syncs its local `params` state from
+// the URL on this event, so a call to `router.goTo('1')` inside Completion
+// also updates App.jsx's router state → App re-renders with the new step
+// component. Without this fan-out, each `useWizardRouter()` call site would
+// maintain independent state and only browser Back/Forward (which fires
+// native `popstate`) would keep them in sync — a `router.goTo(...)` from
+// any component that isn't App silently no-ops on the render path.
+const NAV_EVENT = 'acrossai-mcp-qs-nav';
+
+const dispatchNav = () => {
+	if ( typeof window !== 'undefined' && typeof CustomEvent === 'function' ) {
+		window.dispatchEvent( new CustomEvent( NAV_EVENT ) );
+	}
+};
+
 const useWizardRouter = () => {
 	const [ params, setParams ] = useState( readParams );
 
-	// Popstate listener — sync when browser Back/Forward walks history.
+	// Sync on browser Back/Forward AND on same-tab `pushState`/`replaceState`
+	// dispatched by any other instance of this hook (see NAV_EVENT above).
 	useEffect( () => {
-		const onPopState = () => setParams( readParams() );
-		window.addEventListener( 'popstate', onPopState );
-		return () => window.removeEventListener( 'popstate', onPopState );
+		const sync = () => setParams( readParams() );
+		window.addEventListener( 'popstate', sync );
+		window.addEventListener( NAV_EVENT, sync );
+		return () => {
+			window.removeEventListener( 'popstate', sync );
+			window.removeEventListener( NAV_EVENT, sync );
+		};
 	}, [] );
 
 	const goTo = useCallback( ( step, method = null ) => {
 		if ( ! STEP_ORDER.includes( step ) ) {
 			return;
 		}
+		// ⚠️  The history write MUST happen synchronously HERE — never inside
+		// the setParams updater. React only runs an updater eagerly when the
+		// owning fiber has no queued work; with work pending it defers the
+		// updater to the next render. `dispatchNav()` below fires immediately
+		// either way, so a deferred updater meant NAV_EVENT listeners ran
+		// `setParams( readParams() )` against the OLD URL and queued a second
+		// update that landed AFTER this one — silently reverting the
+		// navigation. That was the "Save and Continue needs two clicks" bug on
+		// Step 3: the URL advanced but the rendered step stayed put.
+		//
+		// Reading the current params from the URL (not from React state) is
+		// consistent with FR-008 — the URL is the source of truth.
+		//
 		// Step navigation always clears mode (mode is a per-step sub-view).
 		// Preserve the current server param so it survives navigation.
-		setParams( ( prev ) => {
-			const nextUrl = buildUrl( step, method, null, prev.server );
-			window.history.pushState( {}, '', nextUrl );
-			return { step, method, mode: null, server: prev.server };
-		} );
+		const current = readParams();
+		const nextUrl = buildUrl( step, method, null, current.server );
+		window.history.pushState( {}, '', nextUrl );
+		setParams( { step, method, mode: null, server: current.server } );
+		dispatchNav();
 	}, [] );
 
 	// Set/clear a per-step sub-view mode (e.g. `?mode=create` for Step 1's
 	// inline server-create form). URL-backed so browser Back returns to the
 	// picker instead of walking all the way out of Step 1.
 	const setMode = useCallback( ( mode ) => {
-		setParams( ( prev ) => {
-			const next = { ...prev, mode: mode || null };
-			const nextUrl = buildUrl( prev.step, prev.method, next.mode, prev.server );
-			window.history.pushState( {}, '', nextUrl );
-			return next;
-		} );
+		// Same synchronous-history-write rule as goTo above.
+		const current = readParams();
+		const next = { ...current, mode: mode || null };
+		const nextUrl = buildUrl( current.step, current.method, next.mode, current.server );
+		window.history.pushState( {}, '', nextUrl );
+		setParams( next );
+		dispatchNav();
 	}, [] );
 
 	// Sync server id into the URL. Used by App.jsx whenever wizardState's
@@ -135,16 +170,17 @@ const useWizardRouter = () => {
 	// (not push) so we don't clutter the browser history with server-id-only
 	// changes — the step navigation entries are what belong in history.
 	const setServer = useCallback( ( server ) => {
-		setParams( ( prev ) => {
-			const normalized =
-				Number.isFinite( server ) && server > 0 ? server : null;
-			if ( prev.server === normalized ) {
-				return prev; // no-op — avoids an extra history entry / rerender.
-			}
-			const nextUrl = buildUrl( prev.step, prev.method, prev.mode, normalized );
-			window.history.replaceState( {}, '', nextUrl );
-			return { ...prev, server: normalized };
-		} );
+		// Same synchronous-history-write rule as goTo above.
+		const normalized =
+			Number.isFinite( server ) && server > 0 ? server : null;
+		const current = readParams();
+		if ( current.server === normalized ) {
+			return; // no-op — avoids an extra history entry / rerender.
+		}
+		const nextUrl = buildUrl( current.step, current.method, current.mode, normalized );
+		window.history.replaceState( {}, '', nextUrl );
+		setParams( { ...current, server: normalized } );
+		dispatchNav();
 	}, [] );
 
 	const advance = useCallback( ( { skips = {} } = {} ) => {
@@ -184,18 +220,44 @@ const useWizardRouter = () => {
 		window.location.href = target;
 	}, [] );
 
-	return {
-		step: params.step,
-		method: params.method,
-		mode: params.mode,
-		server: params.server,
-		goTo,
-		setMode,
-		setServer,
-		advance,
-		back,
-		exit,
-	};
+	// ⚠️  Memoize the returned object. A fresh object literal per render gave
+	// `router` a new identity every time, which cascaded:
+	//   App:   advanceFromContext( [router, skips] ) → new every render
+	//          → guardContext → new every render
+	//   Step:  handleSaveAndContinue( [..., advance] ) → new every render
+	//          → footerAction → new every render
+	//          → useFooterAction's effect ( [action] ) re-fires every render
+	//          → setFooterAction( newObject ) on App's fiber → re-render → …
+	// a self-sustaining passive-effect update loop (React logs "Maximum
+	// update depth exceeded"). It also kept App's fiber permanently dirty,
+	// which is what made goTo's deferred-updater bug above fire reliably on
+	// every step that registers a footer action (3, 5, 6).
+	return useMemo(
+		() => ( {
+			step: params.step,
+			method: params.method,
+			mode: params.mode,
+			server: params.server,
+			goTo,
+			setMode,
+			setServer,
+			advance,
+			back,
+			exit,
+		} ),
+		[
+			params.step,
+			params.method,
+			params.mode,
+			params.server,
+			goTo,
+			setMode,
+			setServer,
+			advance,
+			back,
+			exit,
+		]
+	);
 };
 
 export default useWizardRouter;
