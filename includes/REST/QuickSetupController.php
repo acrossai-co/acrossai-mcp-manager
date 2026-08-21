@@ -801,6 +801,11 @@ final class QuickSetupController {
 
 		return array(
 			'acrossaiPro'                 => $pro_state,
+			// F074 Step 9 — activating the plugin is only half the job; until
+			// a licence (or trial) is connected, acrossai-pro registers no
+			// connector profiles, so "active" alone must NOT let the wizard
+			// walk on to the Connectors screen.
+			'acrossaiProLicensed'         => $this->pro_license_active(),
 			'acrossaiProActivateUrl'      => 'inactive' === $pro_state
 				? $this->plugin_activate_url( $pro_file )
 				: null,
@@ -814,6 +819,32 @@ final class QuickSetupController {
 			// timezone (unlike raw date()).
 			'trialEndDate'                => wp_date( 'F j, Y', strtotime( '+30 days' ) ),
 		);
+	}
+
+	/**
+	 * Whether acrossai-pro currently has a usable licence (paid or trial).
+	 *
+	 * Delegates to the Pro plugin's own Freemius gate — `can_use_premium_code()`
+	 * is the exact predicate acrossai-pro uses to decide whether to register
+	 * its connector profiles (see acrossai-pro/includes/Main.php), so the
+	 * wizard and the plugin can never disagree about what "licensed" means.
+	 * Opting into the free version returns false, which is the point: the
+	 * Connectors flow is unusable without a licence.
+	 *
+	 * Returns false whenever the plugin is inactive or its Freemius SDK is
+	 * missing — the accessor only exists once acrossai-pro has loaded.
+	 *
+	 * @return bool
+	 */
+	private function pro_license_active(): bool {
+		if ( ! function_exists( 'acrossai_pro' ) ) {
+			return false;
+		}
+		$fs = \acrossai_pro();
+		if ( ! $fs || ! method_exists( $fs, 'can_use_premium_code' ) ) {
+			return false;
+		}
+		return (bool) $fs->can_use_premium_code();
 	}
 
 	/**

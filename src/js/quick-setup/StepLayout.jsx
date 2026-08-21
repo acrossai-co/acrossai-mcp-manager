@@ -27,7 +27,7 @@ const STEP_TITLES = {
 	'6': 'Enable server',
 	'7': 'Pick a connection method',
 	'8': 'Get AcrossAI Pro',
-	'9': 'Activate AcrossAI Pro',
+	'9': 'Set up AcrossAI Pro',
 	'10': 'One-click OAuth setup',
 	'11': 'MCP Client setup',
 	'12': 'npm setup',
@@ -115,7 +115,15 @@ const StepLayout = ( {
 	//   - The pulsing brand icon is more legible than a tiny button spinner
 	//   - Overlay blocks all interaction, preventing the double-fire and
 	//     mid-request-back-click races we used to defend against per-button
-	const busy = isLoading || !! footerAction?.isLoading;
+	// A step may register one footer action or several (Step 9 pairs
+	// "Reload — I installed it" with "Open plugin installer" so all three
+	// buttons sit on one row). Normalize to an array so the render path and
+	// the busy/locked math don't need two shapes.
+	const footerActions = footerAction
+		? [].concat( footerAction ).filter( Boolean )
+		: [];
+	const loadingAction = footerActions.find( ( a ) => a.isLoading );
+	const busy = isLoading || !! loadingAction;
 
 	return (
 		<>
@@ -133,8 +141,8 @@ const StepLayout = ( {
 						aria-hidden="true"
 					/>
 					<span className="qs__sr-only">
-						{ footerAction?.isLoading && footerAction?.label
-							? footerAction.label
+						{ loadingAction?.label
+							? loadingAction.label
 							: __( 'Saving…', 'acrossai-mcp-manager' ) }
 					</span>
 				</div>
@@ -165,6 +173,14 @@ const StepLayout = ( {
 				<span className="qs__header-title">
 					{ __( 'Quick Setup', 'acrossai-mcp-manager' ) }
 				</span>
+				<a
+					className="qs__header-consult"
+					href="https://acrossai.co/consultations/"
+					target="_blank"
+					rel="noopener noreferrer"
+				>
+					{ __( 'Free Consultations ↗', 'acrossai-mcp-manager' ) }
+				</a>
 				{ ! isDone && (
 					<a
 						className="qs__header-exit"
@@ -196,9 +212,10 @@ const StepLayout = ( {
 					// Continue and race the auto-skip effect.
 					const backLocked = backDisabled || busy;
 					const continueLocked =
-						! canAdvance || busy || !! footerAction?.disabled;
-					const footerActionLocked =
-						!! footerAction?.disabled || !! footerAction?.isLoading;
+						! canAdvance ||
+						busy ||
+						footerActions.some( ( a ) => a.disabled );
+					const isLocked = ( a ) => !! a.disabled || !! a.isLoading;
 
 					return (
 						<footer className="qs__footer">
@@ -225,7 +242,7 @@ const StepLayout = ( {
 								<button
 									type="button"
 									className={
-										footerAction
+										footerActions.length
 											? 'qs-btn qs-btn--secondary'
 											: 'qs-btn'
 									}
@@ -235,20 +252,59 @@ const StepLayout = ( {
 									{ continueLabel }
 								</button>
 							) }
-							{ footerAction && (
-								<button
-									type="button"
-									className="qs-btn"
-									aria-disabled={ footerActionLocked }
-									onClick={
-										footerActionLocked
-											? undefined
-											: footerAction.onClick
-									}
-								>
-									{ footerAction.label }
-								</button>
-							) }
+							{ /* A footerAction carrying `href` renders as a real
+							     anchor rather than a button. Browsers block
+							     window.open() popups in plenty of setups (and
+							     silently — the user just sees a dead button),
+							     but they never block a genuine link. Used by
+							     Step 8's "Open plugin installer", which has to
+							     reach wp-admin in a new tab while leaving the
+							     wizard tab parked where it is. */ }
+							{ footerActions.map( ( action ) => {
+								const locked = isLocked( action );
+								const className =
+									'secondary' === action.variant
+										? 'qs-btn qs-btn--secondary'
+										: 'qs-btn';
+
+								// An action carrying `href` renders as a real
+								// anchor rather than a button. Browsers block
+								// window.open() popups in plenty of setups (and
+								// silently — the user just sees a dead button),
+								// but they never block a genuine link. Used by
+								// Step 9's "Open plugin installer", which
+								// has to reach wp-admin in a new tab while
+								// leaving the wizard tab parked where it is.
+								return action.href ? (
+									<a
+										key={ action.label }
+										className={ className }
+										href={ action.href }
+										target={ action.target || '_self' }
+										rel={
+											'_blank' === action.target
+												? 'noopener noreferrer'
+												: undefined
+										}
+										aria-disabled={ locked }
+										onClick={ action.onClick }
+									>
+										{ action.label }
+									</a>
+								) : (
+									<button
+										key={ action.label }
+										type="button"
+										className={ className }
+										aria-disabled={ locked }
+										onClick={
+											locked ? undefined : action.onClick
+										}
+									>
+										{ action.label }
+									</button>
+								);
+							} ) }
 						</footer>
 					);
 				} )() }

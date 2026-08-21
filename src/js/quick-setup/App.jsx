@@ -37,7 +37,7 @@ import Step5_Abilities from './steps/Step5_Abilities.jsx';
 import Step6_EnableServer from './steps/Step6_EnableServer.jsx';
 import Step7_MethodGrid from './steps/Step7_MethodGrid.jsx';
 import Step8_ProPromo from './steps/Step8_ProPromo.jsx';
-import Step9_ProActivate from './steps/Step9_ProActivate.jsx';
+import Step9_ProSetup from './steps/Step9_ProSetup.jsx';
 import Step10_ConnectorsDetail from './steps/Step10_ConnectorsDetail.jsx';
 import Step11_ClientDetail from './steps/Step11_ClientDetail.jsx';
 import Step12_NpmDetail from './steps/Step12_NpmDetail.jsx';
@@ -62,7 +62,7 @@ const stepRegistry = {
 	'6': () => <Step6_EnableServer />,
 	'7': () => <Step7_MethodGrid />,
 	'8': () => <Step8_ProPromo />,
-	'9': () => <Step9_ProActivate />,
+	'9': () => <Step9_ProSetup />,
 	'10': () => <Step10_ConnectorsDetail />,
 	'11': () => <Step11_ClientDetail />,
 	'12': () => <Step12_NpmDetail />,
@@ -110,6 +110,9 @@ const App = () => {
 
 	const method = state.wizardState.method;
 	const proState = state.plugins.acrossaiPro; // 'missing' | 'inactive' | 'active'
+	// F074 — a licence (paid or trial) connected via Freemius. Plugin-active
+	// alone is not enough to use Connectors; see skipProSetup below.
+	const proLicensed = !! state.plugins.acrossaiProLicensed;
 
 	// Skip predicates — recomputed whenever the underlying state changes so
 	// advance/back always walk past the right steps.
@@ -137,12 +140,32 @@ const App = () => {
 		skipEnable: !! ( selectedServer && selectedServer.enabled ),
 		// Steps 8-13 are one-of-many terminal method-specific screens. Only
 		// the branch matching the user's picked method + pro state renders.
-		// Step 8 = Pro pitch (missing); Step 9 = Pro activate (inactive);
-		// Step 10 = Connectors detail (active); 11 = Client; 12 = npm;
+		// Step 8 = Pro pitch (missing); Step 9 = Pro install/activate/licence;
+		// Step 10 = Connectors detail (active + licensed); 11 = Client; 12 = npm;
 		// 13 = WP-CLI.
-		skipProPromo: ! ( method === 'connectors' && proState === 'missing' ),
-		skipProActivate: ! ( method === 'connectors' && proState === 'inactive' ),
-		skipConnectorsDetail: ! ( method === 'connectors' && proState === 'active' ),
+		// Step 8 (the pitch + "Start free trial" CTA) stays available until Pro
+		// is fully usable — installed AND licensed. Showing it only while the
+		// plugin was 'missing' meant anyone who had installed acrossai-pro but
+		// never connected a licence had no route to the trial CTA at all.
+		skipProPromo: ! (
+			method === 'connectors' &&
+			! ( proState === 'active' && proLicensed )
+		),
+		// Step 9 is the single "get Pro working" screen — install,
+		// activate, licence. It stays up until acrossai-pro is BOTH active
+		// and licensed, because the plugin registers zero connector profiles
+		// without a licence; treating merely-active as done would drop the
+		// user on a Connectors screen that cannot work. Step 10
+		// correspondingly requires active AND licensed.
+		skipProSetup: ! (
+			method === 'connectors' &&
+			! ( proState === 'active' && proLicensed )
+		),
+		skipConnectorsDetail: ! (
+			method === 'connectors' &&
+			proState === 'active' &&
+			proLicensed
+		),
 		skipClient: method !== 'client',
 		skipNpm: method !== 'npm',
 		skipWpcli: method !== 'wpcli',
@@ -155,6 +178,7 @@ const App = () => {
 		selectedServer,
 		method,
 		proState,
+		proLicensed,
 	] );
 
 	// Auto-skip effect — silently forwards the user past any skipped step
@@ -192,7 +216,8 @@ const App = () => {
 			router.advance( { skips } );
 			return;
 		}
-		if ( router.step === '9' && skips.skipProActivate ) {
+		// Step 9 parks the operator until Pro is active AND licensed.
+		if ( router.step === '9' && skips.skipProSetup ) {
 			router.advance( { skips } );
 			return;
 		}
@@ -211,12 +236,20 @@ const App = () => {
 		if ( router.step === '13' && skips.skipWpcli ) {
 			router.advance( { skips } );
 		}
-	}, [ router.step, state.status, skips, router ] );
+	}, [ router.step, state.status, skips, router, proState ] );
 
 	// Deep-link precondition guard — anything past Step 1 requires a chosen
 	// server (or create_intent en route to Step 2).
 	useEffect( () => {
 		if ( state.status !== 'ready' ) {
+			return;
+		}
+		// Unknown step id — e.g. a bookmark or browser-history entry pointing
+		// at a retired step id. renderCurrentStep() would silently
+		// fall back to Step 1's component while the URL still claimed the dead
+		// step, so send them to Step 1 properly and fix the URL with it.
+		if ( ! stepRegistry[ router.step ] ) {
+			router.goTo( '1' );
 			return;
 		}
 		if ( router.step === '1' || router.step === 'done' ) {
@@ -240,7 +273,7 @@ const App = () => {
 		{ id: 6, skip: skips.skipEnable },
 		{ id: 7, skip: false },
 		{ id: 8, skip: skips.skipProPromo },
-		{ id: 9, skip: skips.skipProActivate },
+		{ id: 9, skip: skips.skipProSetup },
 		{ id: 10, skip: skips.skipConnectorsDetail },
 		{ id: 11, skip: skips.skipClient },
 		{ id: 12, skip: skips.skipNpm },
@@ -259,12 +292,13 @@ const App = () => {
 		if ( router.step === 'done' ) {
 			return totalSteps;
 		}
-		const target = parseInt( router.step, 10 );
+		// Compare as strings so numeric row ids match the string step id.
+		const target = String( router.step );
 		let idx = 0;
 		for ( const row of stepVisibilityTable ) {
 			if ( row.skip ) continue;
 			idx += 1;
-			if ( row.id === target ) return idx;
+			if ( String( row.id ) === target ) return idx;
 		}
 		return idx;
 	}, [ router.step, totalSteps, stepVisibilityTable ] );

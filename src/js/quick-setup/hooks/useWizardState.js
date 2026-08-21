@@ -41,6 +41,9 @@ const initialState = {
 	},
 	plugins: {
 		acrossaiPro: 'missing',
+		// F074 — defaults false so the wizard never walks past the Pro
+		// licence gate on a payload that predates this field.
+		acrossaiProLicensed: false,
 		abilitiesManager: 'missing',
 	},
 	methods: {
