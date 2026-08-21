@@ -28,9 +28,13 @@ import Notice from '../components/Notice.jsx';
 import useWizardState from '../hooks/useWizardState.js';
 import { useFooterAction, useWizardAdvance } from '../hooks/useAdvanceGuard.js';
 
-// Vendor sentinel — an AC rule with key === NO_ACCESS means "delete the row".
-// Kept in sync with wpb-access-control/js/AccessControl.js:NO_ACCESS constant.
-const NO_ACCESS = '_no_access';
+// Vendor sentinel — an AC rule with key === NO_ACCESS means "no access
+// configured". MUST match wpb-access-control/js/AccessControl.js:48
+// (`const NO_ACCESS = '';`). Empty string, NOT '_no_access' — the earlier
+// wrong value silently mis-branched every Save-and-Continue click into
+// the PUT path with an empty ac_key, which the vendor endpoint rejects,
+// blocking the wizard from advancing.
+const NO_ACCESS = '';
 
 const Step3_AccessControl = () => {
 	const { state } = useWizardState();
@@ -63,9 +67,11 @@ const Step3_AccessControl = () => {
 	const handleSaveAndContinue = useCallback( async () => {
 		setSaveError( null );
 
-		// If onChange never fired (vendor still loading), just advance —
-		// admin-only default is a valid final state per F042.
-		if ( ! server || selectionRef.current.key === null ) {
+		if (
+			! server ||
+			selectionRef.current.key === null ||
+			selectionRef.current.key === NO_ACCESS
+		) {
 			advance();
 			return;
 		}
@@ -79,18 +85,14 @@ const Step3_AccessControl = () => {
 
 		setSaving( true );
 		try {
-			if ( selectionRef.current.key === NO_ACCESS ) {
-				await apiFetch( { url, method: 'DELETE' } );
-			} else {
-				await apiFetch( {
-					url,
-					method: 'PUT',
-					data: {
-						ac_key: selectionRef.current.key,
-						ac_options: selectionRef.current.options,
-					},
-				} );
-			}
+			await apiFetch( {
+				url,
+				method: 'PUT',
+				data: {
+					ac_key: selectionRef.current.key,
+					ac_options: selectionRef.current.options,
+				},
+			} );
 			advance();
 		} catch ( err ) {
 			setSaveError(
