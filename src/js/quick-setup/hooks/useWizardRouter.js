@@ -151,6 +151,9 @@ const useWizardRouter = () => {
 		// consistent with FR-008 — the URL is the source of truth.
 		//
 		// Preserve the current server param so it survives navigation.
+		// `mode` is normally null (per-step sub-view is cleared on step
+		// change) but Step 8 → Step 9 handoff seeds `mode=trial` in the
+		// same hop to keep it to one history entry.
 		const current = readParams();
 		const nextUrl = buildUrl( step, method, mode, current.server );
 		window.history.pushState( {}, '', nextUrl );
