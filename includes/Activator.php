@@ -82,6 +82,17 @@ class Activator {
 			FrontendAuth::instance()->register_rewrite_rule();
 		}
 
+		// npm / CLI login is enabled by default on fresh installs.
+		// add_option() is idempotent — it fails silently if the row already
+		// exists, so operators who explicitly stored `false` (unchecked
+		// + saved) keep their choice; only sites with no stored row pick
+		// up the new default. register_setting()'s metadata default in
+		// SettingsMenu.php stays `false` so the PHPUnit assertion at
+		// tests/phpunit/Admin/SettingsMenuTest.php:81 still holds — the
+		// row-is-always-present-after-activation invariant is what makes
+		// the runtime behaviour "enabled by default".
+		add_option( 'acrossai_mcp_npm_login_enabled', 1 );
+
 		flush_rewrite_rules();
 	}
 }
