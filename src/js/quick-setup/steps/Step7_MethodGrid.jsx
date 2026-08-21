@@ -24,13 +24,12 @@
  */
 
 import { useCallback, useState } from '@wordpress/element';
-import { __, sprintf } from '@wordpress/i18n';
+import { __ } from '@wordpress/i18n';
 import RadioCard from '../components/RadioCard.jsx';
 import { LinkIcon, PuzzleIcon, TerminalIcon } from '../components/icons.jsx';
 import useWizardState from '../hooks/useWizardState.js';
 import useAdvanceGuard from '../hooks/useAdvanceGuard.js';
 
-const TRIAL_URL = 'https://acrossai.co/pricing/#pricing';
 
 const METHODS = [
 	{
@@ -74,9 +73,7 @@ const METHODS = [
 const Step7_MethodGrid = () => {
 	const { state, saveStep } = useWizardState();
 	const proState = state.plugins.acrossaiPro; // 'missing' | 'inactive' | 'active'
-	const trialEndDate = state.plugins.trialEndDate || '';
 	const chosenMethod = state.wizardState.method;
-	const showTrialPromo = proState !== 'active';
 	const showRecommendedBadge = proState !== 'active';
 	const [ picking, setPicking ] = useState( null );
 
@@ -103,41 +100,6 @@ const Step7_MethodGrid = () => {
 
 	return (
 		<div>
-			{ showTrialPromo && (
-				<div
-					className="qs__trial-bar"
-					role="region"
-					aria-label={ __(
-						'AcrossAI Pro trial',
-						'acrossai-mcp-manager'
-					) }
-				>
-					<div className="qs__trial-bar-copy">
-						<strong>
-							{ __(
-								'30 days free. No credit card.',
-								'acrossai-mcp-manager'
-							) }
-						</strong>{ ' ' }
-						{ trialEndDate
-							? sprintf(
-									/* translators: %s: date string (e.g. "September 16, 2026") */
-									__( 'Start today — free through %s.', 'acrossai-mcp-manager' ),
-									trialEndDate
-							  )
-							: __( 'Start today.', 'acrossai-mcp-manager' ) }
-					</div>
-					<a
-						className="qs__trial-bar-cta"
-						href={ TRIAL_URL }
-						target="_blank"
-						rel="noopener noreferrer"
-					>
-						{ __( 'Start free trial', 'acrossai-mcp-manager' ) }
-					</a>
-				</div>
-			) }
-
 			<h2 className="qs__step-title">
 				{ __( 'How do you want to connect?', 'acrossai-mcp-manager' ) }
 			</h2>

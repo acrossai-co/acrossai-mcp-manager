@@ -162,6 +162,31 @@ html.wp-toolbar:has(body.acrossai-mcp-quick-setup-fullpage) {
 	}
 }
 
+// Header CTA — subtle outline pill promoting the AcrossAI consultation
+// booking page. Sits before the Exit link on every step (including the
+// Completion screen, unlike Exit which hides on 'done'). Outline style so
+// it reads as an actionable promotion without competing visually with the
+// step content underneath.
+.qs__header-consult {
+	display: inline-flex;
+	align-items: center;
+	padding: 4px 10px;
+	border: 1px solid $qs-primary;
+	border-radius: 4px;
+	color: $qs-primary;
+	font-size: 12px;
+	font-weight: 600;
+	text-decoration: none;
+	line-height: 1.4;
+	white-space: nowrap;
+
+	&:hover, &:focus-visible {
+		background: $qs-primary;
+		color: #ffffff;
+		text-decoration: none;
+	}
+}
+
 .qs__step-counter {
 	font-size: 11px;
 	font-weight: 600;
@@ -464,6 +489,63 @@ html.wp-toolbar:has(body.acrossai-mcp-quick-setup-fullpage) {
 	flex-direction: column;
 	gap: 24px;
 	text-align: center;
+}
+
+// Icon SVG shown above the wordmark inside the gate card. Sourced from
+// wp_localize_script's `logoUrl` (assets/quick-setup/acrossai-logo.svg).
+// Aria-hidden because the wordmark below already labels the brand.
+.qs__gate-card__logo {
+	height: 48px;
+	width: auto;
+	max-width: 100%;
+	align-self: center;
+	margin-bottom: -16px; // hug the wordmark below
+
+	@media (max-width: 640px) {
+		height: 40px;
+	}
+}
+
+// Two-tone AcrossAI wordmark used inside the gate card (between the icon
+// and the heading) and reusable anywhere the wizard needs the brand mark
+// rendered inline — no separate SVG asset, inherits the wizard's font
+// stack, scales via font-size. `Across` in deep indigo, `AI` in bright
+// blue. The negative bottom margin tightens the mark against the heading
+// below so icon+wordmark+heading read as one branded lockup; the card's
+// default 24px gap takes over for the sections that follow.
+.qs__brand-mark {
+	align-self: center;
+	font-size: 32px;
+	font-weight: 800;
+	line-height: 1;
+	letter-spacing: -0.01em;
+	margin-bottom: -12px;
+
+	@media (max-width: 640px) {
+		font-size: 26px;
+	}
+}
+
+.qs__brand-mark__across {
+	color: #1e3a8a; // deep indigo (WP admin's blue-800 territory)
+}
+
+.qs__brand-mark__ai {
+	color: $qs-primary; // bright blue #3858e9 — matches the wizard's link colour
+}
+
+// Inline modifier — used when the wordmark is interpolated into a larger
+// heading (e.g. "Install AcrossAI Abilities Manager"). Inherits the parent
+// heading's font-size / weight so the mark stays visually part of the
+// sentence; only the two-tone colouring carries over.
+.qs__brand-mark--inline {
+	display: inline;
+	align-self: auto;
+	font-size: inherit;
+	font-weight: inherit;
+	line-height: inherit;
+	letter-spacing: inherit;
+	margin: 0;
 }
 
 // Warning variant — used by Step 6 (server disabled). Amber tinting to
@@ -793,51 +875,127 @@ html.wp-toolbar:has(body.acrossai-mcp-quick-setup-fullpage) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────
-// Trial promo bar — Step 7 only, when acrossai-pro is missing/inactive.
-// Full-width solid-blue banner directly above the connection-method grid.
+// Pro pitch card — Step 8. Marketing pricing-panel layout: bold hero title
+// + outlined dark CTA + shield-emoji fine print, a soft divider, then blue
+// checkmark bullets. Text content is F069's original — only the visual
+// treatment mirrors the reference pricing card.
 // ─────────────────────────────────────────────────────────────────────────
 
-.qs__trial-bar {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	gap: 24px;
-	padding: 14px 22px;
-	margin: 0 0 24px;
-	background: linear-gradient(90deg, #1e1b4b 0%, $qs-brand-purple 100%);
-	color: #ffffff;
-	border-radius: $qs-radius;
-	box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
-	flex-wrap: wrap;
+.qs__pro-card {
+	max-width: 560px;
+	margin: 0 auto 20px;
+	padding: 40px 32px 32px;
+	background: #faf9ff;
+	border: 1px solid #ede9fe;
+	border-radius: 10px;
+	box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+}
 
-	strong {
+.qs__pro-card__hero {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 20px;
+	text-align: center;
+}
+
+.qs__pro-card__title {
+	font-size: 32px;
+	font-weight: 700;
+	line-height: 1.2;
+	color: #0f172a;
+	max-width: 420px;
+}
+
+@media (max-width: 640px) {
+	.qs__pro-card__title { font-size: 26px; }
+}
+
+.qs__pro-card__cta {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 240px;
+	padding: 14px 32px;
+	background: transparent;
+	color: #0f172a;
+	border: 2px solid #0f172a;
+	border-radius: 8px;
+	font-size: 17px;
+	font-weight: 600;
+	line-height: 1.2;
+	cursor: pointer;
+	transition: background 0.15s ease, color 0.15s ease;
+
+	&:hover, &:focus-visible {
+		background: #0f172a;
 		color: #ffffff;
-		font-weight: 700;
 	}
 }
 
-.qs__trial-bar-copy {
-	flex: 1 1 auto;
-	font-size: 14px;
+.qs__pro-card__fine {
+	margin: 0;
+	font-size: 13px;
+	color: #64748b;
 	line-height: 1.5;
+	max-width: 380px;
 }
 
-.qs__trial-bar-cta {
-	display: inline-block;
-	flex: 0 0 auto;
-	padding: 8px 20px;
-	background: #ffffff;
-	color: $qs-brand-purple;
-	font-weight: 600;
-	font-size: 14px;
-	text-decoration: none;
-	border-radius: $qs-radius;
-	transition: background 0.15s ease;
+.qs__pro-card__divider {
+	border: 0;
+	border-top: 1px solid #ede9fe;
+	margin: 28px 0 24px;
+}
 
-	&:hover,
-	&:focus-visible {
-		background: #f5f3ff;
-		color: $qs-brand-purple;
+.qs__pro-card__bullets {
+	list-style: none;
+	padding: 0;
+	margin: 0;
+	display: grid;
+	gap: 16px;
+	font-size: 15px;
+	line-height: 1.5;
+	color: #334155;
+
+	li {
+		padding-left: 32px;
+		position: relative;
+
+		&::before {
+			content: '✓';
+			position: absolute;
+			left: 4px;
+			top: 0;
+			color: $qs-primary;
+			font-weight: 700;
+			font-size: 17px;
+			line-height: 1.5;
+		}
+	}
+}
+
+// Video variant — same card container, tighter padding around the 16:9
+// YouTube embed. Applied after the operator clicks "Got it" on the
+// trial-started notice, replacing the pricing panel in place.
+.qs__pro-card--video {
+	padding: 16px;
+}
+
+.qs__pro-card__video {
+	position: relative;
+	width: 100%;
+	padding-top: 56.25%; // 16:9 aspect ratio
+	overflow: hidden;
+	border-radius: 6px;
+	background: #000;
+
+	iframe {
+		position: absolute;
+		top: 0;
+		left: 0;
+		width: 100%;
+		height: 100%;
+		border: 0;
 	}
 }
 

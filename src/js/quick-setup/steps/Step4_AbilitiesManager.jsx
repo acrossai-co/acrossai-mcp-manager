@@ -30,7 +30,7 @@
  * @package AcrossAI_MCP_Manager
  */
 
-import { useState, useCallback, useMemo } from '@wordpress/element';
+import { useState, useCallback, useMemo, createInterpolateElement } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import apiFetch from '@wordpress/api-fetch';
 import Notice from '../components/Notice.jsx';
@@ -122,15 +122,30 @@ const Step4_AbilitiesManager = () => {
 	);
 	useFooterAction( footerAction );
 
-	const heading = isMissing
-		? __(
-				'Install AcrossAI Abilities Manager',
-				'acrossai-mcp-manager'
-		  )
-		: __(
-				'Activate AcrossAI Abilities Manager',
-				'acrossai-mcp-manager'
-		  );
+	// Two-tone brand element interpolated into the heading string via
+	// createInterpolateElement — the `<brand/>` placeholder in the __()
+	// source keeps the string translator-friendly (they can move the mark
+	// around or drop it entirely for languages that don't need a Roman
+	// wordmark, and it still renders as one piece rather than three
+	// concatenated substrings).
+	const brandInline = (
+		<span className="qs__brand-mark qs__brand-mark--inline">
+			<span className="qs__brand-mark__across">Across</span>
+			<span className="qs__brand-mark__ai">AI</span>
+		</span>
+	);
+	const heading = createInterpolateElement(
+		isMissing
+			? __(
+					'Install <brand/> Abilities Manager',
+					'acrossai-mcp-manager'
+			  )
+			: __(
+					'Activate <brand/> Abilities Manager',
+					'acrossai-mcp-manager'
+			  ),
+		{ brand: brandInline }
+	);
 
 	// The full-screen loading overlay is rendered by <StepLayout> whenever
 	// footerAction.isLoading is true (see StepLayout's `busy` computation) —
@@ -145,6 +160,19 @@ const Step4_AbilitiesManager = () => {
 			) }
 
 			<div className="qs__gate-card">
+				{ /* Icon SVG from wp_localize_script's `logoUrl`
+				     (assets/quick-setup/acrossai-logo.svg). The AcrossAI
+				     wordmark is interpolated inline into the heading below,
+				     so the standalone wordmark that used to sit here is
+				     no longer needed. */ }
+				{ ( window.acrossaiMcpQuickSetup || {} ).logoUrl && (
+					<img
+						className="qs__gate-card__logo"
+						src={ window.acrossaiMcpQuickSetup.logoUrl }
+						alt=""
+						aria-hidden="true"
+					/>
+				) }
 				<h2 className="qs__step-title">{ heading }</h2>
 
 				<div className="qs__gate-categories">

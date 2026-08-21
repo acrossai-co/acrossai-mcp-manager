@@ -34,8 +34,10 @@ const STEP_ORDER = [
  *   - 5  (abilities picker) — skip when all abilities are already enabled
  *   - 6  (enable endpoint) — skip when server is already enabled
  *   - 8  (Pro pitch) — skip unless method=connectors AND pro state=missing
- *   - 9  (Pro activate) — skip unless method=connectors AND pro state=inactive
+ *   - 9  (Pro install/activate/licence) — skip unless method=connectors AND
+ *     Pro is not yet both active and licensed
  *   - 10 (Connectors detail) — skip unless method=connectors AND pro state=active
+ *     AND a licence is connected
  *   - 11 (Client detail) — skip unless method=client
  *   - 12 (npm detail) — skip unless method=npm
  *   - 13 (WP-CLI detail) — skip unless method=wpcli
@@ -45,12 +47,12 @@ const STEP_ORDER = [
  * ignorant of wizardState — that lookup belongs in App.jsx.
  */
 const shouldSkip = ( step, skips ) => {
+	if ( step === '9' && skips.skipProSetup ) return true;
 	if ( step === '2' && skips.skipCreate ) return true;
 	if ( step === '4' && skips.skipAbilitiesGate ) return true;
 	if ( step === '5' && skips.skipAbilities ) return true;
 	if ( step === '6' && skips.skipEnable ) return true;
 	if ( step === '8' && skips.skipProPromo ) return true;
-	if ( step === '9' && skips.skipProActivate ) return true;
 	if ( step === '10' && skips.skipConnectorsDetail ) return true;
 	if ( step === '11' && skips.skipClient ) return true;
 	if ( step === '12' && skips.skipNpm ) return true;
@@ -125,7 +127,13 @@ const useWizardRouter = () => {
 		};
 	}, [] );
 
-	const goTo = useCallback( ( step, method = null ) => {
+	// `mode` is normally cleared on step navigation (it's a per-step sub-view),
+	// but a caller can seed the destination's mode in the same hop — Step 8's
+	// trial handoff uses goTo( '9', null, 'trial' ) so Step 9 knows the
+	// operator arrived from a completed checkout rather than plain Continue.
+	// Passing it here (rather than a follow-up setMode) keeps it to ONE
+	// history entry, so Back still takes one press.
+	const goTo = useCallback( ( step, method = null, mode = null ) => {
 		if ( ! STEP_ORDER.includes( step ) ) {
 			return;
 		}
@@ -142,12 +150,14 @@ const useWizardRouter = () => {
 		// Reading the current params from the URL (not from React state) is
 		// consistent with FR-008 — the URL is the source of truth.
 		//
-		// Step navigation always clears mode (mode is a per-step sub-view).
 		// Preserve the current server param so it survives navigation.
+		// `mode` is normally null (per-step sub-view is cleared on step
+		// change) but Step 8 → Step 9 handoff seeds `mode=trial` in the
+		// same hop to keep it to one history entry.
 		const current = readParams();
-		const nextUrl = buildUrl( step, method, null, current.server );
+		const nextUrl = buildUrl( step, method, mode, current.server );
 		window.history.pushState( {}, '', nextUrl );
-		setParams( { step, method, mode: null, server: current.server } );
+		setParams( { step, method, mode, server: current.server } );
 		dispatchNav();
 	}, [] );
 
