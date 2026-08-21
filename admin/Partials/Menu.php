@@ -110,7 +110,15 @@ class Menu {
 	 * @return array<int|string, string> Modified links.
 	 */
 	public function plugin_action_links( $links ): array {
-		$settings_url  = esc_url( admin_url( 'admin.php?page=' . AdminPageSlugs::PARENT ) );
+		// Settings link now targets the shared AcrossAI Settings page with the
+		// MCP tab preselected. The tab body's sub-nav (Servers / Settings /
+		// Quick Setup) lives in SettingsMenu::render_subnav.
+		$settings_url  = esc_url(
+			admin_url(
+				'admin.php?page=' . SettingsPage::SETTINGS_SLUG
+				. '&tab=' . SettingsMenu::TAB_SLUG
+			)
+		);
 		$settings_link = sprintf(
 			'<a href="%s">%s</a>',
 			$settings_url,

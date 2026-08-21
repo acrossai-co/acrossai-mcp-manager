@@ -2338,3 +2338,37 @@ Same `JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES` encoding on both sides; shared
 - D36 / DEC-F035-PUBLIC-API-FINAL-CLASS-FILTER-ONLY-EXTENSION — reinforces that the DTO producer is a public / stable surface; contracts (final class + additive-only DTO) apply.
 - B32 — "filter defaults must be the canonical resolver's output" is the runtime-behaviour equivalent of D43's structural rule.
 - F073 planning doc `docs/planings-tasks/073-wizard-client-snippet-parity.md`.
+
+
+---
+
+
+### 2026-08-21 - D44 / DEC-WP-OPTION-DEFAULT-VIA-ACTIVATION-SEED
+
+**Status**
+Active
+
+**Why this is durable**
+Every future wp_option default flip in this plugin (fresh installs get X instead of Y) will face the same silent-failure trap. `register_setting( … default => X )` metadata alone does NOT change runtime behaviour when the caller passes an explicit second arg to `get_option( key, <fallback> )` — WP core's `filter_default_option` callback checks `$passed_default` and returns the CALLER'S fallback (bypassing the registered default). Every read site in this plugin passes an explicit fallback, so flipping just the register_setting default produces green PHPCS, green tests, and zero runtime change. Silent bug.
+
+**Decision**
+To change the runtime default of an existing wp_option-backed plugin setting for fresh installs, add `add_option( 'key', <new default> )` in `Activator::activate()` instead of flipping `register_setting()`'s metadata and every `get_option()` fallback. `add_option()` is idempotent (WP core: "fails silently if the option already exists"), so operators with an explicitly-saved value keep their choice — only sites with no stored row pick up the new default.
+
+Requirements:
+- Value type must serialize losslessly through wp_options — use `1`/`0` for booleans (matches how WP admin stores checkbox settings), not `true`/`false` (round-trips as `'1'`/`''`).
+- Leave `register_setting()`'s `default` metadata as-is — the row is always present after activation, so metadata is only read by REST schema consumers (cosmetic).
+- Leave all `get_option( key, <fallback> )` fallbacks as-is — they never fire post-activation.
+- Any PHPUnit assertion on the register_setting metadata default continues to hold — no test edits needed.
+
+Trade-off: if a site loses the option row post-activation (`wp option delete`, cache-nuke plugin, DB sweep), `get_option()` returns the fallback (old default) until the plugin is reactivated. Acceptable for a plugin-wide singleton toggle; not acceptable for a security-critical default.
+
+Reference impl: `includes/Activator.php` — `add_option( 'acrossai_mcp_npm_login_enabled', 1 )` for the npm/CLI login flow default flip. Branch `chore/npm-cli-default-enabled-on-activation`.
+
+**Tradeoffs**
+- Gained: 1-file change instead of touching SettingsMenu + Notices + FrontendAuth + SettingsMenuTest. Zero test churn. Operator choices preserved via add_option idempotency. No migration code.
+- Made harder: register_setting metadata and runtime behaviour diverge — a reader has to look at Activator to see the actual default. Add a `// default seeded in Activator::activate()` comment near the register_setting call if the setting becomes non-trivial to reason about.
+- Reconsider: switch to full "flip register_setting default + update every get_option fallback" when (a) the setting is security-critical and must survive row deletion, (b) downstream REST schema consumers rely on truthful metadata default, OR (c) an install base is being updated in-place where activation may not fire on WP `plugin update`.
+
+**Related**
+- D21 (F016 fresh-install-only retirement) — shares the "no migration code" spirit but for teardown.
+- Distinct from `DEC-BERLINDB-*` — this is wp_options (WP core), not BerlinDB tables. Same Activator, different storage layer.
